@@ -1,0 +1,49 @@
+# Local configuration and credentials. Examples are deliberately public.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.p8
+*.p12
+*.pfx
+*.pem
+*.key
+*.keystore
+*.jks
+!mobile/android/app/debug.keystore
+*.mobileprovision
+credentials.json
+
+# Dependencies, generated builds and caches; native source is not ignored.
+node_modules/
+dist/
+build/
+.expo/
+Pods/
+.gradle/
+.cxx/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+local.properties
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Distribution and verification outputs do not belong in source history.
+*.ipa
+*.apk
+*.aab
+*.xcarchive/
+*.dSYM/
+*.xcresult/
+/outputs/
+/work/
+/.playwright-cli/
+
+# Editor and operating-system state.
+*.log
+*.swp
+.DS_Store
+.idea/
