@@ -1,0 +1,36 @@
+{
+  "name": "ochi-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/generate-design-tokens.mjs && vite",
+    "build": "node scripts/generate-design-tokens.mjs && tsc -b && vite build",
+    "test": "node --test scripts/*.test.cjs",
+    "tokens": "node scripts/generate-design-tokens.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.8.0",
+    "@novnc/novnc": "1.7.0",
+    "@streamdown/cjk": "^1.0.4",
+    "@streamdown/code": "^2.0.0",
+    "@streamdown/math": "^1.0.3",
+    "katex": "^0.19.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "streamdown": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  },
+  "packageManager": "pnpm@11.28.0",
+  "engines": {
+    "node": ">=22"
+  }
+}
