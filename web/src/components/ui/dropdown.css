@@ -1,0 +1,173 @@
+.choice-positioner,
+.action-menu-positioner {
+    z-index: 130;
+    max-width: calc(100vw - 24px);
+}
+.choice-trigger {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--control-height);
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: 7px var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-field);
+    background: var(--field);
+    color: var(--ink);
+    font-size: var(--font-size-ui);
+    line-height: 20px;
+    text-align: left;
+    transition: background var(--motion-duration), border-color var(--motion-duration);
+}
+.choice-value {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.choice-chevron {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--muted);
+}
+.choice-trigger > svg {
+    flex-shrink: 0;
+}
+.choice-trigger:hover,
+.choice-trigger[data-popup-open] {
+    border-color: var(--line-strong);
+}
+.choice-trigger[data-disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.choice-compact {
+    width: auto;
+    max-width: 240px;
+    min-height: var(--control-compact);
+    border-color: transparent;
+    padding: var(--space-1) var(--space-2);
+    color: var(--muted);
+    background: transparent;
+}
+.choice-compact:hover,
+.choice-compact[data-popup-open] {
+    border-color: transparent;
+    color: var(--ink);
+    background: var(--hover);
+}
+.choice-compact .choice-value {
+    max-width: 184px;
+}
+.choice-popup,
+.action-menu {
+    width: max-content;
+    max-height: min(var(--available-height), 420px);
+    max-width: min(var(--available-width), calc(100vw - 24px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-popover);
+    padding: 6px;
+    box-shadow: var(--shadow-popover);
+    outline: 0;
+    transform-origin: var(--transform-origin);
+    transition: opacity var(--motion-duration), transform var(--motion-duration) var(--motion-ease);
+}
+.choice-popup {
+    min-width: min(max(160px, var(--anchor-width)), var(--available-width));
+    max-width: min(var(--available-width), calc(100vw - 24px), 400px);
+}
+.choice-popup[data-starting-style],
+.choice-popup[data-ending-style],
+.action-menu[data-starting-style],
+.action-menu[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.98);
+}
+.choice-item,
+.action-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--control-compact);
+    padding: 6px var(--space-2);
+    border-radius: var(--radius-item);
+    color: var(--ink);
+    cursor: default;
+    font-size: var(--font-size-ui);
+    line-height: 20px;
+    font-weight: var(--weight-normal);
+    outline: 0;
+    overflow-wrap: anywhere;
+}
+.choice-item[data-highlighted],
+.action-menu-item[data-highlighted] {
+    background: var(--hover);
+}
+.choice-item[data-disabled],
+.action-menu-item[data-disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.choice-item-text {
+    min-width: 0;
+}
+.choice-item small {
+    display: block;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 20px;
+    margin-top: var(--space-1);
+}
+.choice-check {
+    width: 16px;
+    flex: 0 0 16px;
+    display: flex;
+}
+.action-menu {
+    min-width: 168px;
+    max-width: min(var(--available-width), calc(100vw - 24px), 272px);
+}
+.action-menu-account {
+    width: 208px;
+    min-width: 0;
+}
+.action-menu-item > svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+}
+.action-menu-item.danger[data-highlighted] {
+    background: color-mix(in srgb, var(--danger) 8%, var(--raised));
+}
+.action-menu-trigger {
+    opacity: 1;
+}
+@keyframes popup-in {
+    from {
+        opacity: 0;
+        scale: 0.98;
+    }
+    to {
+        opacity: 1;
+        scale: 1;
+    }
+}
+@media (max-width: 760px), (pointer: coarse) {
+    .choice-trigger,
+    .choice-item,
+    .action-menu-item {
+        min-height: var(--control-touch);
+    }
+    .choice-compact {
+        padding-inline: var(--space-2);
+    }
+}
