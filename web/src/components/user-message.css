@@ -1,0 +1,43 @@
+.user-message-content {
+    position: relative;
+    outline: none;
+}
+.user-message-content:focus-visible .user-body {
+    outline: 2px solid var(--line-strong);
+    outline-offset: 3px;
+}
+.user-message-actions {
+    display: flex;
+    position: absolute;
+    top: calc(100% + 2px);
+    right: 0;
+    gap: 2px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-duration);
+}
+.user-message-actions .icon-button {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    color: var(--muted);
+}
+.user-message-content:focus-visible .user-message-actions,
+.user-message-content:has(.icon-button:focus-visible) .user-message-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+@media (hover: hover) and (pointer: fine) {
+    .user-message-content:hover .user-message-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+@media (hover: none), (pointer: coarse) {
+    .user-message-content .user-body { user-select: none; }
+    .user-message-actions .icon-button { width: 44px; height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .user-message-actions { transition: none; }
+}
