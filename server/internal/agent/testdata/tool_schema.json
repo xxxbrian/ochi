@@ -1,0 +1,212 @@
+[
+  {
+    "name": "object-valid",
+    "schema": "{\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\", \"minLength\": 1, \"maxLength\": 3}, \"n\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 4}}, \"required\": [\"name\"], \"additionalProperties\": false}",
+    "arguments": "{\"name\": \"\u732b\u72ac\", \"n\": 3}",
+    "code": ""
+  },
+  {
+    "name": "required-missing",
+    "schema": "{\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\", \"minLength\": 1, \"maxLength\": 3}, \"n\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 4}}, \"required\": [\"name\"], \"additionalProperties\": false}",
+    "arguments": "{\"n\": 2}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "extra-property",
+    "schema": "{\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\", \"minLength\": 1, \"maxLength\": 3}, \"n\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 4}}, \"required\": [\"name\"], \"additionalProperties\": false}",
+    "arguments": "{\"name\": \"ok\", \"extra\": true}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "fraction-not-integer",
+    "schema": "{\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\", \"minLength\": 1, \"maxLength\": 3}, \"n\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 4}}, \"required\": [\"name\"], \"additionalProperties\": false}",
+    "arguments": "{\"name\": \"ok\", \"n\": 2.5}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "unicode-length",
+    "schema": "{\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\", \"minLength\": 1, \"maxLength\": 3}, \"n\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 4}}, \"required\": [\"name\"], \"additionalProperties\": false}",
+    "arguments": "{\"name\": \"\ud83d\ude00\u732b\u72ac\", \"n\": 1}",
+    "code": ""
+  },
+  {
+    "name": "too-long",
+    "schema": "{\"type\": \"object\", \"properties\": {\"name\": {\"type\": \"string\", \"minLength\": 1, \"maxLength\": 3}, \"n\": {\"type\": \"integer\", \"minimum\": 1, \"maximum\": 4}}, \"required\": [\"name\"], \"additionalProperties\": false}",
+    "arguments": "{\"name\": \"\ud83d\ude00\u732b\u72ac\u5154\"}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "arguments-object-only",
+    "schema": "true",
+    "arguments": "[]",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "boolean-is-not-number",
+    "schema": "{\"properties\": {\"n\": {\"enum\": [1]}}}",
+    "arguments": "{\"n\": true}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "numeric-enum-equivalence",
+    "schema": "{\"properties\": {\"n\": {\"enum\": [1]}}}",
+    "arguments": "{\"n\":1.0}",
+    "code": ""
+  },
+  {
+    "name": "precise-multiple",
+    "schema": "{\"properties\": {\"n\": {\"multipleOf\": 0.1}}}",
+    "arguments": "{\"n\":0.3}",
+    "code": ""
+  },
+  {
+    "name": "not-precise-multiple",
+    "schema": "{\"properties\": {\"n\": {\"multipleOf\": 0.1}}}",
+    "arguments": "{\"n\":0.30000000000000004}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "large-int-exact-const",
+    "schema": "{\"properties\":{\"n\":{\"const\":9007199254740993}}}",
+    "arguments": "{\"n\":9007199254740992}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "unique-numeric-equivalent",
+    "schema": "{\"properties\": {\"items\": {\"type\": \"array\", \"uniqueItems\": true}}}",
+    "arguments": "{\"items\":[1,1.0]}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "local-ref",
+    "schema": "{\"$defs\": {\"item/value\": {\"type\": [\"string\", \"null\"]}}, \"properties\": {\"x\": {\"$ref\": \"#/$defs/item~1value\"}}}",
+    "arguments": "{\"x\": null}",
+    "code": ""
+  },
+  {
+    "name": "all-any-of",
+    "schema": "{\"properties\": {\"x\": {\"allOf\": [{\"type\": \"integer\"}, {\"anyOf\": [{\"minimum\": 5}, {\"maximum\": 0}]}]}}}",
+    "arguments": "{\"x\": 6}",
+    "code": ""
+  },
+  {
+    "name": "one-of-exclusive",
+    "schema": "{\"properties\": {\"x\": {\"oneOf\": [{\"type\": \"integer\"}, {\"type\": \"number\"}]}}}",
+    "arguments": "{\"x\": 6}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "format-is-annotation",
+    "schema": "{\"properties\": {\"x\": {\"type\": \"string\", \"format\": \"uri\"}}}",
+    "arguments": "{\"x\": \"not a uri\"}",
+    "code": ""
+  },
+  {
+    "name": "default-does-not-fill",
+    "schema": "{\"properties\": {\"x\": {\"default\": \"value\"}}, \"required\": [\"x\"]}",
+    "arguments": "{}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "unknown-keyword",
+    "schema": "{\"patternProperties\": {}}",
+    "arguments": "{}",
+    "code": "unsupported_schema"
+  },
+  {
+    "name": "regex-unsupported",
+    "schema": "{\"properties\": {\"x\": {\"pattern\": \"^a$\"}}}",
+    "arguments": "{\"x\": \"a\"}",
+    "code": "unsupported_schema"
+  },
+  {
+    "name": "remote-ref-unsupported",
+    "schema": "{\"$ref\": \"https://example.test/schema\"}",
+    "arguments": "{}",
+    "code": "unsupported_schema"
+  },
+  {
+    "name": "bad-length-exact",
+    "schema": "{\"properties\":{\"x\":{\"maxLength\":1.00000000000000001}}}",
+    "arguments": "{\"x\": \"a\"}",
+    "code": "invalid_schema"
+  },
+  {
+    "name": "duplicate-enum",
+    "schema": "{\"properties\":{\"x\":{\"enum\":[1,1.0]}}}",
+    "arguments": "{}",
+    "code": "invalid_schema"
+  },
+  {
+    "name": "duplicate-schema-property",
+    "schema": "{\"type\":\"object\",\"type\":\"array\"}",
+    "arguments": "{}",
+    "code": "invalid_schema"
+  },
+  {
+    "name": "duplicate-argument-property",
+    "schema": "{\"type\": \"object\"}",
+    "arguments": "{\"x\":1,\"x\":2}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "trailing-argument-json",
+    "schema": "true",
+    "arguments": "{} {}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "false-schema",
+    "schema": "false",
+    "arguments": "{}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "huge-negative-exponent-bool-schema",
+    "schema": "true",
+    "arguments": "{\"x\":{\"nested\":1e-999999}}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "huge-positive-exponent-loose-schema",
+    "schema": "{}",
+    "arguments": "{\"x\":[1e999999]}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "too-many-number-digits",
+    "schema": "{}",
+    "arguments": "{\"x\":111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "too-deep-loose-schema",
+    "schema": "{}",
+    "arguments": "{\"x\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "malformed-json",
+    "schema": "{}",
+    "arguments": "{\"x\":",
+    "code": "invalid_arguments"
+  },
+  {
+    "name": "invalid-description-annotation",
+    "schema": "{\"description\":7}",
+    "arguments": "{}",
+    "code": "invalid_schema"
+  },
+  {
+    "name": "invalid-readonly-annotation",
+    "schema": "{\"readOnly\":\"true\"}",
+    "arguments": "{}",
+    "code": "invalid_schema"
+  },
+  {
+    "name": "invalid-examples-annotation",
+    "schema": "{\"examples\":{}}",
+    "arguments": "{}",
+    "code": "invalid_schema"
+  }
+]
