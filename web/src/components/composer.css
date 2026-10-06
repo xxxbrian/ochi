@@ -1,0 +1,87 @@
+.composer.ochi-composer {
+    container: ochi-input / inline-size;
+    width: 100%;
+    min-height: 102px;
+    padding: 12px 12px 8px;
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    background: var(--surface-raised);
+    transition: border-color 160ms ease;
+}
+.composer.ochi-composer:focus-within { border-color: var(--line-strong, var(--muted)); }
+.composer.ochi-composer textarea {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    max-height: 250px;
+    padding: 4px 8px 8px;
+    border: 0;
+    outline: 0;
+    resize: none;
+    background: transparent;
+    font-size: 16px;
+    line-height: 24px;
+}
+.composer.ochi-composer textarea::placeholder { color: var(--muted); }
+.ochi-composer__toolbar, .ochi-composer__tools, .ochi-composer__send-tools { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ochi-composer__supplement-row { display: flex; justify-content: flex-end; margin-top: -4px; }
+.ochi-composer__supplement { min-height: 28px; padding: 4px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; line-height: 20px; }
+.ochi-composer__supplement:hover:not(:disabled) { color: var(--ink); background: var(--hover); }
+.ochi-composer__supplement:disabled { opacity: 0.4; }
+.ochi-composer__toolbar { justify-content: space-between; }
+.ochi-composer__send-tools { flex-shrink: 0; margin-left: auto; }
+.ochi-composer__toolbar .icon-button { width: 32px; height: 32px; flex-basis: 32px; }
+.ochi-composer__toolbar .icon-button > svg { width: 18px; height: 18px; }
+.ochi-composer__toolbar .send-button { width: 40px; height: 40px; flex-basis: 40px; }
+.ochi-composer__model, .ochi-composer__reasoning { position: relative; display: flex; min-width: 0; }
+.ochi-composer__model { flex: 0 1 auto; max-width: 216px; }
+.ochi-composer__model .choice-trigger, .ochi-composer__reasoning .choice-trigger { width: auto; max-width: 100%; min-height: 32px; gap: 4px; padding: 4px; border: 0; background: transparent; color: var(--muted); font-size: 14px; line-height: 20px; }
+.ochi-composer__model .choice-trigger .choice-value { max-width: 160px; }
+.ochi-composer__model .choice-trigger:hover, .ochi-composer__reasoning .choice-trigger:hover { background: var(--hover); color: var(--ink); }
+.ochi-composer__effort-dot { display: none; }
+.ochi-composer__reasoning-toggle, .ochi-composer__budget-trigger { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px; border-radius: 8px; background: transparent; color: var(--muted); white-space: nowrap; font-size: 14px; }
+.ochi-composer__reasoning-toggle:hover, .ochi-composer__reasoning-toggle.is-active, .ochi-composer__budget-trigger:hover { color: var(--ink); background: var(--hover); }
+.ochi-composer__computer { display: inline-flex; align-items: center; flex-shrink: 0; gap: 4px; min-height: 32px; padding: 4px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 14px; white-space: nowrap; }
+.ochi-composer__computer:hover { color: var(--ink); }
+.ochi-composer__computer.is-active { background: transparent; color: var(--muted); }
+.ochi-composer__switch-track { display: inline-flex; align-items: center; flex: 0 0 24px; width: 24px; height: 14px; padding: 2px; border-radius: 16px; background: var(--line-strong, var(--subtle)); transition: background 160ms ease; }
+.ochi-composer__switch-track > span { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-raised); transition: transform 160ms ease; }
+.ochi-composer__computer.is-active .ochi-composer__switch-track { background: var(--ink); }
+.ochi-composer__computer.is-active .ochi-composer__switch-track > span { transform: translateX(10px); }
+.ochi-composer__computer.is-pending .ochi-composer__switch-track { opacity: 0.5; }
+.send-button { display: grid; place-items: center; padding: 0; border-radius: 50%; background: var(--accent); color: var(--surface); transition: opacity 160ms ease; }
+.send-button:disabled { opacity: 0.22; }
+.voice-button.is-listening { color: var(--danger); background: var(--hover); }
+.ochi-composer__budget-popup { width: 224px; max-width: calc(100vw - 24px); padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-raised); box-shadow: var(--shadow-popover); }
+.ochi-composer__budget-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.ochi-composer__budget-heading h2 { margin: 0; font-size: 14px; font-weight: 550; }
+.ochi-composer__budget-heading .icon-button { width: 32px; height: 32px; flex-basis: 32px; }
+.ochi-composer__budget-popup label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.ochi-composer__budget-popup input { width: 100%; min-width: 0; min-height: 36px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); font-size: 14px; }
+@container ochi-input (max-width: 680px) {
+    .ochi-composer__computer-label, .ochi-composer__send-tools .voice-button { display: none; }
+    .ochi-composer__model { max-width: 188px; }
+    .ochi-composer__model .choice-trigger .choice-value { max-width: 132px; }
+}
+@container ochi-input (max-width: 560px) {
+    .ochi-composer__send-now { display: none; }
+    .ochi-composer__model { max-width: 152px; }
+    .ochi-composer__model .choice-trigger .choice-value { max-width: 96px; }
+}
+@container ochi-input (max-width: 460px) {
+    .ochi-composer__tools, .ochi-composer__send-tools { gap: 0; }
+    .ochi-composer__toolbar { gap: 0; }
+    .ochi-composer__model { flex: 0 0 44px; max-width: 44px; }
+    .ochi-composer__toolbar .icon-button, .ochi-composer__toolbar .send-button, .ochi-composer__model .choice-trigger, .ochi-composer__reasoning .choice-trigger, .ochi-composer__budget-trigger, .ochi-composer__reasoning-toggle { width: 44px; min-width: 44px; min-height: 44px; height: 44px; flex-basis: 44px; max-width: none; padding: 0; justify-content: center; }
+    .ochi-composer__model .choice-trigger .choice-value, .ochi-composer__model .choice-trigger .choice-chevron, .ochi-composer__reasoning .choice-trigger .choice-value, .ochi-composer__reasoning .choice-trigger .choice-chevron, .ochi-composer__budget-trigger > span, .ochi-composer__reasoning-toggle > span { display: none; }
+    .ochi-composer__effort-dot { display: block; position: absolute; top: 8px; right: 8px; width: 4px; height: 4px; border-radius: 50%; background: var(--ink); pointer-events: none; }
+    .ochi-composer__computer { min-height: 44px; padding-inline: 4px; }
+}
+@media (max-width: 760px), (pointer: coarse) {
+    .ochi-composer__supplement { min-height: 44px; }
+    .composer.ochi-composer { padding: 12px 8px 8px; }
+    .ochi-composer__toolbar .icon-button, .ochi-composer__toolbar .send-button { width: 44px; height: 44px; flex-basis: 44px; }
+    .ochi-composer__model .choice-trigger, .ochi-composer__reasoning .choice-trigger, .ochi-composer__budget-trigger, .ochi-composer__reasoning-toggle, .ochi-composer__computer { min-height: 44px; }
+    .ochi-composer__budget-popup input { min-height: 44px; font-size: 16px; }
+    .ochi-composer__budget-heading .icon-button { width: 44px; height: 44px; flex-basis: 44px; }
+}
