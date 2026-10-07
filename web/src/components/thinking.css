@@ -1,0 +1,30 @@
+.ochi-activity { display: flex; align-items: center; gap: 6px; min-height: 36px; max-width: 100%; margin-bottom: 8px; color: var(--muted); font-size: 14px; line-height: 24px; }
+.thinking-content { display: flex; gap: 2px; margin-top: 8px; color: var(--muted); font-size: 14px; line-height: 24px; }
+.thinking-rail { position: relative; display: flex; justify-content: center; align-items: flex-start; flex: 0 0 28px; width: 28px; padding-top: 5px; }
+.thinking-parts { flex: 1; min-width: 0; }
+.thinking-part + .thinking-part { margin-top: 12px; }
+.thinking-part-body { max-height: 96px; overflow: hidden; line-height: 24px; }
+.thinking-part-content { display: flow-root; }
+.thinking-part.is-expanded .thinking-part-body { max-height: none; }
+.thinking-part-toggle { display: block; min-height: 30px; padding: 3px 0; color: var(--muted); font-size: 12px; background: transparent; }
+.thinking-part-toggle:hover { color: var(--ink); }
+.thinking-content .markdown p, .thinking-plain { margin: 0 0 8px; }
+.thinking-part:last-child .markdown p:last-child { margin-bottom: 0; }
+.thinking-plain { white-space: pre-wrap; }
+.thinking-content .markdown :is(h1, h2, h3, h4, h5, h6) { margin: 12px 0 4px; font-size: 14px; line-height: 24px; }
+.ochi-activity-mark { display: inline-grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; color: var(--ink); }
+.ochi-mark-face { display: grid; place-items: center; width: 18px; height: 17px; border: 1.5px solid currentColor; border-radius: 6px; transform-origin: 50% 70%; }
+.ochi-mark-eyes { display: flex; gap: 4px; }
+.ochi-mark-eye { width: 2.5px; height: 5px; border-radius: 2px; background: currentColor; }
+.ochi-activity-mark.is-working .ochi-mark-face { animation: ochi-attentive 3.2s ease-in-out infinite; }
+.ochi-activity-mark.is-working .ochi-mark-eyes { animation: ochi-glance 3.2s ease-in-out infinite; }
+.ochi-activity-mark.is-working .ochi-mark-eye { animation: ochi-blink 4.8s ease-in-out infinite; }
+@keyframes ochi-attentive { 0%, 100% { transform: translateY(0) rotate(0); } 22%, 35% { transform: translateY(-3px) rotate(-10deg); } 60%, 72% { transform: translateY(-1px) rotate(9deg); } }
+@keyframes ochi-glance { 0%, 100% { transform: translateX(0); } 22%, 35% { transform: translateX(-1px); } 60%, 72% { transform: translateX(1px); } }
+@keyframes ochi-blink { 0%, 44%, 49%, 100% { transform: scaleY(1); } 46%, 47% { transform: scaleY(.15); } }
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .ochi-status-label.is-working { background-image: linear-gradient(105deg, var(--muted) 0%, var(--muted) 40%, var(--ink) 47%, var(--ink) 53%, var(--muted) 60%, var(--muted) 100%); background-size: 240% 100%; background-clip: text; -webkit-background-clip: text; color: transparent; animation: ochi-status-shimmer 8s linear infinite; }
+  @keyframes ochi-status-shimmer { 0%, 60% { background-position: 140% 0; } 84%, 100% { background-position: -140% 0; } }
+}
+@media (max-width: 760px) { .ochi-activity { min-height: 44px; } .thinking-part-toggle { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .ochi-activity-mark.is-working :is(.ochi-mark-face, .ochi-mark-eyes, .ochi-mark-eye), .ochi-status-label.is-working { animation: none; } .ochi-status-label.is-working { background: none; color: var(--muted); } }
