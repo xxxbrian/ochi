@@ -1,0 +1,17 @@
+.run-transcript { min-width: 0; overflow-anchor: none; }
+.run-transcript-summary { display: flex; align-items: center; gap: 12px; }
+.run-transcript-summary > .process-toggle { padding-top: 0; }
+.run-answer-ready { flex-shrink: 0; padding: 4px 0; color: var(--ink); font-size: 13px; background: transparent; }
+.run-work-surface, .run-work-contents, .run-answer-surface { display: contents; }
+.run-transcript-slot { min-width: 0; }
+.run-public-block + .run-public-block { margin-top: 12px; }
+.run-process-slot { margin-block: 4px; }
+.run-transcript.is-archived .run-work-surface { display: block; max-height: 320px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) transparent; scrollbar-gutter: stable; margin-block: 4px 12px; padding-right: 4px; }
+.run-work-surface[hidden] { display: none !important; }
+.run-transcript.is-archived .run-work-contents { display: block; }
+.run-transcript.is-archived .run-work-surface :is(.step-output pre, .technical-details pre, .step-file-content) { max-height: none; overflow: visible; }
+.run-transcript.is-archived .run-work-surface .message-body { font-size: 14px; }
+.run-transcript.is-archived .run-transcript-summary .process-chevron { transform: rotate(0); }
+.run-transcript.is-archived.is-open .run-transcript-summary .process-chevron { transform: rotate(90deg); }
+@media (max-width: 760px) { .run-transcript.is-archived .run-work-surface { max-height: 280px; } .run-answer-ready { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .run-transcript .process-chevron { transition: none; } }
