@@ -1,0 +1,6 @@
+Brand artwork is from LobeHub Icons, bundled by yetone/magpie.
+https://github.com/lobehub/lobe-icons
+https://github.com/yetone/magpie/tree/main/internal/gui/assets/icons
+See LICENSE.txt for the MIT license. Brand names and marks remain the property
+of their respective owners. These images are served locally without requests
+to the configured model provider or third-party icon services.
