@@ -1,0 +1,7 @@
+.run-instructions { max-height: 88px; overflow-y: auto; margin: 0 10px 6px; color: var(--muted); font-size: 12px; }
+.run-instructions__receipt, .run-instructions__notice { display: flex; align-items: center; gap: 12px; min-height: 26px; }
+.run-instructions__content { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.run-instructions__status { flex-shrink: 0; }
+.run-instructions__notice button { padding: 4px 8px; margin-left: auto; border: 0; border-radius: 8px; background: transparent; color: var(--ink); }
+.run-instructions__notice button:hover { background: var(--hover); }
+@media (pointer: coarse) { .run-instructions__notice button { min-height: 44px; min-width: 44px; } }
