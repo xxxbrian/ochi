@@ -1,0 +1,49 @@
+.ochi-projects { background: var(--surface); }
+.ochi-projects .ochi-projects__column { width: min(100%, 800px); max-width: 800px; padding: 32px 24px; }
+.ochi-projects__header .header-title { min-width: 0; }
+.ochi-projects__header h1 { font-size: 14px; }
+.ochi-projects__back { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 8px; border-radius: 8px; color: var(--muted); background: transparent; font-size: 14px; line-height: 21px; }
+.ochi-projects__back:hover { color: var(--ink); background: var(--hover); }
+.ochi-projects__intro { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 12px 0 24px; }
+.ochi-projects__intro > svg { display: none; }
+.ochi-projects__intro-text { min-width: 0; }
+.ochi-projects__intro h1 { margin: 0; overflow-wrap: anywhere; color: var(--ink); font-size: 24px; line-height: 32px; letter-spacing: -0.02em; font-weight: 550; text-align: center; }
+.ochi-projects__composer { margin-bottom: 12px; }
+.ochi-projects__context { margin: 0; color: var(--muted); }
+.ochi-projects__context summary { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 0; cursor: pointer; list-style: none; font-size: 13px; line-height: 20px; }
+.ochi-projects__context summary::-webkit-details-marker { display: none; }
+.ochi-projects__context[open] summary > svg { transform: rotate(180deg); }
+.ochi-projects__context > div { padding: 8px 0 8px 12px; margin-bottom: 8px; border-left: 1px solid var(--line); color: var(--ink); font-size: 14px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ochi-projects__sessions-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; padding-bottom: 8px; }
+.ochi-projects__sessions-heading h3 { display: flex; align-items: baseline; gap: 8px; margin: 0; color: var(--ink); font-size: 14px; line-height: 21px; font-weight: 550; flex-shrink: 0; }
+.ochi-projects__sessions-heading h3 > span { color: var(--muted); font-size: 13px; font-weight: 400; }
+.ochi-projects__session-tools { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.ochi-projects__search { display: flex; align-items: center; gap: 4px; min-width: 0; padding-left: 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface-raised); }
+.ochi-projects__search input { min-width: 0; width: 156px; min-height: 32px; padding: 4px 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 14px; line-height: 20px; }
+.ochi-projects__sessions { position: relative; border-top: 1px solid var(--line); }
+.ochi-projects__search-loading { display: flex; position: absolute; inset: 8px 0 auto auto; padding: 4px; color: var(--muted); background: var(--surface); }
+.ochi-projects__sessions > button { display: flex; align-items: center; gap: 16px; width: 100%; min-height: 48px; padding: 12px 4px; border-bottom: 1px solid var(--line); background: transparent; text-align: left; }
+.ochi-projects__sessions > button:hover { background: var(--hover); }
+.ochi-projects__sessions > button > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 21px; }
+.ochi-projects__session-date { flex-shrink: 0; color: var(--muted); font-size: 13px; line-height: 20px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ochi-projects__sessions > button.search-load-more { justify-content: center; color: var(--muted); font-size: 13px; }
+.ochi-projects__list { border-top: 1px solid var(--line); }
+.ochi-projects__list > button { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 12px 4px; border-bottom: 1px solid var(--line); background: transparent; text-align: left; }
+.ochi-projects__list > button:hover { background: var(--hover); }
+.ochi-projects__list > button > svg { flex-shrink: 0; color: var(--muted); }
+.ochi-projects__list > button > div { flex: 1; min-width: 0; }
+.ochi-projects__list strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; line-height: 24px; font-weight: 500; }
+.ochi-projects__list > button > div > span { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 20px; }
+.ochi-projects__empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 96px; color: var(--muted); font-size: 14px; }
+@media (max-width: 760px) {
+    .ochi-projects .ochi-projects__column { padding: 24px 12px; }
+    .ochi-projects__back { min-height: 44px; }
+    .ochi-projects__intro { margin: 8px 0 20px; }
+    .ochi-projects__context summary { min-height: 44px; }
+    .ochi-projects__sessions-heading { margin-top: 16px; gap: 8px; }
+    .ochi-projects__session-tools .icon-button { width: 44px; height: 44px; flex-basis: 44px; }
+    .ochi-projects__search input { min-height: 44px; width: min(136px, 25vw); font-size: 16px; }
+    .ochi-projects__search > svg { display: none; }
+    .ochi-projects__sessions > button { min-height: 48px; gap: 8px; padding-block: 12px; }
+    .ochi-projects__session-date { font-size: 12px; }
+}

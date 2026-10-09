@@ -1,0 +1,26 @@
+/* Task-specific schedule editor controls; general forms use shared UI primitives. */
+.ochi-task-editor .weekday-picker {
+    display: flex;
+    gap: 4px;
+}
+.ochi-task-editor .weekday-picker button {
+    flex: 1;
+    min-width: 0;
+    min-height: 36px;
+    border-radius: var(--radius-control, 8px);
+    background: var(--paper);
+    color: var(--muted);
+    font-size: 14px;
+}
+.ochi-task-editor .weekday-picker button:hover {
+    background: var(--hover);
+    color: var(--ink);
+}
+.ochi-task-editor .weekday-picker button.selected {
+    background: var(--accent);
+    color: var(--surface);
+}
+.ochi-task-editor .advanced-section > :not(summary) { margin-top: 12px; }
+@media (max-width: 760px), (pointer: coarse) {
+    .ochi-task-editor .weekday-picker button { min-height: 44px; }
+}
