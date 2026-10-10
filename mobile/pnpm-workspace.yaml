@@ -1,0 +1,3 @@
+allowBuilds:
+  react-native-enriched-markdown: true
+nodeLinker: isolated

@@ -1,0 +1,67 @@
+{
+  "name": "ochi-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "prebuild": "expo prebuild",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/*.test.cjs scripts/*.test.mjs plugins/*.test.cjs",
+    "doctor": "npx expo-doctor",
+    "export:ios": "expo export --platform ios",
+    "export:android": "expo export --platform android"
+  },
+  "dependencies": {
+    "@expo-google-fonts/geist": "0.4.2",
+    "@expo/ui": "~57.0.22",
+    "@shopify/flash-list": "2.0.2",
+    "expo": "57.0.27",
+    "expo-blur": "~57.0.3",
+    "expo-build-properties": "~57.0.22",
+    "expo-clipboard": "~57.0.2",
+    "expo-dev-client": "~57.0.19",
+    "expo-document-picker": "~57.0.3",
+    "expo-file-system": "~57.0.7",
+    "expo-font": "~57.0.4",
+    "expo-glass-effect": "~57.0.4",
+    "expo-haptics": "~57.0.3",
+    "expo-image-picker": "~57.0.20",
+    "expo-linking": "~57.0.12",
+    "expo-router": "~57.0.25",
+    "expo-secure-store": "~57.0.4",
+    "expo-sharing": "~57.0.22",
+    "expo-splash-screen": "~57.0.9",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
+    "katex": "0.19.0",
+    "lucide-react-native": "0.577.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-enriched-markdown": "1.1.1",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-keyboard-controller": "1.21.9",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.2",
+    "react-native-svg": "15.15.4",
+    "react-native-webview": "13.16.1",
+    "react-native-worklets": "0.10.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.18",
+    "babel-preset-expo": "~57.0.14",
+    "typescript": "~6.0.3"
+  },
+  "packageManager": "pnpm@11.28.0",
+  "enriched-markdown": {
+    "enableMath": true,
+    "enableCodeHighlight": true
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
