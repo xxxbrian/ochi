@@ -1,0 +1,22 @@
+.search-settings { max-width: 840px; }
+.search-settings-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.search-settings-fields:disabled { opacity: .7; }
+.search-key-control { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.search-key-control input { flex: 1; min-width: 0; }
+.search-config-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.search-config-footer a { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.search-config-footer a:hover { color: var(--ink); }
+.search-config-note { color: var(--muted); font-size: 13px; }
+.search-test { display: grid; gap: 12px; padding-top: 20px; }
+.search-test h3 { margin: 0; font-size: 16px; font-weight: 550; }
+.search-test-query { display: flex; align-items: stretch; gap: 8px; }
+.search-test-query input { flex: 1; min-width: 0; }
+.search-test-query button { flex-shrink: 0; }
+.search-test-results { display: grid; gap: 4px; font-size: 13px; }
+.search-test-results > span { color: var(--muted); padding-bottom: 4px; }
+.search-test-results a { display: flex; gap: 12px; justify-content: space-between; padding-block: 8px; border-bottom: 1px solid var(--line); }
+.search-test-results strong { font-weight: 500; overflow-wrap: anywhere; }
+.search-test-results a > span { color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .search-test-results a { flex-direction: column; gap: 2px; }
+}
