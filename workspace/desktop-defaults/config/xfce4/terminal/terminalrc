@@ -1,0 +1,14 @@
+[Configuration]
+FontName=Noto Sans Mono 11
+ColorForeground=#e0e3e9
+ColorBackground=#202329
+ColorCursor=#e0e3e9
+ColorUseTheme=FALSE
+MiscMenubarDefault=FALSE
+MiscToolbarDefault=FALSE
+MiscBordersDefault=TRUE
+MiscAlwaysShowTabs=FALSE
+MiscBell=FALSE
+MiscConfirmClose=TRUE
+ScrollingBar=TERMINAL_SCROLLBAR_RIGHT
+ScrollingLines=10000

@@ -1,0 +1,26 @@
+.xfce4-panel.background {
+  background-color: #f6f7f8;
+  color: #24262a;
+  border-bottom: 1px solid #c9cdd3;
+}
+
+.xfce4-panel.background button {
+  border-radius: 4px;
+  margin: 3px 1px;
+  color: #24262a;
+  text-shadow: none;
+}
+
+.xfce4-panel.background .tasklist button {
+  color: #24262a;
+  text-shadow: none;
+}
+
+.xfce4-panel.background button:hover,
+.xfce4-panel.background button:active,
+.xfce4-panel.background button:checked,
+.xfce4-panel.background .tasklist button:hover,
+.xfce4-panel.background .tasklist button:active,
+.xfce4-panel.background .tasklist button:checked {
+  color: #ffffff;
+}

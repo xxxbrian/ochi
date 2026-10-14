@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Workspace Files
+Comment=Files in the persistent computer workspace
+Exec=thunar /data
+Icon=system-file-manager
+Terminal=false
+StartupNotify=true
+Categories=System;FileManager;
+MimeType=inode/directory;
