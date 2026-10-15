@@ -1,0 +1,331 @@
+/* Settings uses the same compact rail/list grammar as the reference while
+   keeping the memory controls content-sized for a small personal deployment. */
+.modal.ochi-settings-modal {
+    width: min(760px, calc(100% - 32px));
+    border-radius: var(--radius-dialog);
+}
+.modal-body.ochi-settings-body {
+    display: flex;
+    flex: 1 1 auto;
+    padding: 0;
+    overflow: hidden;
+}
+.ochi-settings {
+    display: grid;
+    grid-template-columns: 168px minmax(0, 1fr);
+    flex: 1;
+    min-height: 0;
+    max-height: min(620px, calc(100dvh - 96px));
+}
+.ochi-settings__rail {
+    min-width: 0;
+    padding: var(--space-4) var(--space-3);
+    border-right: 1px solid var(--line);
+    background: var(--canvas);
+}
+.ochi-settings__rail button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: var(--control-compact);
+    padding: 6px var(--space-2);
+    border-radius: var(--radius-field);
+    background: transparent;
+    color: var(--muted);
+    font-size: var(--font-size-ui);
+    line-height: 20px;
+    text-align: left;
+}
+.ochi-settings__rail button:hover,
+.ochi-settings__rail button[aria-current="page"] {
+    background: var(--hover);
+    color: var(--ink);
+}
+.ochi-settings__rail button > svg {
+    width: 16px;
+    height: 16px;
+}
+.ochi-settings__content {
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+}
+.ochi-settings__panel {
+    min-width: 0;
+    padding: var(--space-5);
+}
+.ochi-settings h3 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    color: var(--ink);
+    font-size: var(--font-size-body);
+    line-height: 24px;
+    font-weight: var(--weight-heading);
+}
+.ochi-settings h3 > svg {
+    color: var(--muted);
+}
+.ochi-settings h3 > span {
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    font-weight: var(--weight-normal);
+}
+.ochi-settings__appearance {
+    display: grid;
+    gap: var(--space-4);
+}
+.ochi-settings__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 56px;
+    gap: var(--space-4);
+    padding: var(--space-4) 0;
+    border-bottom: 1px solid var(--line);
+}
+.ochi-settings__row .choice-trigger {
+    width: 160px;
+    max-width: 60%;
+    flex-shrink: 0;
+}
+.ochi-settings__row > strong {
+    font-size: var(--font-size-ui);
+    line-height: 20px;
+    font-weight: var(--weight-normal);
+}
+.ochi-settings__memory {
+    min-width: 0;
+}
+.ochi-settings__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 32px;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+}
+.ochi-settings__heading input {
+    margin: 0;
+}
+.ochi-settings__edit-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+.ochi-settings__edit-heading .icon-button {
+    width: var(--control-compact);
+    height: var(--control-compact);
+    flex-basis: var(--control-compact);
+}
+.ochi-settings__switch {
+    display: grid;
+    place-items: center;
+    width: var(--control-touch);
+    height: var(--control-touch);
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.ochi-settings__filters {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+}
+.ochi-settings__filters .search-input {
+    flex: 1;
+}
+.ochi-settings__filters .secondary-button {
+    flex-shrink: 0;
+}
+.ochi-settings__filter {
+    position: relative;
+    width: var(--control-compact);
+    height: var(--control-compact);
+    flex-basis: var(--control-compact);
+}
+.ochi-settings__filter-indicator {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--ink);
+}
+.ochi-settings__filter-options {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+    padding: var(--space-3);
+    border-radius: var(--radius-field);
+    background: var(--canvas);
+}
+.ochi-settings__filter-options > .text-button {
+    grid-column: 1 / -1;
+    justify-self: end;
+    padding: 0;
+}
+.ochi-settings__records {
+    max-height: none;
+    min-height: 72px;
+    overflow: visible;
+}
+.ochi-settings__records article {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4) 0;
+    border-bottom: 1px solid var(--line);
+}
+.ochi-settings__records article:last-child {
+    border-bottom: 0;
+}
+.ochi-settings__records .ochi-settings__record-main {
+    flex: 1;
+    min-width: 0;
+}
+.ochi-settings__records .ochi-settings__record-main > p {
+    margin: var(--space-2) 0;
+    color: var(--ink);
+    font-size: var(--font-size-ui);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+.ochi-settings__records .ochi-settings__metadata {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    color: var(--subtle);
+    font-size: var(--font-size-caption);
+    line-height: 18px;
+}
+.ochi-settings__records .ochi-settings__metadata > span + span::before {
+    content: "·";
+    margin-right: var(--space-2);
+}
+.ochi-settings__records .ochi-settings__source {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--subtle);
+    font-size: var(--font-size-caption);
+    line-height: 18px;
+}
+.ochi-settings__records .ochi-settings__source .text-button {
+    min-height: 24px;
+    padding: 0;
+    font-size: var(--font-size-caption);
+}
+.ochi-settings__records .ochi-settings__record-actions {
+    display: flex;
+    gap: var(--space-1);
+}
+.ochi-settings__records .ochi-settings__record-actions .icon-button {
+    width: var(--control-compact);
+    height: var(--control-compact);
+    flex-basis: var(--control-compact);
+}
+.ochi-settings__excerpt {
+    margin-top: var(--space-2);
+}
+.ochi-settings__excerpt summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: var(--control-compact);
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 20px;
+    cursor: pointer;
+    list-style: none;
+}
+.ochi-settings__excerpt summary::-webkit-details-marker {
+    display: none;
+}
+.ochi-settings__excerpt blockquote {
+    margin: var(--space-2) 0;
+    padding-left: var(--space-3);
+    border-left: 2px solid var(--line-strong);
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+.ochi-settings__empty {
+    padding: var(--space-8) 0;
+    color: var(--muted);
+    font-size: var(--font-size-meta);
+    text-align: center;
+}
+.ochi-settings__editor {
+    padding: var(--space-2) 0 var(--space-4);
+}
+.ochi-settings__editor textarea {
+    min-height: 128px;
+}
+.ochi-settings__content > .form-error {
+    margin: var(--space-2) var(--space-5) var(--space-3);
+}
+@media (max-width: 760px) {
+    .modal.ochi-settings-modal {
+        width: calc(100% - 24px);
+    }
+    .ochi-settings {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        max-height: calc(100dvh - 80px);
+    }
+    .ochi-settings__rail {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+        overflow-x: auto;
+        padding: var(--space-2) var(--space-3);
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        scrollbar-width: none;
+    }
+    .ochi-settings__rail::-webkit-scrollbar {
+        display: none;
+    }
+    .ochi-settings__rail button {
+        width: auto;
+        flex: 0 0 auto;
+        min-height: var(--control-touch);
+        padding: var(--space-2) var(--space-3);
+        white-space: nowrap;
+    }
+    .ochi-settings__content {
+        flex: 1;
+    }
+    .ochi-settings__panel {
+        padding: var(--space-4);
+    }
+    .ochi-settings__filters .secondary-button {
+        padding-inline: var(--space-2);
+    }
+    .ochi-settings__row {
+        min-height: 52px;
+    }
+}
+@media (max-width: 760px), (pointer: coarse) {
+    .ochi-settings__filter,
+    .ochi-settings__edit-heading .icon-button,
+    .ochi-settings__records .ochi-settings__record-actions .icon-button {
+        width: var(--control-touch);
+        height: var(--control-touch);
+        flex-basis: var(--control-touch);
+    }
+    .ochi-settings__excerpt summary,
+    .ochi-settings__records .ochi-settings__source .text-button {
+        min-height: var(--control-touch);
+    }
+}
