@@ -313,6 +313,7 @@ function messageScrollHarness() {
     "../lib/api": { isActiveStatus: (status) => status === "running", userFacingRunError: () => "error" },
     "../lib/chatProjection": { chatMessageKey, projectChatMessages },
     "../lib/markdown": {},
+    "../lib/runPresentation": {},
     "./MarkdownMessage": {}, "./UserMessage": {}, "./HistoryProcess": {},
     "./FileCards": {}, "./Composer": {}, "./WaitingInputCard": {}, "./chat.css": {},
   }, "", {

@@ -18,10 +18,11 @@ import {
   RotateCcw,
   Volume2,
 } from "lucide-react";
-import { isActiveStatus, userFacingRunError } from "../lib/api";
+import { isActiveStatus } from "../lib/api";
 import type { Message, Snapshot } from "../lib/types";
 import { chatMessageKey, projectChatMessages } from "../lib/chatProjection";
 import { markdownImageUrls } from "../lib/markdown";
+import { terminalPublicReply } from "../lib/runPresentation";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { UserMessage } from "./UserMessage";
 import { HistoryProcess } from "./HistoryProcess";
@@ -40,6 +41,11 @@ type Props = {
   onEdit?: (message: Message) => void;
   onResume: (runId: string, answer: string) => Promise<void>;
 };
+
+function messageRunStatus(message?: Message, snapshot?: Snapshot | null) {
+  if (message?.run_status && !isActiveStatus(message.run_status)) return message.run_status;
+  return snapshot?.status ?? message?.run_status;
+}
 
 const MessageActions = memo(function MessageActions({
   message,
@@ -133,7 +139,11 @@ const HistoryMessage = memo(function HistoryMessage({
       message.run_status ||
       (snapshot?.run_id === message.run_id && Boolean(snapshot.error)));
   const files = message.attachments;
-  const visibleContent = snapshot?.output ?? message.content;
+  const runStatus = messageRunStatus(message, snapshot);
+  const terminalMessage = message.run_status && !isActiveStatus(message.run_status);
+  const visibleContent = terminalMessage && message.content.trim() ? message.content
+    : snapshot && !isActiveStatus(runStatus) ? terminalPublicReply(snapshot.timeline, snapshot.output, runStatus)
+    : snapshot?.output ?? message.content;
   const embeddedImages = useMemo(
     () => markdownImageUrls(message.content),
     [message.content],
@@ -152,6 +162,8 @@ const HistoryMessage = memo(function HistoryMessage({
         hasReasoning={message.has_reasoning}
         hasProcess={message.has_process}
         status={message.run_status}
+        runError={message.run_error}
+        hasArtifacts={Boolean(message.attachments?.length || snapshot?.artifacts?.length)}
         snapshot={snapshot}
         output={message.content}
         createdAt={message.run_created_at}
@@ -168,15 +180,15 @@ const HistoryMessage = memo(function HistoryMessage({
       )}
       {message.role === "user" ? (
         <UserMessage message={message} onEdit={onEdit} onRetry={onRetry} />
-      ) : !process && visibleContent ? <MarkdownMessage message={message} isStreaming={snapshot?.status === "running"} /> : null}
+      ) : !process && visibleContent ? <MarkdownMessage message={{ ...message, content: visibleContent }} isStreaming={runStatus === "running"} /> : null}
       {message.role !== "user" && (
         <>
           <FileCards files={separateFiles} />
           <FileCards files={embeddedFiles} compactImages />
         </>
       )}
-      {message.role !== "user" && visibleContent && !isActiveStatus(snapshot?.status ?? message.run_status ?? "completed") && <div className="message-footer">
-        <MessageActions message={message} onRetry={onRetry} />
+      {message.role !== "user" && visibleContent && !isActiveStatus(runStatus) && <div className="message-footer">
+        <MessageActions message={{ ...message, content: visibleContent }} onRetry={onRetry} />
         {message.role === "assistant" && message.model_name && (
           <span className="message-model" title={`${message.model_name}${message.effort ? ` · ${effortLabel(message.effort)}` : ""}`}>
             {message.model_name}
@@ -252,6 +264,8 @@ export function MessageList({
     setProcessExpansion((current) => current[runId] === expanded ? current : { ...current, [runId]: expanded });
   }, []);
   const projectedMessages = useMemo(() => projectChatMessages(messages, snapshot), [messages, snapshot]);
+  const currentMessage = snapshot ? messages.find((message) => message.role === "assistant" && message.run_id === snapshot.run_id) : undefined;
+  const currentRunStatus = messageRunStatus(currentMessage, snapshot);
   useLayoutEffect(() => {
     shouldStick.current = true;
     inspectingDetails.current = false;
@@ -419,21 +433,13 @@ export function MessageList({
             processExpansion={processExpansion}
             onProcessOpen={onProcessOpen}
           />
-          {snapshot?.waiting_input && snapshot.status === "waiting_user" && (
+          {snapshot?.waiting_input && currentRunStatus === "waiting_user" && (
             <WaitingInputCard
               key={`${snapshot.run_id}:${snapshot.waiting_input.kind ?? "question"}:${snapshot.waiting_input.question}`}
               waiting={snapshot.waiting_input}
               runId={snapshot.run_id}
               onResume={onResume}
             />
-          )}
-          {snapshot?.status === "failed" && (
-            <div className="run-error" role="alert">
-              {userFacingRunError(
-                snapshot.error,
-                Boolean(snapshot.artifacts?.length),
-              )}
-            </div>
           )}
           {messages.length === 0 && !snapshot && (
             <div className="empty-state">

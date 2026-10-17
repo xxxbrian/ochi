@@ -18,7 +18,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { api, isActiveStatus, userFacingRunError } from "../lib/api";
+import { api, isActiveStatus } from "../lib/api";
 import { statusLabel } from "../lib/router";
 import type {
   Model,
@@ -468,7 +468,8 @@ export default function TasksPage({
                 <div className="task-output ochi-tasks__output">
                   <RunTranscript timeline={current?.timeline ?? []} output={visibleOutput} status={executionStatus}
                     waitingKind={current?.waiting_input?.kind} resource={current?.resource}
-                    error={current?.error ?? execution.error} createdAt={current?.created_at ?? execution.started_at}
+                    error={current?.error ?? execution.error} hasArtifacts={Boolean((current?.artifacts ?? execution.artifacts)?.length)}
+                    createdAt={current?.created_at ?? execution.started_at}
                     updatedAt={current?.updated_at ?? execution.finished_at}
                     renderBody={(text, _id, streaming) => <Suspense fallback={<p className="markdown-loading">{text}</p>}>
                       <MarkdownContent content={text} isStreaming={streaming} />
@@ -486,16 +487,6 @@ export default function TasksPage({
                   />
                 ) : null}
                 <FileCards files={current?.artifacts ?? execution.artifacts} />
-                {(current?.error || execution.error) && (
-                  <p className="run-error">
-                    {userFacingRunError(
-                      current?.error ?? execution.error,
-                      Boolean(
-                        (current?.artifacts ?? execution.artifacts)?.length,
-                      ),
-                    )}
-                  </p>
-                )}
               </>
             ) : (
               <>

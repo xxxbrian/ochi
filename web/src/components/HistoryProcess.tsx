@@ -11,6 +11,8 @@ export function HistoryProcess({
   hasReasoning = false,
   hasProcess = false,
   status,
+  runError,
+  hasArtifacts = false,
   snapshot,
   output,
   expanded,
@@ -24,6 +26,8 @@ export function HistoryProcess({
   hasReasoning?: boolean;
   hasProcess?: boolean;
   status?: RunStatus;
+  runError?: string;
+  hasArtifacts?: boolean;
   snapshot?: Snapshot | null;
   output?: string;
   expanded?: boolean;
@@ -42,10 +46,15 @@ export function HistoryProcess({
   const provided = snapshot?.run_id === runId ? snapshot : null;
   const remembered = provided ?? (cachedSnapshot.current?.run_id === runId ? cachedSnapshot.current : null);
   const saved = loaded?.run_id === runId && (!remembered || loaded.seq >= remembered.seq) ? loaded : remembered;
-  const needsTerminal = Boolean(!provided && saved && isActiveStatus(saved.status) && status && !isActiveStatus(status));
-  const current = saved && needsTerminal ? { ...saved, status: status!, output: output ?? saved.output,
+  const needsTerminal = Boolean(saved && isActiveStatus(saved.status) && status && !isActiveStatus(status));
+  const current = saved && needsTerminal ? { ...saved, status: status!, output: status === "completed" ? output ?? saved.output : saved.output,
     created_at: createdAt ?? saved.created_at, updated_at: updatedAt ?? saved.updated_at,
-    waiting_input: undefined } : saved;
+    error: runError || saved.error, waiting_input: undefined } : saved;
+  const recoveringPublic = needsTerminal && status !== "completed" && Boolean(output?.trim());
+  // The terminal history projection can be ahead of a disconnected stream.
+  // Keep all of it visible while the canonical process snapshot recovers.
+  const visibleTimeline = recoveringPublic ? current!.timeline.filter((entry) => entry.kind !== "progress") : current?.timeline ?? [];
+  const visibleOutput = recoveringPublic ? output! : current?.output ?? output ?? "";
 
   useEffect(() => {
     owner.current += 1;
@@ -65,7 +74,7 @@ export function HistoryProcess({
   }, [snapshot, runId]);
 
   useEffect(() => {
-    if (!open || (current && !needsTerminal) || loading || error) return;
+    if ((!open && !needsTerminal) || (current && !needsTerminal) || loading || error) return;
     const token = ++owner.current;
     setLoading(true);
     void api.run(runId).then((snapshot) => {
@@ -86,9 +95,10 @@ export function HistoryProcess({
   }
 
   return <>
-    <RunTranscript timeline={current?.timeline ?? []} output={current?.output ?? output ?? ""}
+    <RunTranscript timeline={visibleTimeline} output={visibleOutput}
       status={current?.status ?? status} waitingKind={current?.waiting_input?.kind} resource={current?.resource}
-      error={current?.error} createdAt={current?.created_at ?? createdAt} updatedAt={current?.updated_at ?? updatedAt}
+      error={runError || current?.error} hasArtifacts={hasArtifacts || Boolean(current?.artifacts?.length)}
+      createdAt={current?.created_at ?? createdAt} updatedAt={current?.updated_at ?? updatedAt}
       expanded={expanded ?? localOpen} onExpandedChange={change} renderBody={renderBody} />
     {!current && (stepCount > 0 || hasReasoning || hasProcess) && <section className={`process history-process ${open ? "is-open" : ""}`}>
       <button className="process-toggle" onClick={() => change(!open)} aria-expanded={open}>

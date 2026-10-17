@@ -233,12 +233,28 @@ test("persisted terminal status preserves every public block in a remembered Web
   assert.equal(terminal.props.updatedAt, end);
   assert.deepEqual(JSON.parse(JSON.stringify(terminal.props.timeline)), [confirmed, pending]);
   assert.equal(snapshot.timeline[1].pending, true);
-  const failed = render({ runId: "R", status: "failed", output: "", stepCount: 0, updatedAt: end });
-  assert.equal(failed.props.output, "");
-  assert.deepEqual(JSON.parse(JSON.stringify(failed.props.timeline)), [confirmed, pending]);
+  const failed = render({ runId: "R", status: "failed", output: "Checking sources\n\nFinal answer", runError: "stream failed", stepCount: 0, updatedAt: end });
+  assert.equal(failed.props.output, "Checking sources\n\nFinal answer");
+  assert.equal(failed.props.error, "stream failed");
+  assert.deepEqual(JSON.parse(JSON.stringify(failed.props.timeline)), []);
+  assert.equal(snapshot.output, "Final answer", "display recovery must not mutate the provider candidate");
+  assert.deepEqual(snapshot.timeline, [confirmed, pending]);
 });
 
-test("opening a remembered Web panel refreshes missed terminal tools in place without retry loops or accepting stale snapshots", async () => {
+test("cold interrupted history shows its public projection and failure without opening heavy process details", () => {
+  let requests = 0;
+  const render = historyProcessHarness(async () => { requests++; throw new Error("Details must stay lazy"); });
+  for (const status of ["failed", "cancelled", "interrupted"]) {
+    const view = render({ runId: `R-${status}`, status, output: "First finding\n\nPartial answer", runError: "model response ended with an output limit", stepCount: 3 });
+    assert.equal(view.props.output, "First finding\n\nPartial answer");
+    assert.equal(view.props.status, status);
+    assert.equal(view.props.error, "model response ended with an output limit");
+    assert.equal(view.props.expanded, false);
+    assert.equal(requests, 0);
+  }
+});
+
+test("a remembered Web panel refreshes terminal tools without disclosure, retry loops or accepting stale snapshots", async () => {
   const tool = { id: "T", seq: 1, kind: "tool", step: { id: "T", name: "exec", status: "running" } };
   const cached = { run_id: "R", status: "running", seq: 4, output: "", timeline: [tool], created_at: start, updated_at: start };
   const final = { ...cached, status: "completed", seq: 9, output: "Final answer", updated_at: end, timeline: [{ ...tool, step: { ...tool.step, status: "completed" } }] };
@@ -254,7 +270,7 @@ test("opening a remembered Web panel refreshes missed terminal tools in place wi
   const terminalProps = { runId: "R", status: "completed", output: "Final answer", stepCount: 1, updatedAt: end };
   render({ ...terminalProps, status: "running", snapshot: cached });
   let view = render(terminalProps);
-  assert.equal(requests, 0, "closed process stays lazy");
+  assert.equal(requests, 1, "a stale active snapshot recovers terminal changes even while details stay closed");
   const initialType = view.type;
   for (let attempt = 1; attempt <= 5; attempt++) {
     view.props.onExpandedChange(true);
@@ -278,6 +294,86 @@ test("opening a remembered Web panel refreshes missed terminal tools in place wi
   assert.equal(cached.timeline[0].step.status, "running");
 });
 
+test("a terminal history update keeps every DTO public block visible while closed, loading or offline", async () => {
+  for (const provided of [false, true]) for (const status of ["failed", "cancelled", "interrupted"]) {
+    let resolve, reject, requests = 0;
+    const render = historyProcessHarness(() => { requests++; return new Promise((yes, no) => { resolve = yes; reject = no; }); });
+    const first = { id: "P1", seq: 1, kind: "progress", text: "First finding", pending: true };
+    const tool = { id: "T1", seq: 2, kind: "tool", step: { id: "T1", name: "exec", status: "running" } };
+    const second = { id: "P2", seq: 3, kind: "progress", text: "Second finding", pending: true };
+    const cached = { run_id: "R", status: "running", seq: 2, output: first.text, timeline: [first, tool], created_at: start, updated_at: start };
+    render({ runId: "R", status: "running", snapshot: cached, stepCount: 0 });
+    const props = { runId: "R", status, snapshot: provided ? cached : undefined, output: "First finding\n\nSecond finding", runError: "stream failed", stepCount: 1, updatedAt: end };
+    let view = render(props);
+    assert.equal(requests, 1);
+    assert.equal(view.props.expanded, false);
+    assert.equal(view.props.output, props.output, "the display projection must include the newly known public suffix immediately");
+    assert.deepEqual(JSON.parse(JSON.stringify(view.props.timeline)), [tool], "keep known work without duplicating the aggregate public prefix");
+    assert.equal(cached.output, "First finding", "display recovery must not mutate the provider candidate");
+    assert.equal(view.props.status, status, "an explicitly retained stale stream snapshot cannot roll back terminal DTO status");
+    assert.equal(view.props.error, "stream failed");
+    if (status === "interrupted") {
+      reject(new Error("Offline"));
+      for (let tick = 0; tick < 5; tick++) await Promise.resolve();
+      view = render(props);
+      assert.equal(view.props.output, props.output, "a failed fetch must retain both public blocks, not only the cached prefix");
+      assert.deepEqual(JSON.parse(JSON.stringify(view.props.timeline)), [tool]);
+      assert.equal(view.props.error, "stream failed");
+      render(props);
+      assert.equal(requests, 1, "a failed terminal refresh must not loop");
+      continue;
+    }
+    resolve({ ...cached, status, seq: 4, output: "Second finding", timeline: [first, tool, second], error: "stream failed", updated_at: end });
+    for (let tick = 0; tick < 5; tick++) await Promise.resolve();
+    view = render(props);
+    assert.equal(view.props.expanded, false);
+    assert.deepEqual(JSON.parse(JSON.stringify(view.props.timeline)), [first, tool, second]);
+    assert.equal(view.props.output, "Second finding");
+    assert.equal(requests, 1);
+  }
+});
+
+test("a nonblank terminal DTO error is visible even when a saved terminal snapshot has an empty error", () => {
+  const render = historyProcessHarness();
+  const snapshot = { run_id: "R", status: "failed", seq: 4, output: "Partial answer", timeline: [], error: "", created_at: start, updated_at: end };
+  const view = render({ runId: "R", status: "failed", output: snapshot.output, runError: "stream failed", snapshot, stepCount: 0 });
+  assert.equal(view.props.error, "stream failed");
+  assert.equal(view.props.output, "Partial answer");
+});
+
+test("terminal history status removes stale waiting UI and copies the complete public reply", () => {
+  const jsx = (type, props) => ({ type, props: props ?? {} });
+  const walk = (node) => Array.isArray(node) ? node.flatMap(walk) : node && typeof node === "object" && "type" in node ? [node, ...walk(node.props.children)] : [];
+  const process = load("src/lib/processTimeline.ts");
+  const presentation = load("src/lib/runPresentation.ts", { "./processTimeline": process });
+  const projection = load("src/lib/chatProjection.ts");
+  const react = { memo: (component) => component, useMemo: (fn) => fn(), useCallback: (fn) => fn, useRef: (current) => ({ current }), useState: (value) => [value, () => {}], useEffect() {}, useLayoutEffect() {} };
+  const { MessageList, TestHistoryMessage } = load("src/components/MessageList.tsx", {
+    react, "react/jsx-runtime": { jsx, jsxs: jsx }, "lucide-react": {},
+    "../lib/api": { isActiveStatus: (status) => ["running", "cancelling", "queued", "waiting_user", "waiting_resource"].includes(status) },
+    "../lib/chatProjection": projection, "../lib/runPresentation": presentation,
+    "../lib/markdown": { markdownImageUrls: () => new Set() },
+    "./MarkdownMessage": { MarkdownMessage: "MarkdownMessage" }, "./UserMessage": {}, "./HistoryProcess": { HistoryProcess: "HistoryProcess" },
+    "./FileCards": {}, "./Composer": {}, "./WaitingInputCard": { WaitingInputCard: "WaitingInputCard" }, "./chat.css": {},
+  }, {}, "\nexports.TestHistoryMessage = HistoryMessage;");
+  const cached = { run_id: "R", status: "waiting_user", output: "", timeline: [], waiting_input: { question: "Continue?" } };
+  const message = { id: "M", role: "assistant", run_id: "R", run_status: "failed", content: "First finding\n\nSecond finding", created_at: start };
+  const parent = walk(MessageList({ messages: [message], snapshot: cached, sessionId: "S", onResume() {} }));
+  assert.equal(parent.some((node) => node.type === "WaitingInputCard"), false, "a stale SSE question must not outlive the terminal history record");
+  const history = walk(TestHistoryMessage({ message, snapshot: cached }));
+  const footer = history.find((node) => node.props.className === "message-footer");
+  assert.ok(footer, "a stale active snapshot cannot hide terminal actions");
+  assert.equal(footer.props.children[0].props.message.content, message.content, "copy and speech use the whole authoritative public projection");
+
+  const publicEntry = { id: "progress:source", seq: 1, kind: "progress", text: "Public finding" };
+  const terminal = { ...cached, status: "failed", timeline: [publicEntry, { id: "reasoning", seq: 2, kind: "reasoning", reasoning: { text: "Private thought" } }] };
+  const synthetic = projection.projectChatMessages([], terminal)[0];
+  const liveHistory = walk(TestHistoryMessage({ message: synthetic, snapshot: terminal }));
+  const liveFooter = liveHistory.find((node) => node.props.className === "message-footer");
+  assert.ok(liveFooter, "a terminal run without a persisted message still offers public copy actions");
+  assert.equal(liveFooter.props.children[0].props.message.content, "Public finding");
+});
+
 test("pending public text streams once and stays visible on cancellation or failure", () => {
   const React = require("react");
   const { renderToStaticMarkup } = require("react-dom/server");
@@ -285,18 +381,47 @@ test("pending public text streams once and stays visible on cancellation or fail
   const presentation = load("src/lib/runPresentation.ts", { "./processTimeline": timeline });
   const { RunTranscript } = load("src/components/RunTranscript.tsx", {
     react: React, "react/jsx-runtime": require("react/jsx-runtime"), "react-dom": require("react-dom"),
-    "../lib/api": { isActiveStatus: (status) => status === "running" },
+    "../lib/api": { isActiveStatus: (status) => status === "running", userFacingRunError: () => "The reply could not finish" },
     "../lib/runPresentation": presentation,
     "./ProcessDetails": { ProcessDetails: () => null, ProcessSummary: () => null }, "./run-transcript.css": {},
   });
   const text = "让我核对来源";
   const props = { timeline: [{ id: "P", seq: 1, kind: "progress", pending: true, text }], output: text,
     renderBody: (content, id, streaming) => React.createElement("p", { "data-answer": id, "data-streaming": streaming }, content) };
-  for (const status of ["running", "cancelled", "failed"]) {
+  for (const status of ["running", "cancelled", "failed", "interrupted"]) {
     const markup = renderToStaticMarkup(React.createElement(RunTranscript, { ...props, status }));
     assert.match(markup, /data-answer="P"/);
     assert.equal(markup.split(text).length - 1, 1, `${status} must not hide or duplicate public text`);
     assert.doesNotMatch(markup, /is-archived/);
+  }
+});
+
+test("failed and interrupted public narrative remains chronological with one sanitized error outside details", () => {
+  const React = require("react");
+  const { renderToStaticMarkup } = require("react-dom/server");
+  const timeline = load("src/lib/processTimeline.ts");
+  const presentation = load("src/lib/runPresentation.ts", { "./processTimeline": timeline });
+  const { RunTranscript } = load("src/components/RunTranscript.tsx", {
+    react: React, "react/jsx-runtime": require("react/jsx-runtime"), "react-dom": require("react-dom"),
+    "../lib/api": { isActiveStatus: () => false, userFacingRunError: (error, hasArtifacts) => hasArtifacts ? "Files are available" : error === "model response ended with an output limit" ? "The reply reached its output limit" : "The reply could not finish" },
+    "../lib/runPresentation": presentation,
+    "./ProcessDetails": { ProcessDetails: () => React.createElement("button", null, "Process details"), ProcessSummary: () => null }, "./run-transcript.css": {},
+  });
+  const props = { output: "First finding\n\nPartial answer", error: "model response ended with an output limit", timeline: [
+    { id: "P1", seq: 1, kind: "progress", text: "First finding" },
+    { id: "T1", seq: 2, kind: "tool", step: { id: "T1", name: "exec", status: "failed" } },
+    { id: "P2", seq: 3, kind: "progress", text: "Partial answer", pending: true },
+  ], renderBody: (text) => React.createElement("p", null, text) };
+  for (const status of ["failed", "interrupted"]) {
+    const markup = renderToStaticMarkup(React.createElement(RunTranscript, { ...props, status }));
+    assert.equal(markup.split("First finding").length - 1, 1);
+    assert.equal(markup.split("Partial answer").length - 1, 1);
+    assert.ok(markup.indexOf("First finding") < markup.indexOf("Process details"));
+    assert.ok(markup.indexOf("Process details") < markup.indexOf("Partial answer"));
+    assert.match(markup, /role="alert">The reply reached its output limit/);
+    assert.doesNotMatch(markup, /model response ended|is-archived|hidden=""/);
+    const withFiles = renderToStaticMarkup(React.createElement(RunTranscript, { ...props, status, hasArtifacts: true }));
+    assert.match(withFiles, /role="alert">Files are available/);
   }
 });
 

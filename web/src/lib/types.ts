@@ -336,6 +336,7 @@ export type Message = {
   id: string;
   run_id?: string;
   run_status?: RunStatus;
+  run_error?: string;
   run_created_at?: string;
   run_updated_at?: string;
   role: "user" | "assistant" | "system";

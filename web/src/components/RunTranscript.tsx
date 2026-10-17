@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { ProcessEntry, RunStatus, WaitingInput } from "../lib/types";
-import { isActiveStatus } from "../lib/api";
+import { isActiveStatus, userFacingRunError } from "../lib/api";
 import { transcriptPlan } from "../lib/runPresentation";
 import { ProcessDetails, ProcessSummary } from "./ProcessDetails";
 import "./run-transcript.css";
@@ -13,6 +13,7 @@ type Props = {
   waitingKind?: WaitingInput["kind"];
   resource?: string;
   error?: string;
+  hasArtifacts?: boolean;
   createdAt?: string;
   updatedAt?: string;
   expanded?: boolean;
@@ -57,7 +58,7 @@ function readerPaused(scroll: HTMLElement | null) {
     (scroll.matches(".workspace-page-scroll") && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight > 96);
 }
 
-export const RunTranscript = memo(function RunTranscript({ timeline, output, status, waitingKind, resource, error, createdAt, updatedAt, expanded, onExpandedChange, renderBody }: Props) {
+export const RunTranscript = memo(function RunTranscript({ timeline, output, status, waitingKind, resource, error, hasArtifacts = false, createdAt, updatedAt, expanded, onExpandedChange, renderBody }: Props) {
   const plan = useMemo(() => transcriptPlan(timeline, output, status), [timeline, output, status]);
   const root = useRef<HTMLDivElement>(null);
   const work = useRef<HTMLDivElement>(null);
@@ -76,6 +77,8 @@ export const RunTranscript = memo(function RunTranscript({ timeline, output, sta
   const releasingScroll = useRef<HTMLElement | null>(null);
   const answerRequested = useRef(false);
   const active = isActiveStatus(status);
+  const failed = status === "failed" || status === "interrupted";
+  const failureMessage = error || failed ? userFacingRunError(error, hasArtifacts) : "";
   const archived = rolledUp && plan.canRollUp;
 
   function preserveAnswer() {
@@ -167,7 +170,7 @@ export const RunTranscript = memo(function RunTranscript({ timeline, output, sta
   return <div className={`run-transcript${archived ? " is-archived" : ""}${open ? " is-open" : ""}`} ref={root}
     onPointerDownCapture={(event) => noteReading(event.target)} onWheelCapture={(event) => noteReading(event.target)}
     onKeyDownCapture={(event) => { if (["Enter", " ", "ArrowUp", "PageUp", "Home"].includes(event.key)) noteReading(event.target); }}>
-    {(active || plan.hasWork || error) ? <div className="run-transcript-summary">
+    {(active || plan.hasWork || failed || status === "cancelled" || error) ? <div className="run-transcript-summary">
       <ProcessSummary timeline={timeline} active={active} status={status} waitingKind={waitingKind} resource={resource} hasOutput={hasPublic}
         expanded={open} onExpandedChange={archived ? changeOpen : undefined} createdAt={createdAt} updatedAt={updatedAt} />
       {answerReady && <button className="run-answer-ready" onClick={showAnswer}>查看答复</button>}
@@ -184,6 +187,6 @@ export const RunTranscript = memo(function RunTranscript({ timeline, output, sta
     {plan.fallback ? <TranscriptSlot key="output" id="output" order={plan.rows.length} publicText destination={archived ? answer : work}>
       {renderBody(plan.fallback, "output", status === "running")}
     </TranscriptSlot> : null}
-    {error && !hasPublic ? <p className="form-error">{error}</p> : null}
+    {failureMessage ? <p className="run-error" role="alert">{failureMessage}</p> : null}
   </div>;
 });
