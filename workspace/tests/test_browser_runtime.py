@@ -616,6 +616,11 @@ class BrowserContracts(unittest.TestCase):
             self.assertTrue(blocked["blocked"])
             self.assertTrue(blocked["automation"]["needs_user"])
             self.assertFalse(any(isinstance(action, tuple) and action[0] == "click" for action in page.actions))
+            with patch.object(page, "locator") as locator:
+                blocked_type = browser.tool_browser_type({"selector": "textarea", "text": "must-not-fill"})
+                self.assertTrue(blocked_type["blocked"])
+                locator.assert_not_called()
+            page.keyboard.type.assert_not_called()
             browser.tool_browser_goto({"url": "https://fixture.invalid/retry", "new_tab": True})
             self.assertEqual(len(context.pages), initial_pages)
             with self.assertRaises(ValueError):
@@ -631,6 +636,52 @@ class BrowserContracts(unittest.TestCase):
             self.assertIsNone(state.pause)
             browser.tool_browser_click({"selector": "button"})
             self.assertIn(("click", "button"), page.actions)
+
+    def test_type_fill_does_not_require_a_separate_pointer_hit(self):
+        for options in ({}, {"clear": True}):
+            with self.subTest(options=options):
+                context = FakeContext()
+                state = browser.BrowserRuntimeState(None, context.browser, {}, context, "one")
+                _, page = state.page()
+                target = Mock()
+                target.first = target
+                target.click.side_effect = browser.PlaywrightTimeoutError("editor presentation intercepts pointer")
+                with patch.object(browser, "_browser_call", side_effect=lambda fn: fn(state)), patch.object(page, "locator", return_value=target):
+                    browser.tool_browser_type({"selector": "textarea.inputarea", "text": "replacement", "press": "Enter", "timeout_ms": 2000, **options})
+                target.fill.assert_called_once_with("replacement", timeout=2000)
+                target.click.assert_not_called()
+                page.keyboard.type.assert_not_called()
+                page.keyboard.press.assert_called_once_with("Enter")
+
+    def test_type_append_still_clicks_before_keyboard_input(self):
+        context = FakeContext()
+        state = browser.BrowserRuntimeState(None, context.browser, {}, context, "one")
+        _, page = state.page()
+        target = Mock()
+        target.first = target
+        actions = Mock()
+        actions.attach_mock(target.click, "click")
+        actions.attach_mock(page.keyboard.type, "type")
+        actions.attach_mock(page.keyboard.press, "press")
+        with patch.object(browser, "_browser_call", side_effect=lambda fn: fn(state)), patch.object(page, "locator", return_value=target):
+            browser.tool_browser_type({"selector": "input", "text": "append", "clear": False, "press": "Enter"})
+        self.assertEqual(actions.mock_calls, [call.click(timeout=10000), call.type("append"), call.press("Enter")])
+        target.fill.assert_not_called()
+
+    def test_type_failed_fill_never_replays_as_keyboard_input_or_submission(self):
+        context = FakeContext()
+        state = browser.BrowserRuntimeState(None, context.browser, {}, context, "one")
+        _, page = state.page()
+        target = Mock()
+        target.first = target
+        target.fill.side_effect = browser.PlaywrightTimeoutError("input is not editable")
+        with patch.object(browser, "_browser_call", side_effect=lambda fn: fn(state)), patch.object(page, "locator", return_value=target):
+            with self.assertRaisesRegex(browser.PlaywrightTimeoutError, "not editable"):
+                browser.tool_browser_type({"selector": "textarea", "text": "must-not-replay", "press": "Enter"})
+        target.fill.assert_called_once_with("must-not-replay", timeout=10000)
+        target.click.assert_not_called()
+        page.keyboard.type.assert_not_called()
+        page.keyboard.press.assert_not_called()
 
     def test_resume_cannot_clear_different_tab_or_failed_observation(self):
         context = FakeContext()
@@ -766,13 +817,13 @@ class BrowserContracts(unittest.TestCase):
             def __exit__(self, *args):
                 pass
 
-        for reason in ("revoke", "expiry"):
-            with self.subTest(reason=reason):
-                runtime = browser.BrowserRuntime(self.root / reason)
+        for reason, clear in ((reason, clear) for reason in ("revoke", "expiry") for clear in (True, False)):
+            with self.subTest(reason=reason, clear=clear):
+                runtime = browser.BrowserRuntime(self.root / f"{reason}-{clear}")
                 entered = threading.Event()
                 release = threading.Event()
                 errors, closed_targets, mutations = [], [], []
-                operation = "fixture-inflight-" + reason
+                operation = f"fixture-inflight-{reason}-{clear}"
                 with patch.object(browser, "sync_playwright", PlaywrightManager), patch.object(browser, "ChromiumProcess", FakeProcess), patch.object(browser, "_browser_call", side_effect=runtime.call):
                     browser.RUN_SCOPE.set({"session_id": "one"})
                     state = runtime.call(lambda state: state)
@@ -785,15 +836,15 @@ class BrowserContracts(unittest.TestCase):
                     target = Mock()
                     target.first = target
 
-                    def delayed_click(**kwargs):
+                    def delayed_input(*args, **kwargs):
                         entered.set()
                         if not release.wait(3):
                             raise AssertionError("fixture was not interrupted")
                         if page.closed:
                             raise RuntimeError("fixture target closed")
-                        mutations.append("late click")
+                        mutations.append("late input")
 
-                    target.click.side_effect = delayed_click
+                    (target.fill if clear else target.click).side_effect = delayed_input
 
                     def close_target(url, **kwargs):
                         self.assertEqual(kwargs["timeout"], 2)
@@ -811,7 +862,7 @@ class BrowserContracts(unittest.TestCase):
                     def action():
                         browser.RUN_SCOPE.set({"session_id": "one", "operation_id": operation})
                         try:
-                            browser.tool_browser_type({"selector": "input", "text": "must-not-type", "press": "Enter"})
+                            browser.tool_browser_type({"selector": "input", "text": "must-not-type", "clear": clear, "press": "Enter"})
                         except (RuntimeError, TimeoutError) as exc:
                             errors.append(str(exc))
 
@@ -831,7 +882,11 @@ class BrowserContracts(unittest.TestCase):
                             self.assertEqual(mutations, [])
                             self.assertFalse(manual.closed)
                             self.assertFalse(sibling.closed)
-                            target.fill.assert_not_called()
+                            if clear:
+                                target.fill.assert_called_once_with("must-not-type", timeout=10000)
+                                target.click.assert_not_called()
+                            else:
+                                target.fill.assert_not_called()
                             page.keyboard.type.assert_not_called()
                             page.keyboard.press.assert_not_called()
                             self.assertTrue(errors and ("revoked" if reason == "revoke" else "timed out") in errors[0])

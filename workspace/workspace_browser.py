@@ -1126,12 +1126,13 @@ def tool_browser_type(args: dict[str, Any]) -> dict[str, Any]:
         with _mutation(state, page):
             if args.get("ref") or args.get("selector"):
                 target = _locator(page, args)
-                target.click(timeout=timeout)
-                _check_operation(RUN_SCOPE.get())
                 if bool(args.get("clear", True)):
-                    # Do not replay failed/ambiguous fills as keyboard input.
+                    # Fill owns focus/editability checks; input hit targets can
+                    # be covered by the editor's own presentation layer.
                     target.fill(text, timeout=timeout)
                 else:
+                    target.click(timeout=timeout)
+                    _check_operation(RUN_SCOPE.get())
                     page.keyboard.type(text)
             else:
                 page.keyboard.type(text)
