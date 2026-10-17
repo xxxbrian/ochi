@@ -544,10 +544,198 @@ test('failed run without a persisted final body preserves its genuine pending pr
   });
   h.render({ snapshot: undefined, message: message({ run_status: 'failed', content: '' }) });
   assert.equal(h.find('ArtifactMarkdown'), undefined);
-  assert.equal(h.all('ActionIcon').length, 0);
+  assert.ok(h.all('ActionIcon').some((node) => node.props.label === '复制回复'), 'already public partial replies remain copyable');
   assert.equal(h.find('Activity').props.snapshot.status, 'failed');
   assert.deepEqual(plain(h.find('Activity').props.snapshot.timeline), plain([pending]));
   h.unmount();
+});
+
+test('cold terminal rows show persisted public replies and exact errors without opening the process inspector', async () => {
+  for (const status of ['failed', 'cancelled', 'interrupted']) {
+    let fetches = 0;
+    const copied = [];
+    const intro = { id: 'intro', seq: 1, kind: 'progress', text: 'Checking the code' };
+    const result = { id: 'result', seq: 4, kind: 'progress', text: 'The first task passed its tests.' };
+    const error = status === 'cancelled' ? undefined : 'model returned an incomplete tool call';
+    const terminal = snapshot({ status, output: '', timeline: [intro, tool('t', 2), { id: 'thought', seq: 3, kind: 'reasoning', reasoning: { id: 'thought', kind: 'reasoning', text: 'Not a public reply', done: true } }, result], error });
+    const content = 'Checking the code\n\nThe first task passed its tests.';
+    const h = harness('src/components/ChatMessages.tsx', 'AssistantBubble', {
+      message: message({ run_status: status, content, run_error: error }), onResume: async () => {}, onProcessReadingChange() {},
+    }, {
+      '../lib/api': { isActiveStatus: () => false, api: { run: async () => { fetches++; return terminal; } } },
+      'expo-clipboard': { setStringAsync: async (value) => { copied.push(value); } },
+    });
+    assert.equal(fetches, 0, 'opening history must not fetch every full run');
+    assert.equal(h.find('ArtifactMarkdown').props.content, content);
+    assert.ok(!error || h.all('ErrorNotice').some((node) => node.props.error === error));
+    h.all('ActionIcon').find((node) => node.props.label === '复制回复').props.onPress();
+    await flush(); h.render();
+    h.find('Pressable').props.onPress();
+    await flush(); h.render();
+    assert.equal(fetches, 1);
+    assert.equal(h.find('ArtifactMarkdown'), undefined, 'the snapshot owns the same public blocks after opening; the combined persisted body is not appended again');
+    const activity = harness('src/components/Activity.tsx', 'Activity', { snapshot: h.find('Activity').props.snapshot });
+    assert.deepEqual(activity.all('PublicText').map((node) => node.props.entry.text), [intro.text, result.text]);
+    assert.ok(activity.all('PublicText').every((node) => !node.props.hidden));
+    assert.ok(!error || activity.all('AppText').some((node) => node.props.children === error));
+    h.all('ActionIcon').find((node) => node.props.label === '复制回复').props.onPress();
+    await flush();
+    assert.deepEqual(copied, [content, content], 'copy preserves every public reply before and after process expansion');
+    activity.unmount(); h.unmount();
+  }
+});
+
+test('terminal recovery shows every persisted partial reply during delayed and failed sync without replacing the candidate buffer', async () => {
+  const first = { id: 'intro', seq: 1, kind: 'progress', text: 'Checking sources' };
+  const candidate = { id: 'pending', seq: 3, kind: 'progress', text: 'Partial result', pending: true };
+  const thought = { id: 'thought', seq: 4, kind: 'reasoning', reasoning: { id: 'thought', kind: 'reasoning', text: 'Private analysis', done: true } };
+  const missed = { id: 'missed', seq: 5, kind: 'progress', text: 'Another result was saved.', pending: true };
+  const content = `${first.text}\n\n${candidate.text}\n\n${missed.text}`;
+  for (const status of ['failed', 'cancelled', 'interrupted']) {
+    let requests = 0, rejectFirst;
+    const copied = [];
+    const live = snapshot({ seq: 4, output: candidate.text, timeline: [first, tool('t', 2), candidate, thought] });
+    const final = snapshot({ status, seq: 8, output: missed.text, timeline: [...live.timeline, missed], error: 'The run stopped' });
+    const h = harness('src/components/ChatMessages.tsx', 'AssistantBubble', {
+      message: message({ run_status: 'running', content: '' }), snapshot: live, onResume: async () => {}, onProcessReadingChange() {},
+    }, {
+      '../lib/api': { isActiveStatus: (status) => status === 'running', api: { run: () => {
+        requests++;
+        if (requests === 1) return new Promise((_resolve, reject) => { rejectFirst = reject; });
+        return requests <= 3 ? Promise.reject(new Error('Offline')) : Promise.resolve(final);
+      } } },
+      'expo-clipboard': { setStringAsync: async (value) => { copied.push(value); } },
+    });
+    const initial = h.find('Activity');
+    h.render({ snapshot: undefined, message: message({ run_status: status, content, run_error: 'The run stopped' }) });
+    const checkPartial = () => {
+      const display = h.find('Activity').props.snapshot;
+      assert.equal(h.find('Activity').type, initial.type, 'the process panel remains mounted');
+      assert.equal(display.status, status);
+      assert.equal(display.output, candidate.text, 'the authoritative public body is never written into the candidate buffer');
+      assert.equal(display.error, 'The run stopped');
+      assert.deepEqual(plain(display.timeline), plain([tool('t', 2), thought]), 'only public display slots defer to the persisted projection');
+      assert.deepEqual(h.all('ArtifactMarkdown').map((node) => node.props.content), [content], 'missed public replies are immediately visible exactly once');
+      assert.deepEqual(plain(live.timeline), plain([first, tool('t', 2), candidate, thought]), 'cached stream history remains immutable');
+      assert.equal(live.output, candidate.text);
+    };
+    checkPartial();
+    h.time(50); await flush(); h.render(); checkPartial();
+    assert.equal(requests, 1, 'the first recovery request is still pending');
+    rejectFirst(new Error('Offline')); await flush(); h.render(); checkPartial();
+    h.time(500); await flush(); h.render(); checkPartial();
+    h.time(1500); await flush(); h.render(); checkPartial();
+    assert.equal(requests, 3);
+    assert.ok(h.all('AppText').some((node) => node.props.children === '处理记录暂时无法同步'));
+    h.all('ActionIcon').find((node) => node.props.label === '复制回复').props.onPress();
+    await flush();
+    assert.deepEqual(copied, [content], 'copy includes the reply missed by the cached timeline');
+    h.all('Pressable').find((node) => node.props.accessibilityLabel === '重试同步处理记录').props.onPress();
+    h.render(); await flush(); h.render();
+    assert.equal(requests, 4);
+    assert.equal(h.find('Activity').props.snapshot, final);
+    assert.equal(h.find('ArtifactMarkdown'), undefined, 'canonical timeline takes over without appending the combined body');
+    const activity = harness('src/components/Activity.tsx', 'Activity', { snapshot: h.find('Activity').props.snapshot });
+    assert.deepEqual(activity.all('PublicText').map((node) => node.props.entry.text), [first.text, candidate.text, missed.text]);
+    assert.ok(activity.all('PublicText').every((node) => !node.props.hidden));
+    assert.ok(activity.all('AppText').some((node) => node.props.children === 'The run stopped'));
+    activity.unmount();
+    h.unmount();
+  }
+});
+
+test('already-terminal cached snapshots fill a missing display error from the message without fetching or changing public text', () => {
+  const publicEntry = { id: 'public', seq: 1, kind: 'progress', text: 'The first task passed.', pending: true };
+  for (const status of ['failed', 'cancelled', 'interrupted']) {
+    let requests = 0;
+    const cached = snapshot({ status, seq: 8, error: '', output: publicEntry.text, timeline: [publicEntry, tool('t', 2)] });
+    const h = harness('src/components/ChatMessages.tsx', 'AssistantBubble', {
+      message: message({ run_status: status, content: publicEntry.text }), snapshot: cached, onResume: async () => {}, onProcessReadingChange() {},
+    }, {
+      '../lib/api': { isActiveStatus: (status) => status === 'running', api: { run: async () => { requests++; throw new Error('Unexpected run fetch'); } } },
+    });
+    assert.equal(h.find('Activity').props.snapshot, cached);
+    h.render({ message: message({ run_status: status, content: publicEntry.text, run_error: 'Provider closed the response early' }) });
+    const display = h.find('Activity').props.snapshot;
+    assert.equal(display.error, 'Provider closed the response early');
+    assert.equal(display.output, cached.output);
+    assert.equal(display.timeline, cached.timeline);
+    assert.equal(h.find('ArtifactMarkdown'), undefined, 'the public timeline still owns the body');
+    assert.equal(cached.error, '', 'the cached snapshot is not mutated');
+    assert.equal(requests, 0, 'an error does not trigger an unnecessary full history fetch');
+    const activity = harness('src/components/Activity.tsx', 'Activity', { snapshot: display });
+    assert.ok(activity.all('AppText').some((node) => node.props.children === 'Provider closed the response early'));
+    assert.equal(activity.find('PublicText').props.entry.text, publicEntry.text);
+    assert.equal(activity.find('PublicText').props.hidden, false);
+    activity.unmount(); h.unmount();
+  }
+});
+
+test('a terminal message overrides a stale supplied active stream and recovers without retaining waiting controls', async () => {
+  for (const activeStatus of ['running', 'waiting_user']) for (const status of ['completed', 'failed', 'cancelled', 'interrupted']) {
+    let requests = 0, resolve;
+    const cached = snapshot({ status: activeStatus, seq: 4, output: 'Earlier draft', timeline: [tool('t', 2)],
+      waiting_input: activeStatus === 'waiting_user' ? { question: 'Choose' } : undefined });
+    const finalText = { id: 'reply', seq: 5, kind: 'progress', text: 'The authoritative reply', pending: status !== 'completed', final: status === 'completed' };
+    const final = snapshot({ status, seq: 8, output: finalText.text, timeline: [...cached.timeline, finalText] });
+    const h = harness('src/components/ChatMessages.tsx', 'AssistantBubble', {
+      message: message({ run_status: activeStatus, content: '' }), snapshot: cached, onResume: async () => {}, onProcessReadingChange() {},
+    }, {
+      '../lib/api': { isActiveStatus: (status) => ['running', 'waiting_user'].includes(status), api: { run: () => { requests++; return new Promise((done) => { resolve = done; }); } } },
+    });
+    assert.equal(Boolean(h.find('WaitingCard')), activeStatus === 'waiting_user');
+    h.render({ message: message({ run_status: status, content: finalText.text }) });
+    assert.equal(requests, 1, 'an attached but stale SSE snapshot cannot suppress terminal recovery');
+    const display = h.find('Activity').props.snapshot;
+    assert.equal(display.status, status);
+    assert.equal(display.output, status === 'completed' ? finalText.text : cached.output);
+    assert.equal(h.find('ArtifactMarkdown').props.content, finalText.text);
+    assert.equal(h.find('WaitingCard'), undefined, 'terminal status removes stale user-input controls immediately');
+    assert.equal(cached.status, activeStatus);
+    resolve(final); await flush(); h.render();
+    assert.equal(h.find('Activity').props.snapshot, final, 'a newer recovered snapshot wins over the stale supplied stream');
+    assert.equal(h.find('ArtifactMarkdown'), undefined);
+    assert.equal(h.timerCount, 0);
+    h.unmount();
+  }
+});
+
+test('terminal states remain visible without process history or text and cold failures offer retry', () => {
+  for (const status of ['failed', 'cancelled', 'interrupted']) {
+    const h = harness('src/components/ChatMessages.tsx', 'AssistantBubble', {
+      message: message({ run_status: status, content: '', has_process: false, run_error: status === 'cancelled' ? undefined : 'Request failed' }),
+      onResume: async () => {}, onRetry: async () => {}, onProcessReadingChange() {},
+    });
+    assert.ok(h.find('ProcessElapsed'), 'cold stopped rows retain a status header even without process entries');
+    assert.equal(h.find('ArtifactMarkdown'), undefined);
+    if (status !== 'cancelled') {
+      assert.ok(h.all('ErrorNotice').some((node) => node.props.error === 'Request failed'));
+      assert.ok(h.all('Pressable').some((node) => node.props.children?.props?.children === '重试'));
+    }
+    const activity = harness('src/components/Activity.tsx', 'Activity', { snapshot: snapshot({ status }) });
+    assert.ok(activity.find('ActivityStatusText'), 'a loaded stopped run cannot appear blank');
+    activity.unmount(); h.unmount();
+  }
+});
+
+test('completed public progress is not folded away when no nonempty final answer exists', () => {
+  const first = { id: 'intro', seq: 1, kind: 'progress', text: 'Checking sources' };
+  const result = { id: 'result', seq: 3, kind: 'progress', text: 'The result is available.' };
+  const whitespace = { id: 'empty', seq: 4, kind: 'progress', text: '\n ', pending: true, final: true };
+  for (const output of ['', '\n ']) {
+    const terminal = snapshot({ status: 'completed', output, timeline: [first, tool('t', 2), result, whitespace] });
+    const activity = harness('src/components/Activity.tsx', 'Activity', { snapshot: terminal });
+    assert.deepEqual(activity.all('PublicText').map((node) => node.props.entry.text), [first.text, result.text]);
+    assert.ok(activity.all('PublicText').every((node) => !node.props.hidden));
+    assert.equal(activity.find('Pressable').props.accessibilityRole, undefined, 'a fold with no final answer has no meaningful action');
+    assert.equal(activity.all('Pressable').some((node) => node.props.accessibilityLabel === '查看答复'), false);
+    const bubble = harness('src/components/ChatMessages.tsx', 'AssistantBubble', {
+      message: message({ content: `${first.text}\n\n${result.text}` }), snapshot: terminal, onResume: async () => {}, onProcessReadingChange() {},
+    });
+    assert.equal(bubble.find('ArtifactMarkdown'), undefined, 'public timeline owns the fallback, not another combined body');
+    assert.ok(bubble.all('ActionIcon').some((node) => node.props.label === '复制回复'));
+    activity.unmount(); bubble.unmount();
+  }
 });
 
 test('native task output uses the current confirmed body without pending duplicates or stale execution fallbacks', () => {

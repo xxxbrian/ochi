@@ -114,7 +114,8 @@ export const Activity = memo(function Activity({
   const segments = useMemo(() => timelineSegments(timeline), [timeline]);
   const history = useMemo(() => timeline.filter((entry) => !entry.final), [timeline]);
   const hasHistory = hasProcessHistory({ ...snapshot, timeline });
-  const firstFinal = timeline.find((entry) => entry.kind === "progress" && entry.final)?.id;
+  const firstFinal = timeline.find((entry) => entry.kind === "progress" && entry.final && entry.text?.trim())?.id;
+  const canFold = completed && Boolean(snapshot.output.trim() || firstFinal);
   // Lock in an explicit reading choice before removing earlier native views.
   const retainHistory = heldAtCompletion || (completed && !wasCompleted.current && (manualReading || readingTranscript));
   useEffect(() => {
@@ -131,7 +132,7 @@ export const Activity = memo(function Activity({
     if (interaction) setManualReading(true);
     onReadingChange?.(reading, interaction);
   }, [onReadingChange]);
-  const collapse = completed && finishedLayout && hasHistory && !retainHistory;
+  const collapse = canFold && finishedLayout && hasHistory && !retainHistory;
   const completedSteps = snapshot.steps.filter((step) => step.status === "completed").length;
   function toggleHistory() {
     const next = !open;
@@ -151,12 +152,12 @@ export const Activity = memo(function Activity({
   }
   return (
     <View style={styles.activity}>
-      {(active || hasHistory || snapshot.error) && <View style={styles.headerRow}>
+      {(active || hasHistory || snapshot.error || !completed) && <View style={styles.headerRow}>
         <Pressable
-          disabled={!hasHistory || !completed || retainHistory}
+          disabled={!hasHistory || !canFold || retainHistory}
           onPress={toggleHistory}
-          accessibilityRole={hasHistory && completed ? "button" : undefined}
-          accessibilityState={hasHistory && completed ? { expanded: open || retainHistory } : undefined}
+          accessibilityRole={hasHistory && canFold ? "button" : undefined}
+          accessibilityState={hasHistory && canFold ? { expanded: open || retainHistory } : undefined}
           accessibilityLabel={runLabel(snapshot)}
           style={styles.activityHeader}
         >
@@ -166,9 +167,9 @@ export const Activity = memo(function Activity({
           <ActivityStatusText working={working}>{runLabel(snapshot)}</ActivityStatusText>
           {snapshot.steps.length > 0 && <AppText muted size={12}>{completed ? `${snapshot.steps.length} 步` : `· 已完成 ${completedSteps} 步`}</AppText>}
           <ProcessElapsed createdAt={snapshot.created_at} updatedAt={snapshot.updated_at} active={active} />
-          {hasHistory && completed && !retainHistory && <ActivityDisclosure color={colors.subtle} open={open} />}
+          {hasHistory && canFold && !retainHistory && <ActivityDisclosure color={colors.subtle} open={open} />}
         </Pressable>
-        {completed && retainHistory && <Pressable accessibilityRole="button" accessibilityLabel="查看答复" onPress={viewAnswer} style={styles.answerLink}>
+        {canFold && retainHistory && <Pressable accessibilityRole="button" accessibilityLabel="查看答复" onPress={viewAnswer} style={styles.answerLink}>
           <AppText muted size={12}>查看答复</AppText><ArrowDown size={12} color={colors.muted} />
         </Pressable>}
       </View>}

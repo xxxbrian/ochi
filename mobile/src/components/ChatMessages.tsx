@@ -20,7 +20,7 @@ import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import * as Clipboard from "expo-clipboard";
 import type { Message, Snapshot, WaitingInput } from "../lib/types";
 import { api, isActiveStatus } from "../lib/api";
-import { reconcileTerminalText, unrepresentedOutput } from "../lib/processTimeline";
+import { publicReply, reconcileTerminalText, unrepresentedOutput } from "../lib/processTimeline";
 import { useTheme } from "../providers/AppProvider";
 import { LongPressMenu } from "../ui/LongPressMenu";
 import {
@@ -336,16 +336,24 @@ const AssistantBubble = memo(function AssistantBubble({
   if (provided && (!cachedSnapshot.current || provided.seq >= cachedSnapshot.current.seq)) cachedSnapshot.current = provided;
   const remembered = cachedSnapshot.current;
   const saved = history && (!remembered || history.seq >= remembered.seq) ? history : remembered;
-  const needsTerminal = Boolean(!provided && saved && isActiveStatus(saved.status) && message.run_status && !isActiveStatus(message.run_status));
-  const current = saved && needsTerminal ? { ...saved, status: message.run_status!, output: message.content,
+  const needsTerminal = Boolean(saved && isActiveStatus(saved.status) && message.run_status && !isActiveStatus(message.run_status));
+  const current = saved && needsTerminal ? { ...saved, status: message.run_status!,
+    output: message.run_status === "completed" ? message.content || saved.output : saved.output,
     timeline: message.run_status === "completed" ? reconcileTerminalText(saved, message.content) : saved.timeline,
+    error: message.run_error || saved.error,
     created_at: message.run_created_at ?? saved.created_at, updated_at: message.run_updated_at ?? saved.updated_at,
-    artifacts: message.attachments ?? saved.artifacts, waiting_input: undefined } : saved;
-  const active = isActiveStatus(current?.status ?? message.run_status);
-  const content = current?.output ?? message.content;
-  const bodyFallback = current ? unrepresentedOutput(current) : content;
+    artifacts: message.attachments ?? saved.artifacts, waiting_input: undefined }
+    : saved && !saved.error && message.run_error ? { ...saved, error: message.run_error } : saved;
+  const status = current?.status ?? message.run_status;
+  const active = isActiveStatus(status);
+  const persistedPartial = needsTerminal && (status === "failed" || status === "cancelled" || status === "interrupted") && Boolean(message.content.trim());
+  const content = persistedPartial ? message.content : current ? publicReply(current) : message.content;
+  const bodyFallback = persistedPartial ? message.content : current ? unrepresentedOutput(current) : content;
+  // The message may contain public replies missed by SSE; keep them visible while the full timeline catches up.
+  const display = persistedPartial && current ? { ...current, timeline: current.timeline.filter((entry) => entry.kind !== "progress") } : current;
   const files = current?.artifacts ?? message.attachments;
-  const process = Boolean(current || message.has_process || message.step_count || message.has_reasoning);
+  const process = Boolean(current || message.has_process || message.step_count || message.has_reasoning ||
+    status === "failed" || status === "interrupted" || status === "cancelled");
   const readingChange = useCallback((isReading: boolean, interaction?: boolean) => {
     if (reading.current === isReading && !interaction) return;
     reading.current = isReading;
@@ -429,8 +437,8 @@ const AssistantBubble = memo(function AssistantBubble({
   }
   return (
     <View style={styles.assistant}>
-      {process && (current ? (
-        <Activity snapshot={current} defaultExpanded={historyOpen} availableHeight={processHeight} onReadingChange={readingChange}
+      {process && (display ? (
+        <Activity snapshot={display} defaultExpanded={historyOpen} availableHeight={processHeight} onReadingChange={readingChange}
           readingTranscript={readingTranscript} onViewAnswer={onViewAnswer} />
       ) : (
         <View>
@@ -457,7 +465,7 @@ const AssistantBubble = memo(function AssistantBubble({
         />
       ) : null}
       <ArtifactCards files={files} />
-      {provided?.waiting_input && provided.status === "waiting_user" && (
+      {provided?.waiting_input && status === "waiting_user" && (
         <WaitingCard waiting={provided.waiting_input} onResume={onResume} />
       )}
       {!active && content ? (
@@ -485,12 +493,12 @@ const AssistantBubble = memo(function AssistantBubble({
           />}
         </View>
       ) : null}
-      {(current?.status === "failed" || current?.status === "interrupted") && (
+      {(status === "failed" || status === "interrupted") && (
         <View style={styles.failure}>
           <AppText size={14} style={{ color: colors.error }}>
             {files?.length
               ? "任务未完成，已有文件仍可使用。"
-              : "未能完成回复。"}
+              : content.trim() ? "回复未完成，已生成的内容已保留。" : "未能完成回复。"}
           </AppText>
           {onRetry && <Pressable onPress={retry}>
             <AppText size={14} weight="medium">
@@ -499,6 +507,7 @@ const AssistantBubble = memo(function AssistantBubble({
           </Pressable>}
         </View>
       )}
+      {!current && <ErrorNotice error={message.run_error} />}
       <ErrorNotice error={error} />
     </View>
   );

@@ -182,6 +182,47 @@ test('a distinct output remains visible even with older progress, and only compl
   assert.equal(process.hasProcessHistory(pure), false);
 });
 
+test('terminal copy text preserves chronological public replies, never reasoning or tool output, and does not duplicate the candidate', () => {
+  const entries = [progress('last', 4, 'Public result'), tool('t', 3), reasoning('secret', 2, 'Private reasoning'), progress('first', 1, 'Checking sources')];
+  for (const status of ['failed', 'cancelled', 'interrupted']) {
+    const state = snapshot({ status, timeline: entries, output: 'Public result' });
+    assert.equal(process.publicReply(state), 'Checking sources\n\nPublic result');
+    assert.equal(process.unrepresentedOutput(state), '');
+    assert.equal(process.publicReply({ ...state, output: 'Unmatched partial answer' }), 'Checking sources\n\nPublic result\n\nUnmatched partial answer');
+  }
+  assert.equal(process.publicReply(snapshot({ status: 'completed', timeline: entries, output: 'Final answer' })), 'Final answer');
+  assert.equal(process.publicReply(snapshot({ status: 'completed', timeline: entries, output: '\n ' })), 'Checking sources\n\nPublic result');
+  assert.equal(process.publicReply(snapshot({ status: 'running', timeline: entries, output: 'Current candidate' })), 'Current candidate');
+  assert.equal(process.unrepresentedOutput(snapshot({ output: '\n ' })), '');
+});
+
+test('terminal provider whitespace cleanup does not duplicate a candidate or hide its final public slots', () => {
+  const first = { ...progress('first', 1, '\nFirst '), pending: true };
+  const last = { ...progress('last', 3, 'second\n \n'), pending: true };
+  const state = snapshot({ status: 'completed', timeline: [first, tool('t', 2), last], output: 'First second' });
+  assert.equal(process.unrepresentedOutput(state), '');
+  assert.deepEqual(Array.from(process.reconcileTerminalText(state, state.output).filter((entry) => entry.final), (entry) => entry.id), ['first', 'last']);
+  assert.equal(process.publicReply({ ...state, status: 'failed' }), '\nFirst second\n \n');
+  assert.equal(process.unrepresentedOutput({ ...state, status: 'running' }), state.output, 'live byte comparisons must not silently consume a distinct candidate');
+});
+
+test('terminal history joins same-source fragments across private work without corrupting math or code indentation', () => {
+  const entries = [progress('progress:math', 1, '$E = '), reasoning('calculation', 2, 'Private calculation'),
+    progress('progress:math:segment-2', 3, 'mc^2$'), progress('progress:code', 4, '    first()\n'),
+    reasoning('review', 5, 'Private review'), progress('progress:code:segment-2', 6, '    second()\n'),
+    progress('progress:blank', 7, '\n\n')];
+  for (const status of ['failed', 'cancelled', 'interrupted', 'completed']) {
+    const state = snapshot({ status, output: '', timeline: entries });
+    assert.equal(process.publicReply(state), '$E = mc^2$\n\n    first()\n    second()\n');
+    assert.equal(entries[0].text, '$E = ');
+    assert.equal(entries[3].text, '    first()\n');
+  }
+  const candidates = [progress('progress:intro', 1, 'Earlier reply.'), { ...progress('progress:blank', 2, '\n\n'), pending: true },
+    { ...progress('progress:first', 3, 'First '), pending: true }, reasoning('private', 4),
+    { ...progress('progress:second', 5, 'second'), pending: true }];
+  assert.equal(process.publicReply(snapshot({ status: 'failed', timeline: candidates, output: 'First second' })), 'Earlier reply.\n\n\n\nFirst second');
+});
+
 test('terminal reconciliation preserves public IDs and never removes partial text or guesses by answer wording', () => {
   const entries = [progress('first', 1, 'Conclusion'), tool('t', 2), progress('last-a', 3, 'Actual '), progress('last-b', 4, 'answer')];
   const original = snapshot({ timeline: entries });

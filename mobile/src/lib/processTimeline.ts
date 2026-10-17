@@ -105,47 +105,79 @@ export function hasProcessHistory(snapshot: Snapshot): boolean {
     : entry.kind === 'tool' || Boolean(entry.reasoning?.text.trim()));
 }
 
+function terminal(snapshot: Snapshot): boolean {
+  return snapshot.status === 'completed' || snapshot.status === 'cancelled' || snapshot.status === 'failed' || snapshot.status === 'interrupted';
+}
+
+function matchesOutput(text: string, snapshot: Snapshot): boolean {
+  return text === snapshot.output || (terminal(snapshot) && text.trim() === snapshot.output.trim());
+}
+
 export function unrepresentedOutput(snapshot: Snapshot): string {
-  if (!snapshot.output) return '';
+  if (!snapshot.output.trim()) return '';
   if (representedOutputEntries(snapshot).length) return '';
-  const publicEntries = snapshot.timeline.filter((entry) => entry.kind === 'progress');
+  const publicEntries = ordered(snapshot.timeline).filter((entry) => entry.kind === 'progress');
   let suffix = '';
   for (let index = publicEntries.length - 1; index >= 0; index--) {
     suffix = (publicEntries[index]!.text ?? '') + suffix;
-    if (suffix === snapshot.output) return '';
-    if (suffix.length >= snapshot.output.length) break;
+    if (matchesOutput(suffix, snapshot)) return '';
+    if (suffix.trim().length >= snapshot.output.trim().length) break;
   }
   return snapshot.output;
 }
 
+export function publicReply(snapshot: Snapshot): string {
+  if (snapshot.status === 'completed' && snapshot.output.trim()) return snapshot.output;
+  if (!terminal(snapshot)) return snapshot.output;
+  const entries = ordered(snapshot.timeline).filter((entry) => entry.kind === 'progress');
+  const candidates = entries.filter((entry) => entry.pending || entry.final);
+  const mergeCandidates = Boolean(snapshot.output.trim()) && candidates.length > 0 && matchesOutput(candidates.map((entry) => entry.text ?? '').join(''), snapshot);
+  const groups: { source: string; candidate: boolean; text: string }[] = [];
+  for (const entry of entries) {
+    const source = entry.id.replace(/:segment-\d+$/, '');
+    const candidate = Boolean(entry.pending || entry.final);
+    const previous = groups.at(-1);
+    // Reasoning can divide a provider's sentence without ending its Markdown.
+    if (previous && ((source && previous.source === source) || (mergeCandidates && candidate && previous.candidate))) {
+      previous.text += entry.text ?? '';
+      previous.candidate = previous.candidate && candidate;
+    } else groups.push({ source, candidate, text: entry.text ?? '' });
+  }
+  const blocks = groups.filter((group) => group.text.trim()).map((group) => group.text);
+  const output = unrepresentedOutput(snapshot);
+  if (output.trim()) blocks.push(output);
+  return blocks.join('\n\n');
+}
+
 export function reconcileTerminalText(snapshot: Snapshot, output: string): ProcessEntry[] {
-  if (!output) return snapshot.timeline;
-  const current = representedOutputEntries({ ...snapshot, output });
+  if (!output.trim()) return snapshot.timeline;
+  const confirmed = { ...snapshot, output };
+  const current = representedOutputEntries(confirmed);
   if (current.length) {
     const ids = new Set(current.map((entry) => entry.id));
     return snapshot.timeline.map((entry) => entry.kind === 'progress'
       ? { ...entry, pending: false, final: ids.has(entry.id) } : entry);
   }
-  const publicEntries = snapshot.timeline.filter((entry) => entry.kind === 'progress');
+  const publicEntries = ordered(snapshot.timeline).filter((entry) => entry.kind === 'progress');
   let suffix = '';
   const ids = new Set<string>();
   for (let index = publicEntries.length - 1; index >= 0; index--) {
     const entry = publicEntries[index]!;
     suffix = (entry.text ?? '') + suffix;
     ids.add(entry.id);
-    if (suffix === output) return snapshot.timeline.map((item) => item.kind === 'progress'
+    if (matchesOutput(suffix, confirmed)) return snapshot.timeline.map((item) => item.kind === 'progress'
       ? { ...item, pending: false, final: ids.has(item.id) } : item);
-    if (suffix.length >= output.length) break;
+    if (suffix.trim().length >= output.trim().length) break;
   }
   return snapshot.timeline;
 }
 
 function representedOutputEntries(snapshot: Snapshot): ProcessEntry[] {
-  const publicEntries = snapshot.timeline.filter((entry) => entry.kind === 'progress');
+  const publicEntries = ordered(snapshot.timeline).filter((entry) => entry.kind === 'progress');
   const finals = publicEntries.filter((entry) => entry.final);
-  if (finals.length && finals.map((entry) => entry.text ?? '').join('') === snapshot.output) return finals;
+  if (finals.length && matchesOutput(finals.map((entry) => entry.text ?? '').join(''), snapshot)) return finals;
   const current = publicEntries.filter((entry) => entry.final || entry.pending);
-  return current.length && current.map((entry) => entry.text ?? '').join('') === snapshot.output ? current : [];
+  return current.length && matchesOutput(current.map((entry) => entry.text ?? '').join(''), snapshot) ? current : [];
 }
 
 // Some relays flatten a title-only summary into adjacent bold spans. Only that
