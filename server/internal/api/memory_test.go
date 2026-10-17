@@ -21,6 +21,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+func TestFailedMemorySaveReturnsItsErrorNotAnUnsavedRecord(t *testing.T) {
+	f := newCoreHTTPFixture(t)
+	ctx := agent.WithRunScope(context.Background(), agent.RunScope{UserID: f.owner, SessionID: f.session.ID, RunID: f.run.RunID})
+	result, err := f.server.memoryTool(ctx, f.owner, "memory_save", json.RawMessage(`{"content":"Prefers short replies","excerpt":"Unstated preference"}`))
+	if !errors.Is(err, storage.ErrMemorySource) || result.Output != "" {
+		t.Fatalf("rejected memory returned success-shaped data instead of its failure: output=%q err=%v", result.Output, err)
+	}
+}
+
 func TestEmbeddingBatchHasOneFiniteDimensionAndExactCount(t *testing.T) {
 	for _, test := range []struct {
 		vectors [][]float32

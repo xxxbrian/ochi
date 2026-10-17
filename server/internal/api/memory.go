@@ -238,8 +238,11 @@ func (s *Server) memoryTool(ctx context.Context, userID, name string, args json.
 	default:
 		err = fmt.Errorf("unknown memory tool %s", name)
 	}
+	if err != nil {
+		return agent.ToolResult{}, err
+	}
 	data, _ := json.Marshal(value)
-	return agent.ToolResult{Output: string(data)}, err
+	return agent.ToolResult{Output: string(data)}, nil
 }
 
 func (s *Server) registerMemoryRoutes(mux *http.ServeMux) {

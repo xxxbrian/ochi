@@ -122,7 +122,7 @@ func (s *Store) SaveTask(ctx context.Context, userID, sessionID, runID string, v
 			return TaskState{}, err
 		}
 		if v.Objective != previous.Objective {
-			return TaskState{}, errors.New("a different objective requires an explicit new task")
+			return TaskState{}, errors.New("task objective changed; use task_read and preserve its objective verbatim when updating progress or constraints; use new_task only when the user starts a different task")
 		}
 	}
 	v.Status, v.Verification, v.Revision = "active", nil, revision+1
