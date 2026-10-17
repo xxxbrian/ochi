@@ -36,12 +36,7 @@ type completionDelta struct {
 			ReasoningDetails json.RawMessage `json:"reasoning_details"`
 			Reasoning        json.RawMessage `json:"reasoning"`
 			ReasoningSummary json.RawMessage `json:"reasoning_summary"`
-			ToolCalls        []struct {
-				Index    int          `json:"index"`
-				ID       string       `json:"id"`
-				Type     string       `json:"type"`
-				Function functionCall `json:"function"`
-			} `json:"tool_calls"`
+			ToolCalls        []toolCallDelta `json:"tool_calls"`
 		} `json:"delta"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -229,8 +224,9 @@ func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools [
 	visible := newReasoningStream(reasonID, emit)
 	returned := newChatReasoningStream(visible)
 	var reasoningAlias, summaryAlias json.RawMessage
-	calls := map[int]*toolCall{}
+	var calls chatToolCalls
 	finished := false
+	finishReason := ""
 	var usage *Usage
 	var terminalErr error
 	var usageGrace *time.Timer
@@ -300,19 +296,13 @@ func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools [
 			summaryAlias = appendReasoningValue(summaryAlias, delta.ReasoningSummary)
 		}
 		for _, delta := range choice.Delta.ToolCalls {
-			call := calls[delta.Index]
-			if call == nil {
-				call = &toolCall{Type: "function"}
-				calls[delta.Index] = call
+			if err := calls.append(delta); err != nil {
+				return wireMessage{}, usage, err
 			}
-			if delta.ID != "" {
-				call.ID = delta.ID
-			}
-			call.Function.Name += delta.Function.Name
-			call.Function.Arguments += delta.Function.Arguments
 		}
 		if choice.FinishReason != "" {
 			finished = true
+			finishReason = choice.FinishReason
 			if choice.FinishReason == "length" || choice.FinishReason == "content_filter" {
 				class := "output_limit"
 				if choice.FinishReason == "content_filter" {
@@ -338,13 +328,12 @@ func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools [
 	if err := visible.done(); err != nil {
 		return wireMessage{}, usage, err
 	}
-	ordered := make([]toolCall, len(calls))
-	for i := range ordered {
-		call, ok := calls[i]
-		if !ok || call.ID == "" || call.Function.Name == "" {
-			return wireMessage{}, usage, errors.New("model returned an incomplete tool call")
-		}
-		ordered[i] = *call
+	ordered, err := calls.complete()
+	if err != nil {
+		return wireMessage{}, usage, err
+	}
+	if finishReason == "tool_calls" && len(ordered) == 0 {
+		return wireMessage{}, usage, toolProtocolError("missing_calls", nil)
 	}
 	return wireMessage{Role: "assistant", Content: text.String(), ToolCalls: ordered, ReasoningContent: reasoning.String(), ReasoningDetails: details, Reasoning: reasoningAlias, ReasoningSummary: summaryAlias}, usage, nil
 }

@@ -20,6 +20,8 @@ import (
 type Diagnostic struct {
 	Kind       string         `json:"kind"`
 	Class      string         `json:"class"`
+	Code       string         `json:"code,omitempty"`
+	ToolIndex  *int           `json:"tool_index,omitempty"`
 	Attempt    int            `json:"attempt,omitempty"`
 	StatusCode int            `json:"status_code,omitempty"`
 	Message    string         `json:"message,omitempty"`
@@ -28,6 +30,8 @@ type Diagnostic struct {
 
 type ModelError struct {
 	Class      string
+	Code       string
+	ToolIndex  *int
 	StatusCode int
 	RetryAfter time.Duration
 	retryable  bool
@@ -48,6 +52,7 @@ func (e *ModelError) Error() string {
 		"context":        "model context window was exceeded",
 		"stream":         "model stream ended before completion",
 		"invalid_stream": "model returned an invalid stream",
+		"tool_protocol":  "model returned an invalid tool call",
 		"output_limit":   "model response ended with an output limit",
 		"content_filter": "model response was stopped by the provider content filter",
 	}[e.Class]
@@ -166,7 +171,7 @@ func (g *OpenAI) observe(d Diagnostic) {
 func (g *OpenAI) observeModelError(kind string, attempt int, err error) {
 	var model *ModelError
 	if errors.As(err, &model) {
-		g.observe(Diagnostic{Kind: kind, Class: model.Class, Attempt: attempt, StatusCode: model.StatusCode, Message: model.Error()})
+		g.observe(Diagnostic{Kind: kind, Class: model.Class, Code: model.Code, ToolIndex: model.ToolIndex, Attempt: attempt, StatusCode: model.StatusCode, Message: model.Error()})
 	}
 }
 

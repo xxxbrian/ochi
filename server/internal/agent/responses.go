@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -161,7 +160,8 @@ func (r responsesResult) message() (wireMessage, error) {
 	}
 	var text strings.Builder
 	calls := []toolCall{}
-	for _, raw := range r.Output {
+	ids := map[string]bool{}
+	for index, raw := range r.Output {
 		var item responseOutput
 		if err := json.Unmarshal(raw, &item); err != nil {
 			return wireMessage{}, err
@@ -179,10 +179,11 @@ func (r responsesResult) message() (wireMessage, error) {
 				}
 			}
 		case "function_call":
-			if item.CallID == "" || item.Name == "" {
-				return wireMessage{}, errors.New("model returned an incomplete tool call")
+			call := toolCall{ID: item.CallID, Type: "function", Function: functionCall{Name: item.Name, Arguments: item.Arguments}}
+			if err := validateToolIdentity(call, &index, ids); err != nil {
+				return wireMessage{}, err
 			}
-			calls = append(calls, toolCall{ID: item.CallID, Type: "function", Function: functionCall{Name: item.Name, Arguments: item.Arguments}})
+			calls = append(calls, call)
 		}
 	}
 	items, _ := json.Marshal(r.Output)
