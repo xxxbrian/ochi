@@ -41,6 +41,7 @@ type Message struct {
 	ID           string          `json:"id"`
 	RunID        *string         `json:"run_id,omitempty"`
 	RunStatus    string          `json:"run_status,omitempty"`
+	RunError     string          `json:"run_error,omitempty"`
 	RunCreatedAt *time.Time      `json:"run_created_at,omitempty"`
 	RunUpdatedAt *time.Time      `json:"run_updated_at,omitempty"`
 	Role         string          `json:"role"`
@@ -79,15 +80,43 @@ func Open(ctx context.Context, url string) (*Store, error) {
 func (s *Store) recoverStartup(ctx context.Context) error {
 	// A browser reconnect is supported, but process restart is not automatic
 	// agent resumption. Persist that distinction rather than leaving runs stuck.
-	if _, err := s.db.Exec(ctx, `UPDATE runs SET status='interrupted', error='server stopped before the run completed', updated_at=now(), seq=seq+1 WHERE status IN ('running','cancelling','waiting_user','waiting_resource')`); err != nil {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
 		return err
+	}
+	defer tx.Rollback(context.Background())
+	rows, err := tx.Query(ctx, `UPDATE runs r SET status='interrupted',error='server stopped before the run completed',updated_at=now(),seq=seq+1
+ WHERE status IN ('running','cancelling','waiting_user','waiting_resource') AND NOT EXISTS(SELECT 1 FROM run_requests q WHERE q.run_id=r.id)
+ RETURNING `+runColumns)
+	if err != nil {
+		return err
+	}
+	var interrupted []runtime.Snapshot
+	for rows.Next() {
+		snapshot, scanErr := scanRun(rows)
+		if scanErr != nil {
+			rows.Close()
+			return scanErr
+		}
+		interrupted = append(interrupted, snapshot)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	// A checkpoint has no assistant history row yet. Finalize its public
+	// projection atomically with interruption so later turns cannot hide it.
+	for _, snapshot := range interrupted {
+		if err = completeRunTx(ctx, tx, snapshot); err != nil {
+			return err
+		}
 	}
 	// A request is deleted in the same transaction that appends its canonical
 	// user turn. A claimed-but-not-admitted input is therefore safe to requeue.
-	if _, err := s.db.Exec(ctx, `UPDATE runs SET status='queued',error=NULL,resource='',updated_at=now(),seq=seq+1 WHERE status='interrupted' AND EXISTS(SELECT 1 FROM run_requests q WHERE q.run_id=runs.id)`); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE runs SET status='queued',error=NULL,resource='',updated_at=now(),seq=seq+1 WHERE status IN ('running','cancelling','waiting_user','waiting_resource','interrupted') AND EXISTS(SELECT 1 FROM run_requests q WHERE q.run_id=runs.id)`); err != nil {
 		return err
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (s *Store) Close() { s.db.Close() }
@@ -176,6 +205,18 @@ func (s *Store) LatestRun(ctx context.Context, userID, sessionID string) (*runti
 // CompleteRun commits the visible final reply separately from the complete
 // canonical tool transcript, whose messages are checkpointed during execution.
 func (s *Store) CompleteRun(ctx context.Context, snapshot runtime.Snapshot) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	if err = completeRunTx(ctx, tx, snapshot); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func completeRunTx(ctx context.Context, tx pgx.Tx, snapshot runtime.Snapshot) error {
 	steps, err := json.Marshal(snapshot.Steps)
 	if err != nil {
 		return err
@@ -191,26 +232,13 @@ func (s *Store) CompleteRun(ctx context.Context, snapshot runtime.Snapshot) erro
 	if snapshot.Reasoning == nil {
 		reasoning = []byte("[]")
 	}
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(context.Background())
 	var sessionID string
 	err = tx.QueryRow(ctx, `UPDATE runs SET status=$2,error=NULLIF($3,''),output=$4,steps=$5,seq=$6,updated_at=$7,usage=$8,waiting_input=$9,artifacts=$10,resource=$11,computer_granted=$12,reasoning=$13,timeline=$14 WHERE id=$1 AND seq<=$6 RETURNING session_id::text`, snapshot.RunID, snapshot.Status, snapshot.Error, snapshot.Output, steps, snapshot.Seq, snapshot.UpdatedAt, usage, waiting, artifacts, snapshot.Resource, snapshot.ComputerGranted, reasoning, timeline).Scan(&sessionID)
 	if err != nil {
 		return err
 	}
 	if snapshot.Output != "" || len(snapshot.Artifacts) > 0 || len(snapshot.Timeline) > 0 || len(snapshot.Steps) > 0 || len(snapshot.Reasoning) > 0 || snapshot.Status == runtime.StatusFailed || snapshot.Status == runtime.StatusInterrupted || snapshot.Status == runtime.StatusCancelled {
-		content := snapshot.Output
-		for _, entry := range snapshot.Timeline {
-			if entry.Pending {
-				// An interrupted unclassified reply remains in the process, not a
-				// second copy masquerading as the final historical answer.
-				content = ""
-				break
-			}
-		}
+		content := runtime.PublicReply(snapshot)
 		_, err = tx.Exec(ctx, `INSERT INTO messages (session_id,run_id,role,content,model_id,model_name,effort,attachments) VALUES ($1,$2,'assistant',$3,$4,$5,$6,$7)
    ON CONFLICT (run_id) WHERE role='assistant' DO UPDATE SET content=EXCLUDED.content,attachments=EXCLUDED.attachments`, sessionID, snapshot.RunID, content, snapshot.ModelID, snapshot.ModelName, snapshot.Effort, artifacts)
 		if err != nil {
@@ -228,7 +256,7 @@ func (s *Store) CompleteRun(ctx context.Context, snapshot runtime.Snapshot) erro
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (s *Store) GetRun(ctx context.Context, userID, runID string) (runtime.Snapshot, error) {
@@ -248,7 +276,7 @@ func (s *Store) Messages(ctx context.Context, userID, sessionID string) ([]Messa
 		CASE WHEN m.role='assistant' THEN COALESCE(jsonb_array_length(r.steps),0) ELSE 0 END, m.model_id, m.model_name, m.effort, m.attachments,
 		CASE WHEN m.role='assistant' THEN COALESCE(jsonb_array_length(r.reasoning)>0,false) ELSE false END,
 		CASE WHEN m.role='assistant' THEN COALESCE(r.status,'') ELSE '' END,
-		`+messageProcessSQL+`,r.created_at,r.updated_at
+		`+messageProcessSQL+`,r.created_at,r.updated_at,`+messagePublicSQL+`
 		FROM messages m LEFT JOIN runs r ON r.id=m.run_id WHERE m.session_id=$1 AND NOT m.archived
 		ORDER BY m.created_at, CASE WHEN m.role='user' THEN 0 ELSE 1 END, m.id`, sessionID)
 	if err != nil {
@@ -262,8 +290,20 @@ func collectMessages(rows pgx.Rows) ([]Message, error) {
 	items := make([]Message, 0)
 	for rows.Next() {
 		var item Message
-		if err := rows.Scan(&item.ID, &item.RunID, &item.Role, &item.Content, &item.CreatedAt, &item.StepCount, &item.ModelID, &item.ModelName, &item.Effort, &item.Attachments, &item.HasReasoning, &item.RunStatus, &item.HasProcess, &item.RunCreatedAt, &item.RunUpdatedAt); err != nil {
+		var output string
+		var publicJSON []byte
+		if err := rows.Scan(&item.ID, &item.RunID, &item.Role, &item.Content, &item.CreatedAt, &item.StepCount, &item.ModelID, &item.ModelName, &item.Effort, &item.Attachments, &item.HasReasoning, &item.RunStatus, &item.HasProcess, &item.RunCreatedAt, &item.RunUpdatedAt, &item.RunError, &output, &publicJSON); err != nil {
 			return nil, err
+		}
+		if item.Role == "assistant" && runtime.IsTerminal(item.RunStatus) {
+			var timeline []runtime.ProcessEntry
+			if err := json.Unmarshal(publicJSON, &timeline); err != nil {
+				return nil, err
+			}
+			item.Content = runtime.PublicReply(runtime.Snapshot{Status: item.RunStatus, Output: output, Timeline: timeline})
+		}
+		if item.Role != "assistant" {
+			item.RunError = ""
 		}
 		items = append(items, item)
 	}

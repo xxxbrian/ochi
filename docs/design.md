@@ -31,6 +31,11 @@ and process details have bounded scrollable height. Interim replies are useful
 while running and fold into the completed process once the final answer arrives.
 Status animation belongs on active system state, not on settled prose.
 
+Failed, stopped and interrupted turns keep their already-public replies visible
+without opening process details, alongside their terminal status/error. Only a
+completed turn with an actual answer folds its earlier public updates. A turn
+with no final answer must not collapse all of its prose into process details.
+
 Web Markdown uses Streamdown with CJK, math/KaTeX and lazy code highlighting.
 Native Markdown uses Enriched Markdown/MD4C and RaTeX. Isolated HTML artifacts
 and the authenticated computer viewer can use WebViews; the chat itself does not.

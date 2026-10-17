@@ -149,3 +149,65 @@ func TestDeclaredFinalBecomesProgressWithoutDisappearing(t *testing.T) {
 		t.Fatal("a subsequent round moved, removed, or kept final status on public text")
 	}
 }
+
+func TestHistoryPublicReplyKeepsInterruptedProseWithoutExposingPrivateWork(t *testing.T) {
+	timeline := []ProcessEntry{
+		{ID: "public-1", Kind: "progress", Text: "I checked the first result."},
+		{ID: "reasoning", Kind: "reasoning", Reasoning: &agent.ReasoningPart{Text: "Private reasoning"}},
+		{ID: "tool", Kind: "tool", Step: &Step{Output: "Raw tool output"}},
+		{ID: "blank", Kind: "progress", Text: "\n\n", Pending: true},
+		{ID: "public-2", Kind: "progress", Text: "First ", Pending: true},
+		{ID: "public-3", Kind: "progress", Text: "second", Pending: true},
+	}
+	for _, status := range []string{StatusFailed, StatusCancelled, StatusInterrupted} {
+		snapshot := Snapshot{Status: status, Output: "First second", Timeline: timeline}
+		if got := PublicReply(snapshot); got != "I checked the first result.\n\n\n\nFirst second" {
+			t.Fatalf("%s lost or duplicated public prose: %q", status, got)
+		}
+		if snapshot.Output != "First second" || !snapshot.Timeline[3].Pending || snapshot.Timeline[4].Final {
+			t.Fatal("history projection mutated the provider buffer or classified partial output as final")
+		}
+	}
+}
+
+func TestHistoryPublicReplyPreservesMathAndCodeAcrossReasoning(t *testing.T) {
+	r := processRun(t)
+	_ = r.AppendText("math", "$E = ", true)
+	_ = r.AppendReasoning(agent.ReasoningPart{ID: "thought-1", Kind: "reasoning", Text: "Private calculation"})
+	_ = r.AppendText("math", "mc^2$", true)
+	_ = r.ResetOutput()
+	_ = r.AppendText("code", "    first()\n", true)
+	_ = r.AppendReasoning(agent.ReasoningPart{ID: "thought-2", Kind: "reasoning", Text: "Private check"})
+	_ = r.AppendText("code", "    second()\n", true)
+	if err := r.Finalize(StatusFailed, "stream failed", func(snapshot Snapshot) error {
+		if got := PublicReply(snapshot); got != "$E = mc^2$\n\n    first()\n    second()\n" {
+			t.Fatalf("history projection corrupted Markdown fragments: %q", got)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHistoryPublicReplyPrefersCompletedAnswerAndPreservesProgressOnlyTurns(t *testing.T) {
+	timeline := []ProcessEntry{
+		{Kind: "progress", Text: "A useful intermediate result."},
+		{Kind: "progress", Text: "\n", Pending: true},
+		{Kind: "progress", Text: "The answer.", Final: true},
+	}
+	if got := PublicReply(Snapshot{Status: StatusCompleted, Output: "The answer.", Timeline: timeline}); got != "The answer." {
+		t.Fatalf("stray provisional whitespace hid the final answer: %q", got)
+	}
+	if got := PublicReply(Snapshot{Status: StatusCompleted, Timeline: timeline[:1]}); got != timeline[0].Text {
+		t.Fatalf("a turn without a final answer hid all public progress: %q", got)
+	}
+	if got := PublicReply(Snapshot{Status: StatusFailed, Output: "A partial answer."}); got != "A partial answer." {
+		t.Fatalf("output without timeline vanished: %q", got)
+	}
+	if got := PublicReply(Snapshot{Status: StatusFailed, Output: "New partial answer.", Timeline: timeline[:1]}); got != "A useful intermediate result.\n\nNew partial answer." {
+		t.Fatalf("unrepresented output vanished: %q", got)
+	}
+	if got := PublicReply(Snapshot{Status: StatusRunning, Output: "Streaming", Timeline: timeline}); got != "Streaming" {
+		t.Fatal("history projection reclassified a live run")
+	}
+}

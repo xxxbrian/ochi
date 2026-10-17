@@ -224,7 +224,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	page, err = s.MessagesPage(ctx, user, session.ID, "", 20)
-	if err != nil || len(page) != 4 || !page[3].HasProcess || page[3].HasReasoning || page[3].StepCount != 0 || page[3].Content != "" {
+	if err != nil || len(page) != 4 || !page[3].HasProcess || page[3].HasReasoning || page[3].StepCount != 0 || page[3].Content != "I finished the requested action." {
 		t.Fatalf("completed progress-only run vanished from message history: %v %+v", err, page)
 	}
 	const interruptedRun = "77777777-7777-4777-8777-777777777777"
@@ -240,7 +240,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	if err = s.Checkpoint(ctx, interrupted.Snapshot()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.db.Exec(ctx, `UPDATE runs SET status='interrupted',seq=seq+1 WHERE id=$1`, interruptedRun); err != nil {
+	if err = s.recoverStartup(ctx); err != nil {
 		t.Fatal(err)
 	}
 	read, err = s.GetRun(ctx, user, interruptedRun)
@@ -249,6 +249,10 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	if err != nil || adminErr != nil || latestErr != nil || read.Timeline[0].Text != "I will check." || read.Timeline[1].Step.Status != "failed" || !read.Timeline[2].Reasoning.Done ||
 		!sameProcessJSON(read.Timeline, admin.Timeline) || !sameProcessJSON(read.Timeline, latest.Timeline) {
 		t.Fatal("restarting an unfinished checkpoint lost progress or kept work active")
+	}
+	page, err = s.MessagesPage(ctx, user, session.ID, "", 20)
+	if err != nil || len(page) != 6 || page[5].Role != "assistant" || page[5].Content != "I will check." || page[5].RunStatus != runtime.StatusInterrupted || page[5].RunError == "" {
+		t.Fatalf("startup interruption did not create a visible assistant reply: %v %+v", err, page)
 	}
 	const pendingRun = "88888888-8888-4888-8888-888888888888"
 	pendingSnapshot, _, err := s.CreateConfiguredRun(ctx, user, session.ID, "Unconfirmed output", pendingRun, Model{ID: modelID, Name: "QA model", ProviderID: provider}, "", "", nil)
@@ -266,8 +270,21 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 		t.Fatal("could not read failed provisional output history")
 	}
 	last := page[len(page)-1]
-	if last.Content != "" || !last.HasProcess || len(read.Timeline) != 1 || !read.Timeline[0].Pending || read.Timeline[0].Text != "Still checking sources" {
-		t.Fatal("failed provisional output was lost or saved as a final history answer")
+	if last.Content != "Still checking sources" || last.RunError != "stream failed" || !last.HasProcess || len(read.Timeline) != 1 || !read.Timeline[0].Pending || read.Timeline[0].Text != "Still checking sources" {
+		t.Fatal("failed public output/error was hidden or provisional output was marked final")
+	}
+	// The same read model applies to a checkpoint interrupted before CompleteRun.
+	// No stored conversation or provider transcript needs to be rewritten.
+	if _, err = s.db.Exec(ctx, `UPDATE messages SET content='' WHERE run_id=$1 AND role='assistant'`, pendingRun); err != nil {
+		t.Fatal(err)
+	}
+	messages, err = s.Messages(ctx, user, session.ID)
+	page, pageErr = s.MessagesPage(ctx, user, session.ID, "", 20)
+	if err != nil || pageErr != nil || messages[len(messages)-1].Content != "Still checking sources" || page[len(page)-1].Content != "Still checking sources" || page[len(page)-1].RunError != "stream failed" {
+		t.Fatal("history reads hid public text from the run projection")
+	}
+	if page[5].Content != "I will check." || page[5].RunStatus != runtime.StatusInterrupted {
+		t.Fatal("starting another turn lost the interrupted checkpoint's public reply")
 	}
 	const answerRun = "99999999-9999-4999-8999-999999999999"
 	answerSnapshot, _, err := s.CreateConfiguredRun(ctx, user, session.ID, "Direct answer", answerRun, Model{ID: modelID, Name: "QA model", ProviderID: provider}, "", "", nil)

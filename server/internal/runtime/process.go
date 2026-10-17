@@ -162,3 +162,65 @@ func ReconcileTerminal(snapshot Snapshot) Snapshot {
 }
 
 func hasPublicText(entry ProcessEntry) bool { return strings.TrimSpace(entry.Text) != "" }
+
+// PublicReply is the history projection, not the provider's final-answer buffer.
+// An interrupted turn keeps everything it already told the user visible; only
+// a completed turn with an answer replaces its interim public updates.
+func PublicReply(snapshot Snapshot) string {
+	if !IsTerminal(snapshot.Status) {
+		return snapshot.Output
+	}
+	if snapshot.Status == StatusCompleted && strings.TrimSpace(snapshot.Output) != "" {
+		return snapshot.Output
+	}
+	var public []ProcessEntry
+	var candidates strings.Builder
+	for _, entry := range snapshot.Timeline {
+		if entry.Kind != "progress" {
+			continue
+		}
+		public = append(public, entry)
+		if entry.Pending || entry.Final {
+			candidates.WriteString(entry.Text)
+		}
+	}
+	output := strings.TrimSpace(snapshot.Output)
+	candidatesMatch := output != "" && strings.TrimSpace(candidates.String()) == output
+	type publicBlock struct {
+		id, text  string
+		candidate bool
+	}
+	var blocks []publicBlock
+	for _, entry := range public {
+		candidate := entry.Pending || entry.Final
+		if len(blocks) > 0 {
+			last := &blocks[len(blocks)-1]
+			// A reasoning occurrence can split one public message in the
+			// middle of math/code. Its fragments must retain their exact bytes.
+			if (last.id != "" && publicSourceMatches(entry.ID, last.id)) || (candidatesMatch && last.candidate && candidate) {
+				last.text += entry.Text
+				last.candidate = last.candidate && candidate
+				continue
+			}
+		}
+		blocks = append(blocks, publicBlock{id: entry.ID, text: entry.Text, candidate: candidate})
+	}
+	var paragraphs []string
+	for _, block := range blocks {
+		if strings.TrimSpace(block.text) != "" {
+			paragraphs = append(paragraphs, block.text)
+		}
+	}
+	represented := candidatesMatch
+	suffix := ""
+	for i := len(public) - 1; i >= 0 && !represented; i-- {
+		suffix = public[i].Text + suffix
+		represented = strings.TrimSpace(suffix) == output
+	}
+	// The output can span multiple public occurrences. Compare the full buffer,
+	// not individual rows, so interleaved reasoning cannot duplicate its text.
+	if output != "" && !represented {
+		paragraphs = append(paragraphs, snapshot.Output)
+	}
+	return strings.Join(paragraphs, "\n\n")
+}

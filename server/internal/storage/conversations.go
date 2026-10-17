@@ -92,7 +92,7 @@ func (s *Store) MessagesPage(ctx context.Context, userID, sessionID, before stri
  CASE WHEN m.role='assistant' THEN COALESCE(jsonb_array_length(r.steps),0) ELSE 0 END,m.model_id,m.model_name,m.effort,m.attachments,
  CASE WHEN m.role='assistant' THEN COALESCE(jsonb_array_length(r.reasoning)>0,false) ELSE false END,
  CASE WHEN m.role='assistant' THEN COALESCE(r.status,'') ELSE '' END,
- `+messageProcessSQL+`,r.created_at,r.updated_at
+ `+messageProcessSQL+`,r.created_at,r.updated_at,`+messagePublicSQL+`
  FROM messages m LEFT JOIN runs r ON r.id=m.run_id WHERE m.session_id=$1 AND NOT m.archived
  AND ($2='' OR (m.created_at,m.id)<(SELECT created_at,id FROM messages WHERE id=NULLIF($2,'')::uuid AND session_id=$1))
  ORDER BY m.created_at DESC,m.id DESC LIMIT $3`, sessionID, before, limit)

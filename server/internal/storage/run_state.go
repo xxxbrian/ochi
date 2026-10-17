@@ -14,6 +14,12 @@ const messageProcessSQL = `m.role='assistant' AND EXISTS (
 	SELECT 1 FROM jsonb_array_elements(r.timeline) entry WHERE NOT COALESCE((entry->>'final')::boolean,false)
 )`
 
+// History reads only public prose, not the potentially large tool/reasoning
+// payloads. Deriving the projection also covers interrupted checkpoints.
+const messagePublicSQL = `COALESCE(r.error,''),COALESCE(r.output,''),
+ CASE WHEN m.role='assistant' AND r.status IN ('completed','failed','cancelled','interrupted')
+ THEN jsonb_path_query_array(r.timeline, '$[*] ? (@.kind == "progress")') ELSE '[]'::jsonb END`
+
 func marshalTimeline(items []runtime.ProcessEntry) ([]byte, error) {
 	if items == nil {
 		return []byte("[]"), nil
