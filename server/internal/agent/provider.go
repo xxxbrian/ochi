@@ -36,6 +36,8 @@ type Config struct {
 	CompactionConfig   *Config
 	MemoryContext      string
 	Observe            func(Diagnostic)
+	DebugEnabled       func() bool
+	ObserveProvider    func(ProviderTrace)
 }
 
 type ToolDefinition struct {

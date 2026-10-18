@@ -177,6 +177,13 @@
     font-size: 16px;
     font-weight: 550;
 }
+.settings-note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+}
 .system-form .form-field {
     display: grid;
     grid-template-columns: 152px minmax(0, 1fr);

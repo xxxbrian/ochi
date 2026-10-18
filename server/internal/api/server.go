@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ochi/server/internal/agent"
@@ -26,34 +27,48 @@ import (
 )
 
 type Server struct {
-	store             *storage.Store
-	runtime           *runtime.Manager
-	agent             agent.Generator
-	auth              *authentication
-	tools             agent.ToolSource
-	schedulerCancel   context.CancelFunc
-	backgroundCtx     context.Context
-	backgroundCancel  context.CancelFunc
-	backgroundWG      sync.WaitGroup
-	backgroundMu      sync.Mutex
-	queueCancel       context.CancelFunc
-	resources         *resourceManager
-	desktops          *desktopHub
-	permissionMu      sync.Mutex
-	computerCalls     sync.Map
-	preparedScopes    sync.Map
-	scopePreparations sync.Map
-	memoryWorkerOnce  sync.Once
-	extensionMu       sync.Mutex
+	store               *storage.Store
+	runtime             *runtime.Manager
+	agent               agent.Generator
+	auth                *authentication
+	tools               agent.ToolSource
+	schedulerCancel     context.CancelFunc
+	backgroundCtx       context.Context
+	backgroundCancel    context.CancelFunc
+	backgroundWG        sync.WaitGroup
+	backgroundMu        sync.Mutex
+	settingsUpdateMu    sync.Mutex
+	debugMode           atomic.Bool
+	providerDebugSlots  chan struct{}
+	providerDebugWG     sync.WaitGroup
+	providerDebugClosed bool
+	queueCancel         context.CancelFunc
+	resources           *resourceManager
+	desktops            *desktopHub
+	permissionMu        sync.Mutex
+	computerCalls       sync.Map
+	preparedScopes      sync.Map
+	scopePreparations   sync.Map
+	memoryWorkerOnce    sync.Once
+	extensionMu         sync.Mutex
 }
 
 func NewServer(store *storage.Store, generator agent.Generator, accounts []Account, secureCookies bool) (*Server, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	settings, err := store.Settings(ctx)
+	cancel()
+	if err != nil {
+		return nil, err
+	}
 	auth, err := newAuthentication(store, accounts, secureCookies)
 	if err != nil {
 		return nil, err
 	}
 	backgroundCtx, backgroundCancel := context.WithCancel(context.Background())
-	return &Server{store: store, runtime: runtime.NewManager(), agent: generator, auth: auth, resources: newResourceManager(), desktops: newDesktopHub(), backgroundCtx: backgroundCtx, backgroundCancel: backgroundCancel}, nil
+	s := &Server{store: store, runtime: runtime.NewManager(), agent: generator, auth: auth, resources: newResourceManager(), desktops: newDesktopHub(), backgroundCtx: backgroundCtx, backgroundCancel: backgroundCancel, providerDebugSlots: make(chan struct{}, 8)}
+	s.debugMode.Store(settings.DebugMode)
+	s.startProviderDebugRetention()
+	return s, nil
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
@@ -71,7 +86,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return err
 	}
 	done := make(chan struct{})
-	go func() { s.backgroundWG.Wait(); close(done) }()
+	go func() {
+		s.backgroundWG.Wait()
+		s.backgroundMu.Lock()
+		s.providerDebugClosed = true
+		s.backgroundMu.Unlock()
+		s.providerDebugWG.Wait()
+		close(done)
+	}()
 	select {
 	case <-done:
 		return nil
@@ -457,7 +479,7 @@ func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID
 	// Capture the generation before recall. Reading it afterwards could hide a
 	// user deletion between the recall's final guard and execution startup.
 	memoryState := s.memoryBoundaryState(ctx, req)
-	memoryContext, memoryDiagnostics, memoryErr := s.memoryContextWithDiagnostics(ctx, userID, session.ProjectID, sessionID, prompt)
+	memoryContext, memoryDiagnostics, memoryErr := s.memoryContextWithDiagnostics(agent.WithRunScope(ctx, scope), userID, session.ProjectID, sessionID, prompt)
 	for _, diagnostic := range memoryDiagnostics {
 		s.recordRunDiagnostic(runID, diagnostic)
 	}

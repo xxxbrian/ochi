@@ -20,6 +20,7 @@ import { statusLabel } from "../../lib/router";
 import { ErrorNotice, Field, Toggle } from "./Fields";
 import { StepList } from "../../components/ProcessDetails";
 import { FileCards } from "../../components/FileCards";
+import { RequestDiagnostics } from "./RequestDiagnostics";
 
 const MarkdownContent = lazy(() => import("../../components/MarkdownContent"));
 
@@ -238,6 +239,8 @@ export function UsersPage() {
 }
 export function SystemPage() {
   const [settings, setSettings] = useState<Record<string, unknown>>({});
+  const [debugMode, setDebugMode] = useState(false);
+  const [debugBusy, setDebugBusy] = useState(false);
   const [models, setModels] = useState<Model[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -249,6 +252,7 @@ export function SystemPage() {
       .then(([value, available]) => {
         if (!disposed) {
           setSettings(value);
+          setDebugMode(value.debug_mode === true);
           setModels(available);
         }
       })
@@ -262,6 +266,20 @@ export function SystemPage() {
       disposed = true;
     };
   }, []);
+  async function saveDebugMode(debug_mode: boolean) {
+    setDebugBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const value = await adminApi.saveSettings({ debug_mode });
+      setDebugMode(value.debug_mode === true);
+      setNotice(value.debug_mode === true ? "Debug 模式已开启" : "Debug 模式已关闭");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "保存失败");
+    } finally {
+      setDebugBusy(false);
+    }
+  }
   if (loading)
     return (
       <div className="panel-loading">
@@ -278,9 +296,13 @@ export function SystemPage() {
         className="admin-form system-form"
         onSubmit={(event) => {
           event.preventDefault();
+          if (busy || debugBusy) return;
           setBusy(true);
+          setError("");
+          setNotice("");
+          const { debug_mode: _debugMode, ...draft } = settings;
           void adminApi
-            .saveSettings(settings)
+            .saveSettings(draft)
             .then((value) => {
               setSettings(value);
               setNotice("已保存");
@@ -373,8 +395,21 @@ export function SystemPage() {
             />
           </Field>
         </section>
+        <section className="settings-card">
+          <h3>诊断</h3>
+          <Toggle
+            title="Debug 模式"
+            value={debugMode}
+            disabled={busy || debugBusy}
+            onChange={(debug_mode) => void saveDebugMode(debug_mode)}
+          />
+          <p className="settings-note">
+            开启后记录模型请求、响应原文及流数据，包含对话及工具内容，仅管理员可见。凭据脱敏，限量保存 7 天。
+            {debugBusy ? "正在保存…" : "切换后立即对新的上游请求生效，无需重启。"}关闭不会清除已有记录。可在“请求诊断”或运行详情中查看或清除。
+          </p>
+        </section>
         <div className="form-footer">
-          <button className="primary-button" disabled={busy}>
+          <button className="primary-button" disabled={busy || debugBusy}>
             {busy && <LoaderCircle className="spin" size={15} />}保存
           </button>
         </div>
@@ -690,7 +725,7 @@ export function RunsPage({ currentUserID, onNavigate }: { currentUserID: string;
       <div className="run-detail-heading"><strong>{current.session_title}</strong><RunStatusBadge run={current} /></div>
       <div className="run-detail-meta"><span>{current.display_name || current.username}</span><span>{current.model_name}{current.effort ? ` · ${current.effort}` : ""}</span><span>{new Date(current.created_at).toLocaleString("zh-CN", { hour12: false })}</span><span>{formatDuration(current.duration_ms)}</span></div>
       <div className="run-detail-tabs" role="tablist" aria-label="运行详情">
-        {[{ id: "result", title: "内容" }, { id: "tools", title: `工具 (${current.step_count})` }, { id: "metadata", title: "数据" }].map(tab => <button key={tab.id} role="tab" aria-selected={detailTab === tab.id} aria-controls="run-detail-content" className={detailTab === tab.id ? "selected" : ""} onClick={() => setDetailTab(tab.id)}>{tab.title}</button>)}
+        {[{ id: "result", title: "内容" }, { id: "tools", title: `工具 (${current.step_count})` }, { id: "metadata", title: "数据" }, { id: "requests", title: "请求诊断" }].map(tab => <button key={tab.id} role="tab" aria-selected={detailTab === tab.id} aria-controls="run-detail-content" className={detailTab === tab.id ? "selected" : ""} onClick={() => setDetailTab(tab.id)}>{tab.title}</button>)}
       </div>
       <ErrorNotice error={detailError} />
       {detailLoading ? <div className="run-detail-loading"><LoaderCircle size={18} className="spin" /></div> : detail && <div id="run-detail-content" role="tabpanel" className="run-detail-content">
@@ -699,7 +734,7 @@ export function RunsPage({ currentUserID, onNavigate }: { currentUserID: string;
           {detail.error && <pre className="run-error-output">{detail.error}</pre>}
           {detail.output && <div className="markdown-body"><Suspense fallback={<div>{detail.output}</div>}><MarkdownContent content={detail.output} isStreaming={false} /></Suspense></div>}
           {detail.artifacts.length > 0 && (detail.user_id === currentUserID ? <FileCards files={detail.artifacts} /> : <ul className="run-artifact-names">{detail.artifacts.map(file => <li key={file.id}>{file.name}</li>)}</ul>)}
-        </> : detailTab === "tools" ? (detail.steps.length ? detail.user_id === currentUserID ? <StepList steps={detail.steps} /> : <ReadOnlySteps steps={detail.steps} /> : <div className="table-empty">无工具调用</div>) : <dl className="run-data-facts">
+        </> : detailTab === "tools" ? (detail.steps.length ? detail.user_id === currentUserID ? <StepList steps={detail.steps} /> : <ReadOnlySteps steps={detail.steps} /> : <div className="table-empty">无工具调用</div>) : detailTab === "requests" ? <RequestDiagnostics key={`${detail.run_id}:${detailRevision}`} runID={detail.run_id} /> : <dl className="run-data-facts">
           {[
             ["用户", detail.display_name || detail.username], ["服务", detail.provider_name || "—"], ["输入 Tokens", formatTokens(detail.usage?.prompt_tokens)], ["输出 Tokens", formatTokens(detail.usage?.completion_tokens)], ["缓存 Tokens", formatTokens(detail.usage?.cached_tokens)], ["总耗时", formatDuration(detail.duration_ms)], ["更新", new Date(detail.updated_at).toLocaleString("zh-CN", { hour12: false })], ["文件", String(detail.artifact_count)], ["运行 ID", detail.run_id], ["对话 ID", detail.session_id], ["用户 ID", detail.user_id], ...(detail.resource ? [["资源", detail.resource]] : []), ...(detail.archived ? [["版本", "历史版本"]] : []),
           ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}

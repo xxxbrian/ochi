@@ -49,6 +49,11 @@ session cookie. All nonpublic routes recheck the account. Roles are admin/user.
 
 Provider sync/discovery/catalog and model test routes are under `/api/admin`.
 Secrets are never returned in ordinary client DTOs.
+The `debug_mode` system setting gates detailed provider captures per HTTP
+attempt. Admin-only `/api/admin/requests` and `/api/admin/runs/{id}/requests`
+provide paginated summaries, `/{request}` details, and DELETE for debug-log
+clearing only. Ordinary run diagnostics are separate from these sensitive,
+credential-redacted, bounded seven-day captures.
 
 ## Configuration And Checks
 

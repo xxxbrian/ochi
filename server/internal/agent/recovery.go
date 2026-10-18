@@ -178,12 +178,12 @@ func (g *OpenAI) observeModelError(kind string, attempt int, err error) {
 // Only model inference is retried. Tool calls and streamed client output are
 // outside this seam, so a recovery never re-executes an external side effect.
 func (g *OpenAI) doRetry(ctx context.Context, body any) (*http.Response, error) {
-	return g.retryRequest(ctx, func() (*http.Response, error) { return g.do(ctx, body) })
+	return g.retryRequest(ctx, func(attemptCtx context.Context) (*http.Response, error) { return g.do(attemptCtx, body) })
 }
 
-func (g *OpenAI) retryRequest(ctx context.Context, request func() (*http.Response, error)) (*http.Response, error) {
+func (g *OpenAI) retryRequest(ctx context.Context, request func(context.Context) (*http.Response, error)) (*http.Response, error) {
 	for attempt := 1; ; attempt++ {
-		response, err := request()
+		response, err := request(withProviderTraceAttempt(ctx, "", attempt))
 		if err == nil {
 			return response, nil
 		}

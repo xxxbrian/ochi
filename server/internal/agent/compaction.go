@@ -103,6 +103,7 @@ func (g *OpenAI) compactToBudget(ctx context.Context, req *Request, original []w
 	summary, summaryErr := "", error(nil)
 	if estimateTextTokens(string(payload))+estimateTextTokens(summaryPolicy)+maxTokens+256 < contextWindow(auxiliary) && req.Budget.AcquireReserved(1) == nil {
 		summaryCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+		summaryCtx = WithProviderTracePurpose(summaryCtx, "compaction")
 		var usage *Usage
 		summary, usage, summaryErr = CompleteWithUsage(summaryCtx, auxiliary, summaryPolicy, string(payload), maxTokens)
 		cancel()

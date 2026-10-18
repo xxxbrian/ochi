@@ -15,6 +15,7 @@ CREATE TABLE app_settings (
     embedding_model_id text DEFAULT ''::text NOT NULL,
     title_model_id text DEFAULT ''::text NOT NULL,
     image_model_id text DEFAULT ''::text NOT NULL,
+    debug_mode boolean DEFAULT false NOT NULL,
     embedding_revision bigint DEFAULT 1 NOT NULL,
     CONSTRAINT app_settings_id_check CHECK (id)
 );
@@ -286,6 +287,15 @@ CREATE TABLE run_requests (
     timezone text DEFAULT 'UTC'::text NOT NULL
 );
 
+CREATE TABLE run_request_debug (
+    id uuid NOT NULL,
+    run_id uuid,
+    started_at timestamp with time zone NOT NULL,
+    summary jsonb NOT NULL,
+    detail jsonb NOT NULL,
+    CONSTRAINT run_request_debug_detail_size_check CHECK (octet_length(detail::text) <= 8388608)
+);
+
 CREATE TABLE runs (
     id uuid NOT NULL,
     session_id uuid NOT NULL,
@@ -495,6 +505,9 @@ ALTER TABLE ONLY run_instructions
 ALTER TABLE ONLY run_requests
     ADD CONSTRAINT run_requests_pkey PRIMARY KEY (run_id);
 
+ALTER TABLE ONLY run_request_debug
+    ADD CONSTRAINT run_request_debug_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY runs
     ADD CONSTRAINT runs_pkey PRIMARY KEY (id);
 
@@ -572,6 +585,10 @@ CREATE INDEX run_diagnostics_run_idx ON run_diagnostics USING btree (run_id, id)
 CREATE INDEX run_instructions_pending_idx ON run_instructions USING btree (run_id, created_at, id) WHERE ((canonical_seq IS NULL) AND (queued_run_id IS NULL));
 
 CREATE INDEX run_requests_session_created_idx ON run_requests USING btree (session_id, created_at, run_id);
+
+CREATE INDEX run_request_debug_started_idx ON run_request_debug USING btree (started_at DESC, id DESC);
+
+CREATE INDEX run_request_debug_run_started_idx ON run_request_debug USING btree (run_id, started_at DESC, id DESC);
 
 CREATE INDEX runs_created_id_idx ON runs USING btree (created_at DESC, id DESC);
 
@@ -673,6 +690,9 @@ ALTER TABLE ONLY run_requests
 
 ALTER TABLE ONLY run_requests
     ADD CONSTRAINT run_requests_session_id_fkey FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY run_request_debug
+    ADD CONSTRAINT run_request_debug_run_id_fkey FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY runs
     ADD CONSTRAINT runs_schedule_id_fkey FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE SET NULL;

@@ -51,7 +51,8 @@ func complete(ctx context.Context, config Config, system, user string, maxTokens
 	return completeObserved(ctx, config, system, user, maxTokens, nil)
 }
 
-func completeObserved(ctx context.Context, config Config, system, user string, maxTokens int, observed func(*Usage)) (string, error) {
+func completeObserved(ctx context.Context, config Config, system, user string, maxTokens int, observed func(*Usage)) (text string, resultErr error) {
+	ctx = defaultProviderTracePurpose(ctx, "auxiliary")
 	g, err := NewOpenAI(config)
 	if err != nil {
 		return "", err
@@ -89,14 +90,19 @@ func completeObserved(ctx context.Context, config Config, system, user string, m
 		return "", err
 	}
 	defer resp.Body.Close()
+	var traceUsage *Usage
+	defer func() { finishProviderTrace(resp, traceUsage, resultErr) }()
 	if config.Protocol == "openai-responses" {
 		var result responsesResult
 		if err = json.NewDecoder(io.LimitReader(resp.Body, 2*1024*1024)).Decode(&result); err != nil {
 			return "", err
 		}
-		if observed != nil && result.Usage != nil {
+		if result.Usage != nil {
 			u := result.Usage
-			observed(&Usage{PromptTokens: u.InputTokens, CompletionTokens: u.OutputTokens, TotalTokens: u.TotalTokens, CachedTokens: u.InputTokenDetails.CachedTokens, ReasoningTokens: u.OutputTokenDetails.ReasoningTokens})
+			traceUsage = &Usage{PromptTokens: u.InputTokens, CompletionTokens: u.OutputTokens, TotalTokens: u.TotalTokens, CachedTokens: u.InputTokenDetails.CachedTokens, ReasoningTokens: u.OutputTokenDetails.ReasoningTokens}
+			if observed != nil {
+				observed(traceUsage)
+			}
 		}
 		message, err := result.message()
 		if err != nil {
@@ -118,9 +124,9 @@ func completeObserved(ctx context.Context, config Config, system, user string, m
 		} `json:"choices"`
 	}
 	if err = json.NewDecoder(io.LimitReader(resp.Body, 2*1024*1024)).Decode(&result); err != nil {
-		return "", &ModelError{Class: "invalid_stream"}
+		return "", &ModelError{Class: "invalid_stream", cause: err}
 	}
-	if observed != nil && len(result.Usage) > 0 {
+	if len(result.Usage) > 0 {
 		payload, _ := json.Marshal(map[string]json.RawMessage{"usage": result.Usage})
 		var parsed completionDelta
 		if json.Unmarshal(payload, &parsed) == nil && parsed.Usage != nil {
@@ -129,7 +135,10 @@ func completeObserved(ctx context.Context, config Config, system, user string, m
 			if cached == nil {
 				cached = u.PromptCacheHitTokens
 			}
-			observed(&Usage{PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens, TotalTokens: u.TotalTokens, CachedTokens: cached, ReasoningTokens: u.CompletionTokensDetails.ReasoningTokens})
+			traceUsage = &Usage{PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens, TotalTokens: u.TotalTokens, CachedTokens: cached, ReasoningTokens: u.CompletionTokensDetails.ReasoningTokens}
+			if observed != nil {
+				observed(traceUsage)
+			}
 		}
 	}
 	if len(result.Choices) > 0 && result.Choices[0].FinishReason == "length" {
@@ -141,7 +150,8 @@ func completeObserved(ctx context.Context, config Config, system, user string, m
 	return strings.TrimSpace(result.Choices[0].Message.Content), nil
 }
 
-func Embed(ctx context.Context, config Config, texts []string) ([][]float32, error) {
+func Embed(ctx context.Context, config Config, texts []string) (vectors [][]float32, resultErr error) {
+	ctx = defaultProviderTracePurpose(ctx, "embedding")
 	if len(texts) == 0 {
 		return [][]float32{}, nil
 	}
@@ -150,13 +160,18 @@ func Embed(ctx context.Context, config Config, texts []string) ([][]float32, err
 		return nil, err
 	}
 	body := map[string]any{"model": config.Model, "input": texts, "encoding_format": "float"}
-	resp, err := g.retryRequest(ctx, func() (*http.Response, error) { return g.post(ctx, "/embeddings", body) })
+	resp, err := g.retryRequest(ctx, func(attemptCtx context.Context) (*http.Response, error) {
+		return g.post(attemptCtx, "/embeddings", body)
+	})
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	var traceUsageSnapshot *Usage
+	defer func() { finishProviderTrace(resp, traceUsageSnapshot, resultErr) }()
 	var result struct {
-		Data []struct {
+		Usage json.RawMessage `json:"usage"`
+		Data  []struct {
 			Index     int       `json:"index"`
 			Embedding []float32 `json:"embedding"`
 		} `json:"data"`
@@ -164,6 +179,7 @@ func Embed(ctx context.Context, config Config, texts []string) ([][]float32, err
 	if err = json.NewDecoder(io.LimitReader(resp.Body, 16*1024*1024)).Decode(&result); err != nil {
 		return nil, err
 	}
+	traceUsageSnapshot = traceUsage(result.Usage)
 	if len(result.Data) != len(texts) {
 		return nil, errors.New("embedding model returned incomplete vectors")
 	}

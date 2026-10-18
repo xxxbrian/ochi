@@ -61,6 +61,21 @@ projects, runs/inputs, schedules, memory and immutable artifact metadata. Live
 subscriptions remain process-local. Schema initialization creates the current
 schema on a fresh database; it does not run a historical migration chain.
 
+The administrator's global Debug mode is off by default and is checked at the
+start of each provider HTTP attempt, including attempts in an already-running
+turn. An in-flight capture finishes using the mode selected at its start.
+Detailed records include redacted request/response headers and bodies, ordered
+SSE lines, request IDs, timing, termination markers and underlying errors.
+Ordinary error diagnostics and context inspections remain independent of this
+switch. Provider captures never enter the chat event stream or ordinary logs.
+Per-attempt captures are bounded to 1 MiB per body and 2,048 stream lines, with
+explicit redaction/truncation flags; binary image and embedding payloads are
+omitted. Only administrators can list, inspect or clear captured requests.
+Summaries are read separately from large payloads. Records expire after seven
+days, with startup/hourly cleanup, and are limited to 256 per run and 2,048
+globally, evicting the oldest. Bounded asynchronous writes do not block token
+delivery; saturation/storage failures are reported in server logs.
+
 Computer ON grants the session access to a persistent per-user workspace,
 project directories, browser/desktop and approved extensions. Computer OFF uses
 an isolated per-session compute container for ordinary code and public HTTP;

@@ -189,12 +189,15 @@ func (r responsesResult) message() (wireMessage, error) {
 	return wireMessage{Role: "assistant", Content: text.String(), ToolCalls: calls, ResponsesItems: items}, nil
 }
 
-func (g *OpenAI) streamResponses(ctx context.Context, messages []wireMessage, tools []wireTool, reasonID string, emit func(Update) error) (wireMessage, *Usage, error) {
+func (g *OpenAI) streamResponses(ctx context.Context, messages []wireMessage, tools []wireTool, reasonID string, emit func(Update) error) (message wireMessage, usage *Usage, returnErr error) {
+	ctx = withProviderTraceRound(ctx, reasonID)
 	resp, err := g.do(ctx, g.responsesBody(messages, tools, true))
 	if err != nil {
 		return wireMessage{}, nil, err
 	}
 	defer resp.Body.Close()
+	defer func() { finishProviderTrace(resp, usage, returnErr) }()
+	capture := responseTrace(resp)
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 8192), 4*1024*1024)
 	visible := newReasoningStream(reasonID, emit)
@@ -235,6 +238,7 @@ func (g *OpenAI) streamResponses(ctx context.Context, messages []wireMessage, to
 		if delta == "" {
 			return nil
 		}
+		capture.token()
 		if item.Kind == "" {
 			item.Kind = publicTextKind(item.Phase, len(tools) > 0)
 		}
@@ -286,7 +290,6 @@ func (g *OpenAI) streamResponses(ctx context.Context, messages []wireMessage, to
 	}
 	result := responsesResult{}
 	finished := false
-	var usage *Usage
 stream:
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -295,6 +298,7 @@ stream:
 		}
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "[DONE]" {
+			capture.terminal("", "", true, false)
 			break
 		}
 		var event struct {
@@ -309,16 +313,20 @@ stream:
 				Type string `json:"type"`
 				Text string `json:"text"`
 			} `json:"part"`
-			Item     json.RawMessage `json:"item"`
-			Response responsesResult `json:"response"`
-			Message  string          `json:"message"`
-			Code     string          `json:"code"`
+			Item      json.RawMessage `json:"item"`
+			Response  responsesResult `json:"response"`
+			Message   string          `json:"message"`
+			Code      string          `json:"code"`
+			ErrorType string          `json:"error_type"`
 		}
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			return wireMessage{}, usage, &ModelError{Class: "invalid_stream"}
+			return wireMessage{}, usage, &ModelError{Class: "invalid_stream", cause: err}
 		}
 		if known := event.Response.usage(); known != nil {
 			usage = known
+		}
+		if event.Delta != "" || event.Text != "" || event.Part.Text != "" || event.Type == "response.output_item.added" && strings.Contains(string(event.Item), "function_call") {
+			capture.token()
 		}
 		index := -1
 		if event.OutputIndex != nil {
@@ -400,10 +408,19 @@ stream:
 			if result.Status == "" {
 				result.Status = strings.TrimPrefix(event.Type, "response.")
 			}
+			reason := ""
+			if result.IncompleteDetails != nil {
+				reason = result.IncompleteDetails.Reason
+			}
+			capture.terminal(reason, result.Status, false, event.Type == "response.completed")
+			if result.Error != nil {
+				capture.upstream(result.Error.Code, result.Error.Type, result.Error.Message)
+			}
 			// Unlike Chat Completions, this terminal event contains its usage.
 			// Do not wait for EOF (or another event) after a complete response.
 			break stream
 		case "error":
+			capture.upstream(event.Code, event.ErrorType, event.Message)
 			return wireMessage{}, usage, classifyProviderError(0, event.Code, event.Message, "")
 		}
 	}
@@ -467,7 +484,7 @@ stream:
 	if resultErr != nil {
 		return wireMessage{}, usage, resultErr
 	}
-	message, err := result.message()
+	message, err = result.message()
 	if err != nil {
 		return wireMessage{}, usage, err
 	}

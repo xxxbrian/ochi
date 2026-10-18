@@ -10,6 +10,20 @@ import (
 )
 
 func (g *OpenAI) Generate(ctx context.Context, req Request, emit func(Update) error) error {
+	scope, _ := ScopeFromContext(ctx)
+	if req.Scope.RunID != "" || req.Scope.SessionID != "" {
+		scope = req.Scope
+	}
+	if scope.RunID == "" {
+		scope.RunID = req.RunID
+	}
+	if scope.SessionID == "" {
+		scope.SessionID = req.SessionID
+	}
+	if scope.UserID == "" {
+		scope.UserID = req.UserID
+	}
+	ctx = WithRunScope(ctx, scope)
 	runner := *g
 	config := g.config
 	if req.Config != nil {

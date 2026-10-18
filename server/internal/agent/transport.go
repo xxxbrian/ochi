@@ -127,17 +127,29 @@ func (g *OpenAI) post(ctx context.Context, path string, body any) (*http.Respons
 	for key, value := range g.config.Headers {
 		req.Header.Set(key, value)
 	}
-	resp, err := g.client.Do(req)
+	capture := newProviderTrace(g.config, req, payload)
+	resp, err := g.client.Do(capture.request(req))
 	if err != nil {
 		if ctx.Err() != nil {
+			capture.finish(nil, connectionError(err))
 			return nil, ctx.Err()
 		}
-		return nil, connectionError(err)
+		failure := connectionError(err)
+		capture.finish(nil, failure)
+		return nil, failure
 	}
+	capture.responseHeaders(resp)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if capture != nil && len(data) == 4096 && resp.ContentLength != int64(len(data)) {
+			capture.mu.Lock()
+			capture.trace.ResponseTruncated = true
+			capture.mu.Unlock()
+		}
 		resp.Body.Close()
-		return nil, providerError(resp.StatusCode, data, resp.Header.Get("Retry-After"))
+		failure := providerError(resp.StatusCode, data, resp.Header.Get("Retry-After"))
+		capture.finish(nil, failure)
+		return nil, failure
 	}
 	return resp, nil
 }
@@ -159,10 +171,11 @@ func (g *OpenAI) stream(ctx context.Context, messages []wireMessage, tools []wir
 		var message wireMessage
 		var usage *Usage
 		var err error
+		attemptCtx := withProviderTraceAttempt(ctx, reasonID, attempt)
 		if g.config.Protocol == "openai-responses" {
-			message, usage, err = g.streamResponses(ctx, messages, tools, reasonID, tracked)
+			message, usage, err = g.streamResponses(attemptCtx, messages, tools, reasonID, tracked)
 		} else {
-			message, usage, err = g.streamChat(ctx, messages, tools, reasonID, tracked)
+			message, usage, err = g.streamChat(attemptCtx, messages, tools, reasonID, tracked)
 		}
 		// Each attempt returns its final cumulative snapshot, not additive chunks.
 		// A safely retried request can still have incurred known provider usage.
@@ -210,12 +223,15 @@ func (g *OpenAI) stream(ctx context.Context, messages []wireMessage, tools []wir
 	}
 }
 
-func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools []wireTool, reasonID string, emit func(Update) error) (wireMessage, *Usage, error) {
+func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools []wireTool, reasonID string, emit func(Update) error) (message wireMessage, usage *Usage, resultErr error) {
+	ctx = withProviderTraceRound(ctx, reasonID)
 	resp, err := g.do(ctx, g.requestBody(messages, tools, true))
 	if err != nil {
 		return wireMessage{}, nil, err
 	}
 	defer resp.Body.Close()
+	defer func() { finishProviderTrace(resp, usage, resultErr) }()
+	capture := responseTrace(resp)
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 8192), 4*1024*1024)
 	var text, reasoning strings.Builder
@@ -226,7 +242,6 @@ func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools [
 	var calls chatToolCalls
 	finished := false
 	finishReason := ""
-	var usage *Usage
 	var terminalErr error
 	var usageGrace *time.Timer
 	defer func() {
@@ -241,6 +256,7 @@ func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools [
 		}
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "[DONE]" {
+			capture.terminal("", "", true, false)
 			finished = true
 			break
 		}
@@ -249,7 +265,7 @@ func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools [
 			if terminalErr != nil {
 				break
 			}
-			return wireMessage{}, usage, &ModelError{Class: "invalid_stream"}
+			return wireMessage{}, usage, &ModelError{Class: "invalid_stream", cause: err}
 		}
 		if part.Usage != nil {
 			u := part.Usage
@@ -260,6 +276,7 @@ func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools [
 			usage = &Usage{PromptTokens: u.PromptTokens, CompletionTokens: u.CompletionTokens, TotalTokens: u.TotalTokens, CachedTokens: cached, ReasoningTokens: u.CompletionTokensDetails.ReasoningTokens}
 		}
 		if part.Error != nil {
+			capture.upstream(part.Error.Code, part.Error.Type, part.Error.Message)
 			if terminalErr == nil {
 				terminalErr = classifyProviderError(0, part.Error.Code+" "+part.Error.Type, part.Error.Message, "")
 			}
@@ -270,6 +287,9 @@ func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools [
 		}
 		choice := part.Choices[0]
 		delta := choice.Delta
+		if delta.Content != "" || delta.ReasoningContent != "" || len(delta.ToolCalls) > 0 || len(delta.ReasoningDetails) > 0 || len(delta.Reasoning) > 0 || len(delta.ReasoningSummary) > 0 {
+			capture.token()
+		}
 		if err := returned.delta(delta.ReasoningContent, delta.Reasoning, delta.ReasoningSummary, delta.ReasoningDetails); err != nil {
 			return wireMessage{}, usage, err
 		}
@@ -300,6 +320,7 @@ func (g *OpenAI) streamChat(ctx context.Context, messages []wireMessage, tools [
 			}
 		}
 		if choice.FinishReason != "" {
+			capture.terminal(choice.FinishReason, "", false, false)
 			finished = true
 			finishReason = choice.FinishReason
 			if choice.FinishReason == "length" || choice.FinishReason == "content_filter" {

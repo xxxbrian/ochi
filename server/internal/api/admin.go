@@ -50,6 +50,12 @@ func (s *Server) registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/runs", s.auth.admin(s.adminRunList))
 	mux.HandleFunc("GET /api/admin/runs/stats", s.auth.admin(s.adminRunStats))
 	mux.HandleFunc("GET /api/admin/runs/{id}", s.auth.admin(s.adminRunDetail))
+	for _, path := range []string{
+		"GET /api/admin/runs/{id}/requests", "GET /api/admin/runs/{id}/requests/{request}", "DELETE /api/admin/runs/{id}/requests",
+		"GET /api/admin/requests", "GET /api/admin/requests/{request}", "DELETE /api/admin/requests",
+	} {
+		mux.HandleFunc(path, s.auth.admin(s.adminRequests))
+	}
 }
 func (s *Server) publishedModels(w http.ResponseWriter, r *http.Request) {
 	models, err := s.store.Models(r.Context(), true)
@@ -583,13 +589,35 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPatch {
+		// Keep partial updates and the live switch in the same commit order.
+		s.settingsUpdateMu.Lock()
+		defer s.settingsUpdateMu.Unlock()
+	}
 	settings, err := s.store.Settings(r.Context())
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	if r.Method == http.MethodPatch {
-		if !decodeRequest(w, r, &settings) {
+		previous := settings
+		patch := adminSettingsPatch{Settings: &settings}
+		if !decodeRequest(w, r, &patch) {
+			return
+		}
+		if err := patch.applyDebugMode(); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		withoutDebug := settings
+		withoutDebug.DebugMode = previous.DebugMode
+		if withoutDebug == previous {
+			if err := s.store.SaveDebugMode(r.Context(), settings.DebugMode); err != nil {
+				writeStoreError(w, err)
+				return
+			}
+			s.debugMode.Store(settings.DebugMode)
+			writeJSON(w, http.StatusOK, settings)
 			return
 		}
 		if settings.MaxToolRounds < 1 || settings.MaxToolRounds > 200 {
@@ -619,7 +647,10 @@ func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {
 			writeStoreError(w, err)
 			return
 		}
-		s.enqueueMemoryIndexesAfterConfigChange(r.Context())
+		s.debugMode.Store(settings.DebugMode)
+		if settings.EmbeddingModelID != previous.EmbeddingModelID {
+			s.enqueueMemoryIndexesAfterConfigChange(r.Context())
+		}
 	}
 	writeJSON(w, http.StatusOK, settings)
 }
@@ -630,6 +661,7 @@ func validEffortParameter(parameter string) bool {
 
 func (s *Server) modelConfig(ctx context.Context, model storage.Model, provider storage.Provider, effort string, settings storage.Settings) *agent.Config {
 	config := &agent.Config{Protocol: provider.Protocol, BaseURL: provider.BaseURL, APIKey: provider.APIKey, Headers: provider.Headers, TimeoutSeconds: provider.TimeoutSeconds, AllowNoKey: provider.AllowNoKey, Model: model.Model, ModelID: model.ID, ProviderID: model.ProviderID, Effort: effort, EffortParameter: model.EffortParameter, EffortValue: model.EffortMapping[effort], EffortMapping: model.EffortMapping, ReasoningKind: model.ReasoningKind, ReasoningBudgetMin: model.ReasoningBudgetMin, ReasoningBudgetMax: model.ReasoningBudgetMax, ReasoningBudget: model.ReasoningBudgetDefault, ContextWindow: model.ContextWindow, OutputTokenLimit: model.MaxOutputTokens, SupportsTools: model.SupportsTools, SupportsVision: model.SupportsVision, SystemPrompt: settings.SystemPrompt, MaxToolRounds: settings.MaxToolRounds, Tools: s.tools}
+	s.configureProviderDebug(config)
 	config.SupportsTools = model.SupportsTools || !model.MetadataKnown["supports_tools"]
 	config.SupportsVision = model.SupportsVision || !model.MetadataKnown["supports_vision"]
 	if !model.MetadataOverrides["reasoning"] && (config.EffortParameter == "reasoning_effort" || config.EffortParameter == "reasoning.effort") {

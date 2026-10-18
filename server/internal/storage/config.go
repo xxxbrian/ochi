@@ -98,6 +98,7 @@ type Model struct {
 }
 
 type Settings struct {
+	DebugMode         bool   `json:"debug_mode"`
 	SystemPrompt      string `json:"system_prompt"`
 	MaxToolRounds     int    `json:"max_tool_rounds"`
 	CompactionModelID string `json:"compaction_model_id"`
@@ -416,11 +417,22 @@ func (s *Store) DeleteModel(ctx context.Context, id string) error {
 }
 func (s *Store) Settings(ctx context.Context) (Settings, error) {
 	var v Settings
-	err := s.db.QueryRow(ctx, `SELECT system_prompt,max_tool_rounds,compaction_model_id,memory_model_id,embedding_model_id,title_model_id,image_model_id FROM app_settings WHERE id=true`).Scan(&v.SystemPrompt, &v.MaxToolRounds, &v.CompactionModelID, &v.MemoryModelID, &v.EmbeddingModelID, &v.TitleModelID, &v.ImageModelID)
+	err := s.db.QueryRow(ctx, `SELECT system_prompt,max_tool_rounds,compaction_model_id,memory_model_id,embedding_model_id,title_model_id,image_model_id,debug_mode FROM app_settings WHERE id=true`).Scan(&v.SystemPrompt, &v.MaxToolRounds, &v.CompactionModelID, &v.MemoryModelID, &v.EmbeddingModelID, &v.TitleModelID, &v.ImageModelID, &v.DebugMode)
 	return v, err
 }
 func (s *Store) SaveSettings(ctx context.Context, v Settings) error {
-	_, err := s.db.Exec(ctx, `UPDATE app_settings SET system_prompt=$1,max_tool_rounds=$2,compaction_model_id=$3,memory_model_id=$4,embedding_model_id=$5,title_model_id=$6,image_model_id=$7 WHERE id=true`, v.SystemPrompt, v.MaxToolRounds, v.CompactionModelID, v.MemoryModelID, v.EmbeddingModelID, v.TitleModelID, v.ImageModelID)
+	_, err := s.db.Exec(ctx, `UPDATE app_settings SET system_prompt=$1,max_tool_rounds=$2,compaction_model_id=$3,memory_model_id=$4,embedding_model_id=$5,title_model_id=$6,image_model_id=$7,debug_mode=$8 WHERE id=true`, v.SystemPrompt, v.MaxToolRounds, v.CompactionModelID, v.MemoryModelID, v.EmbeddingModelID, v.TitleModelID, v.ImageModelID, v.DebugMode)
 	return err
+}
+
+func (s *Store) SaveDebugMode(ctx context.Context, enabled bool) error {
+	_, err := s.db.Exec(ctx, `UPDATE app_settings SET debug_mode=$1 WHERE id=true`, enabled)
+	return err
+}
+
+func (s *Store) DebugMode(ctx context.Context) (bool, error) {
+	var enabled bool
+	err := s.db.QueryRow(ctx, `SELECT debug_mode FROM app_settings WHERE id=true`).Scan(&enabled)
+	return enabled, err
 }
 func (s *Store) Ping(ctx context.Context) error { return s.db.Ping(ctx) }

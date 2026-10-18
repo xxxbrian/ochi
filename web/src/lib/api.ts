@@ -4,6 +4,8 @@ import type {
   AdminRunFilter,
   AdminRunPage,
   AdminRunStats,
+  ProviderRequestDetail,
+  ProviderRequestPage,
   Artifact,
   MCPServer,
   Memory,
@@ -324,6 +326,12 @@ export const api = {
     `${API_BASE}/api/runs/${encodeURIComponent(runId)}/events`,
 };
 
+function providerRequestsPath(runID?: string) {
+  return runID
+    ? `/api/admin/runs/${encodeURIComponent(runID)}/requests`
+    : "/api/admin/requests";
+}
+
 export const adminApi = {
   providers: () => request<Provider[]>("/api/admin/providers"),
   models: () => request<Model[]>("/api/admin/models"),
@@ -375,6 +383,12 @@ export const adminApi = {
     )}`, { signal }),
   run: (id: string, signal?: AbortSignal) =>
     request<AdminRunDetail>(`/api/admin/runs/${encodeURIComponent(id)}`, { signal }),
+  providerRequests: (runID: string | undefined, offset = 0, signal?: AbortSignal) =>
+    request<ProviderRequestPage>(`${providerRequestsPath(runID)}?limit=30&offset=${offset}`, { signal }),
+  providerRequest: (runID: string | undefined, id: string, signal?: AbortSignal) =>
+    request<ProviderRequestDetail>(`${providerRequestsPath(runID)}/${encodeURIComponent(id)}`, { signal }),
+  clearProviderRequests: (runID?: string, signal?: AbortSignal) =>
+    request<void>(providerRequestsPath(runID), { method: "DELETE", signal }),
   settings: () => request<Record<string, unknown>>("/api/admin/settings"),
   catalogProviders: () =>
     request<{ id: string; name: string; model_count?: number }[]>(

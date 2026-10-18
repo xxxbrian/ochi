@@ -137,6 +137,7 @@ func (s *Server) preserveMemoryBeforeCompaction(ctx context.Context, userID, run
 }
 
 func (s *Server) extractMemoryJob(ctx context.Context, job storage.MemoryJob) error {
+	ctx = agent.WithProviderTracePurpose(agent.WithRunScope(ctx, agent.RunScope{UserID: job.UserID, SessionID: job.SessionID, RunID: job.RunID}), "memory")
 	pref, err := s.store.Preferences(ctx, job.UserID)
 	if err != nil {
 		return err

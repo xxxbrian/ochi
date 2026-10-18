@@ -35,6 +35,10 @@ entry point small; detailed rules belong with the module that owns them.
 
 - Preserve unrelated user changes. Prefer deleting obsolete code over adding
   another fallback. Keep actual provider interoperability and OS fallbacks.
+- Before switching to an unrelated task, inspect outstanding changes and close
+  the previous task's commit boundary. Commit independently verified, approved
+  work after its privacy review; if it cannot be safely separated, ask first.
+  Never silently mix unrelated tasks into one commit.
 - Keep one owner for each component, state transition and style surface.
   Avoid speculative shared packages and arbitrary file-size-driven splitting.
 - Preserve established neutral, compact UI and native interactions. Read

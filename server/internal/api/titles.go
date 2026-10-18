@@ -40,6 +40,7 @@ func (s *Server) asyncTitle(request agent.Request) {
 				return
 			}
 			ctx, cancel := context.WithTimeout(parent, 60*time.Second)
+			ctx = agent.WithProviderTracePurpose(agent.WithRunScope(ctx, request.Scope), "title")
 			claim, err := s.store.ClaimTitle(ctx, request.UserID, request.SessionID)
 			if err != nil {
 				cancel()

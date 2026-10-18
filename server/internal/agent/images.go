@@ -117,7 +117,8 @@ func validateImageModelOptions(model string, options ImageOptions) error {
 
 // Dedicated native Images API requests work independently from the selected
 // chat model and never require a Docker workspace or computer permission.
-func GenerateImage(ctx context.Context, config Config, options ImageOptions) (GeneratedImage, error) {
+func GenerateImage(ctx context.Context, config Config, options ImageOptions) (generated GeneratedImage, resultErr error) {
+	ctx = defaultProviderTracePurpose(ctx, "image")
 	if config.BaseURL == "" || config.Model == "" || config.APIKey == "" && !config.AllowNoKey {
 		return GeneratedImage{}, errors.New("请先配置可用的生图服务")
 	}
@@ -203,12 +204,17 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (Ge
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
 	client := providerClient(config)
+	capture := newProviderTrace(config, req, body.Bytes())
 	// Never replay an ambiguously billed image request on timeout/server failure.
-	resp, err := client.Do(req)
+	resp, err := client.Do(capture.request(req))
 	if err != nil {
+		capture.finish(nil, connectionError(err))
 		return GeneratedImage{}, errors.New("生图服务连接中断，未自动重试")
 	}
+	capture.responseHeaders(resp)
 	defer resp.Body.Close()
+	var traceUsage *Usage
+	defer func() { capture.finish(traceUsage, resultErr) }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var failure struct {
 			Error struct {
@@ -235,6 +241,8 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (Ge
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxGeneratedImageBytes*4/3+1048576)).Decode(&response); err != nil || len(response.Data) == 0 {
 		return GeneratedImage{}, errors.New("生图服务未返回有效图片")
 	}
+	imageUsage := Usage{PromptTokens: response.Usage.InputTokens, CompletionTokens: response.Usage.OutputTokens, TotalTokens: response.Usage.TotalTokens}
+	traceUsage = &imageUsage
 	result := response.Data[0]
 	var data []byte
 	if result.Base64 != "" {
@@ -243,7 +251,7 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (Ge
 		}
 		data, err = base64.StdEncoding.DecodeString(result.Base64)
 	} else if result.URL != "" {
-		data, err = downloadGeneratedImage(ctx, client, result.URL)
+		data, err = downloadGeneratedImage(ctx, client, result.URL, config)
 	} else {
 		err = errors.New("生图服务未返回图片内容")
 	}
@@ -258,7 +266,8 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (Ge
 		Usage: Usage{PromptTokens: response.Usage.InputTokens, CompletionTokens: response.Usage.OutputTokens, TotalTokens: response.Usage.TotalTokens}}, nil
 }
 
-func downloadGeneratedImage(ctx context.Context, client *http.Client, location string) ([]byte, error) {
+func downloadGeneratedImage(ctx context.Context, client *http.Client, location string, config Config) (data []byte, resultErr error) {
+	ctx = WithProviderTracePurpose(ctx, "image_download")
 	u, err := url.Parse(location)
 	if err != nil || u.Host == "" || u.User != nil || u.Scheme != "https" && u.Scheme != "http" {
 		return nil, errors.New("invalid image download URL")
@@ -268,16 +277,20 @@ func downloadGeneratedImage(ctx context.Context, client *http.Client, location s
 		return nil, err
 	}
 	req.Header.Set("User-Agent", product.UserAgent())
+	capture := newProviderTrace(config, req, nil)
 	// The image host receives no provider key or custom authentication headers.
-	resp, err := client.Do(req)
+	resp, err := client.Do(capture.request(req))
 	if err != nil {
+		capture.finish(nil, connectionError(err))
 		return nil, err
 	}
+	capture.responseHeaders(resp)
 	defer resp.Body.Close()
+	defer func() { capture.finish(nil, resultErr) }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.New("image download failed")
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxGeneratedImageBytes+1))
+	data, err = io.ReadAll(io.LimitReader(resp.Body, maxGeneratedImageBytes+1))
 	if len(data) > maxGeneratedImageBytes {
 		return nil, errors.New("image too large")
 	}

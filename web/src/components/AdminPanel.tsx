@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import {
   Activity,
   ArrowLeft,
+  Bug,
   Cpu,
   LoaderCircle,
   Plug,
@@ -16,6 +17,7 @@ import {
   WorkspacesPage,
   RunsPage,
 } from "../pages/admin/SystemPages";
+import { DebugPage } from "../pages/admin/RequestDiagnostics";
 const ProvidersPage = lazy(() => import("../pages/admin/ProvidersPage"));
 const SearchPage = lazy(() => import("../pages/admin/SearchPage"));
 const PluginsPage = lazy(() => import("../pages/admin/PluginsPage"));
@@ -26,6 +28,7 @@ const tabs = [
   { id: "users", title: "用户", icon: Users },
   { id: "workspaces", title: "工作区", icon: Cpu },
   { id: "runs", title: "运行记录", icon: Activity },
+  { id: "debug", title: "请求诊断", icon: Bug },
   { id: "settings", title: "系统", icon: Settings2 },
 ];
 export default function AdminPanel({
@@ -90,6 +93,8 @@ export default function AdminPanel({
             <WorkspacesPage />
           ) : section === "runs" ? (
             <RunsPage currentUserID={currentUserID} onNavigate={onNavigate} />
+          ) : section === "debug" ? (
+            <DebugPage />
           ) : (
             <ProvidersPage />
           )}

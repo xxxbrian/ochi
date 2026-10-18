@@ -12,6 +12,23 @@ models, auxiliary tasks and search can then be managed in the administrator UI;
 bootstrap values do not overwrite subsequent administrator edits.
 `RUNNER=demo` is explicit development-only behavior.
 
+In **Administration > System**, **Debug mode** enables detailed upstream model
+request diagnostics without a restart. The next HTTP attempt uses the new mode;
+an existing in-flight capture completes normally. Inspect records under
+**Request diagnostics**, or the same tab in a run's detail. The mode defaults
+off. Captures can contain conversation and tool content even after credential
+redaction; restrict administrator access and protect database backups accordingly.
+Request/response bodies and SSE captures are bounded and marked when omitted or
+truncated. Seven-day retention and oldest-first count limits apply, and the
+administrator can clear global or per-run debug records without deleting chats.
+
+For an existing development database, back it up before applying schema changes.
+Debug capture needs `app_settings.debug_mode` and the `run_request_debug` table,
+indexes and constraints from the current `server/internal/storage/schema.sql`.
+If those objects are absent, add just their DDL in one explicit transaction
+before starting the new server; do not rerun the full schema, reset a volume or
+add startup migration aliases. Check that capture remains off after maintenance.
+
 The server requires `DATABASE_URL` (supplied by Compose). `SECURE_COOKIES=true`
 is required behind production HTTPS. Workspace defaults use the built
 `ochi-workspace:local` image and private `ochi`/`ochi-compute` networks.
