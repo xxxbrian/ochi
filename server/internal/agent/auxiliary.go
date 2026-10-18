@@ -43,7 +43,7 @@ func CompleteWithUsage(ctx context.Context, config Config, system, user string, 
 }
 
 func TestCompletion(ctx context.Context, config Config) error {
-	_, err := complete(ctx, config, "Return exactly OK. This is a connection check.", "OK", 8192)
+	_, err := complete(ctx, config, "Return exactly OK. This is a connection check.", "OK", 0)
 	return err
 }
 
@@ -56,25 +56,33 @@ func completeObserved(ctx context.Context, config Config, system, user string, m
 	if err != nil {
 		return "", err
 	}
-	body := g.requestBody([]wireMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}, nil, false)
+	if err := g.validateContextConfig(); err != nil {
+		return "", err
+	}
+	messages := []wireMessage{{Role: "system", Content: system}, {Role: "user", Content: user}}
+	available := contextWindow(config) - 256
+	for _, message := range messages {
+		available -= estimateMessageTokens(message, config.Protocol)
+	}
+	if available <= 0 {
+		return "", &ModelError{Class: "configuration"}
+	}
 	if maxTokens > 0 {
-		maxTokens = min(maxTokens, outputBudget(config))
-	} else {
-		maxTokens = outputBudget(config)
-	}
-	if config.OutputTokenLimit > 0 {
-		maxTokens = min(maxTokens, config.OutputTokenLimit)
-	}
-	if config.Protocol == "openai-responses" {
-		body["max_output_tokens"] = maxTokens
-	} else {
-		body["max_tokens"] = maxTokens
+		maxTokens = min(maxTokens, available)
+		if config.OutputTokenLimit > 0 {
+			maxTokens = min(maxTokens, config.OutputTokenLimit)
+		}
 	}
 	if config.ReasoningKind == "budget" && config.ReasoningBudget > 0 && maxTokens > 0 && maxTokens <= config.ReasoningBudget {
 		return "", &ModelError{Class: "configuration"}
 	}
-	if maxTokens+256 >= contextWindow(config) {
-		return "", &ModelError{Class: "configuration"}
+	body := g.requestBody(messages, nil, false)
+	if maxTokens > 0 {
+		if config.Protocol == "openai-responses" {
+			body["max_output_tokens"] = maxTokens
+		} else {
+			body["max_tokens"] = maxTokens
+		}
 	}
 	resp, err := g.doRetry(ctx, body)
 	if err != nil {

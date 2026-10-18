@@ -90,14 +90,15 @@ The configuration file uses `agent.Config` field names, for example:
   "Protocol": "openai",
   "Model": "your-selected-model-id",
   "SupportsTools": true,
-  "ContextWindow": 32768,
-  "MaxOutputTokens": 2048
+  "ContextWindow": 32768
 }
 ```
 
 Supply the private `BaseURL` and `APIKey` fields separately in that same file
 (or `AllowNoKey: true` for an explicitly unauthenticated endpoint). No model or
 endpoint is chosen automatically. Compaction uses the same recorded model.
+The harness bounds request duration and tool rounds, not the provider's output
+allowance, so it exercises the ordinary generation policy.
 `OCHI_PROCESS_TEST_DATABASE_URL` must name the disposable `ochi_process_qa`
 database with pgvector available. The fixture creates and removes only its own
 isolated schema; never supply the application's database. After configuring

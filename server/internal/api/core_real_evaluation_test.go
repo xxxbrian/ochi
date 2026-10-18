@@ -365,7 +365,7 @@ func (e coreEvalRunner) run(id, boundary, prompt string, session storage.Session
 	ctx = agent.WithRunScope(ctx, scope)
 	config := e.config
 	config.ModelID, config.ProviderID = e.model.ID, e.model.ProviderID
-	config.TimeoutSeconds, config.MaxOutputTokens, config.MaxToolRounds = 150, 2048, 6
+	config.TimeoutSeconds, config.MaxToolRounds = 150, 6
 	config.Headers = map[string]string{"X-Ochi-Eval-Case": id}
 	config.Tools = tools
 	config.Observe = func(d agent.Diagnostic) { result.Diagnostics = append(result.Diagnostics, d) }

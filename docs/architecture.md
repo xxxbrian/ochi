@@ -38,6 +38,17 @@ from the final answer alone. Provider-specific reasoning replay is normalized
 when switching models. Titles, memory extraction and context compaction use
 separate auxiliary requests and do not masquerade as user conversation turns.
 
+Ordinary chat and tool-loop requests omit output-token caps; the provider owns
+the single-generation allowance. Model output metadata describes capability,
+not an application quota, even when an administrator edits it. Input compaction
+reserves context headroom independently (normally a quarter of the window,
+adjusted for known output capability and selected thinking budgets), triggering
+at 70% input use and targeting 55%, or earlier when the reservation requires it.
+An unknown window uses a conservative 16,384-token estimate, not a generation
+limit. Titles, memory extraction and summaries keep explicit task-sized output
+budgets. Real upstream truncation retains visible partial output and usage,
+never executes incomplete tools, and does not automatically replay the request.
+
 Process events preserve thinking, interim replies and tool calls in occurrence
 order. The clients derive compact grouped views without reordering the canonical
 events. Finished message DTOs expose `attachments`; live run snapshots expose

@@ -164,7 +164,7 @@ func TestCompactionKeepsRepeatedReplyBoundary(t *testing.T) {
 		fmt.Fprint(w, `{"choices":[{"message":{"content":"Saved task summary"}}]}`)
 	}))
 	defer server.Close()
-	generator, _ := NewOpenAI(Config{BaseURL: server.URL, APIKey: "fixture", Model: "fixture", ContextWindow: 8192, MaxOutputTokens: 512})
+	generator, _ := NewOpenAI(Config{BaseURL: server.URL, APIKey: "fixture", Model: "fixture", ContextWindow: 8192})
 	req := Request{}
 	messages := []wireMessage{{Role: "system", Content: "Preserve the user's original constraints."}}
 	for i := 0; i < 24; i++ {
@@ -200,7 +200,7 @@ func TestCompactionEmptyAuxiliaryResponseFallsBack(t *testing.T) {
 		fmt.Fprint(w, `{"choices":[{"message":{"content":"","reasoning_content":"budget consumed"}}]}`)
 	}))
 	defer server.Close()
-	config := Config{BaseURL: server.URL, APIKey: "fixture", Model: "fixture", ContextWindow: 8192, MaxOutputTokens: 512, Effort: "high", EffortParameter: "reasoning_effort", EffortValue: json.RawMessage(`"high"`), EffortMapping: map[string]json.RawMessage{"none": json.RawMessage(`"none"`)}}
+	config := Config{BaseURL: server.URL, APIKey: "fixture", Model: "fixture", ContextWindow: 8192, Effort: "high", EffortParameter: "reasoning_effort", EffortValue: json.RawMessage(`"high"`), EffortMapping: map[string]json.RawMessage{"none": json.RawMessage(`"none"`)}}
 	generator, _ := NewOpenAI(config)
 	req := Request{}
 	messages := []wireMessage{{Role: "system", Content: "Preserve the user's original constraints."}}

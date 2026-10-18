@@ -629,7 +629,7 @@ func validEffortParameter(parameter string) bool {
 }
 
 func (s *Server) modelConfig(ctx context.Context, model storage.Model, provider storage.Provider, effort string, settings storage.Settings) *agent.Config {
-	config := &agent.Config{Protocol: provider.Protocol, BaseURL: provider.BaseURL, APIKey: provider.APIKey, Headers: provider.Headers, TimeoutSeconds: provider.TimeoutSeconds, AllowNoKey: provider.AllowNoKey, Model: model.Model, ModelID: model.ID, ProviderID: model.ProviderID, Effort: effort, EffortParameter: model.EffortParameter, EffortValue: model.EffortMapping[effort], EffortMapping: model.EffortMapping, ReasoningKind: model.ReasoningKind, ReasoningBudgetMin: model.ReasoningBudgetMin, ReasoningBudgetMax: model.ReasoningBudgetMax, ReasoningBudget: model.ReasoningBudgetDefault, ContextWindow: model.ContextWindow, MaxOutputTokens: model.MaxOutputTokens, SupportsTools: model.SupportsTools, SupportsVision: model.SupportsVision, SystemPrompt: settings.SystemPrompt, MaxToolRounds: settings.MaxToolRounds, Tools: s.tools}
+	config := &agent.Config{Protocol: provider.Protocol, BaseURL: provider.BaseURL, APIKey: provider.APIKey, Headers: provider.Headers, TimeoutSeconds: provider.TimeoutSeconds, AllowNoKey: provider.AllowNoKey, Model: model.Model, ModelID: model.ID, ProviderID: model.ProviderID, Effort: effort, EffortParameter: model.EffortParameter, EffortValue: model.EffortMapping[effort], EffortMapping: model.EffortMapping, ReasoningKind: model.ReasoningKind, ReasoningBudgetMin: model.ReasoningBudgetMin, ReasoningBudgetMax: model.ReasoningBudgetMax, ReasoningBudget: model.ReasoningBudgetDefault, ContextWindow: model.ContextWindow, OutputTokenLimit: model.MaxOutputTokens, SupportsTools: model.SupportsTools, SupportsVision: model.SupportsVision, SystemPrompt: settings.SystemPrompt, MaxToolRounds: settings.MaxToolRounds, Tools: s.tools}
 	config.SupportsTools = model.SupportsTools || !model.MetadataKnown["supports_tools"]
 	config.SupportsVision = model.SupportsVision || !model.MetadataKnown["supports_vision"]
 	if !model.MetadataOverrides["reasoning"] && (config.EffortParameter == "reasoning_effort" || config.EffortParameter == "reasoning.effort") {
@@ -638,11 +638,6 @@ func (s *Server) modelConfig(ctx context.Context, model storage.Model, provider 
 		if parameter := storage.CatalogEffortParameter(provider); parameter != "" {
 			config.EffortParameter = parameter
 		}
-	}
-	config.OutputTokenLimit = model.MaxOutputTokens
-	if !model.MetadataOverrides["max_output_tokens"] {
-		// Keep the catalog ceiling separate from the automatic request budget.
-		config.MaxOutputTokens = 0
 	}
 	if strings.HasPrefix(effort, "budget:") {
 		config.ReasoningBudget, _ = strconv.Atoi(strings.TrimPrefix(effort, "budget:"))

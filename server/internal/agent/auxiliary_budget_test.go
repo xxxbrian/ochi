@@ -16,20 +16,25 @@ func TestCompactionSharesBudgetReportsActualUsageAndReservesFinal(t *testing.T) 
 		t.Run(fmt.Sprint(allowance), func(t *testing.T) {
 			var auxiliaryCalls, streamCalls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var body struct {
-					Stream bool `json:"stream"`
+				var body map[string]any
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+					return
 				}
-				_ = json.NewDecoder(r.Body).Decode(&body)
-				if !body.Stream {
+				if body["stream"] != true {
 					auxiliaryCalls.Add(1)
+					if tokens, _ := body["max_tokens"].(float64); tokens <= 0 || tokens > 2048 {
+						t.Errorf("summary lost its task-sized output budget: %v", body["max_tokens"])
+					}
 					fmt.Fprint(w, `{"choices":[{"message":{"content":"Earlier comparison, retaining the original constraints."}}],"usage":{"prompt_tokens":8,"completion_tokens":3,"total_tokens":11,"prompt_tokens_details":{"cached_tokens":5}}}`)
 					return
 				}
+				assertNoOutputCap(t, body)
 				streamCalls.Add(1)
 				fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"Final result retains CEDAR.\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":13,\"completion_tokens\":6,\"total_tokens\":19}}\n\ndata: [DONE]\n\n")
 			}))
 			defer server.Close()
-			g, _ := NewOpenAI(Config{BaseURL: server.URL, Model: "same", AllowNoKey: true, ContextWindow: 8192, MaxOutputTokens: 512})
+			g, _ := NewOpenAI(Config{BaseURL: server.URL, Model: "same", AllowNoKey: true, ContextWindow: 8192})
 			messages := []wireMessage{{Role: "system", Content: "stable"}, {Role: "user", Content: "Prepare a comparison.\nMust retain CEDAR."}, {Role: "assistant", Content: strings.Repeat("historical observation ", 2000)}, {Role: "user", Content: "Finish the comparison."}}
 			req := canonicalFixture(messages)
 			parent := NewExecutionBudget(allowance + 1)
@@ -102,7 +107,7 @@ func TestCompactionConsumesPenultimateRoundKeepsFinalFormatPolicy(t *testing.T) 
 	}))
 	defer server.Close()
 	tools := &largeReturnBudgetTools{}
-	g, _ := NewOpenAI(Config{BaseURL: server.URL, Model: "same", AllowNoKey: true, ContextWindow: 8192, MaxOutputTokens: 512, Tools: tools})
+	g, _ := NewOpenAI(Config{BaseURL: server.URL, Model: "same", AllowNoKey: true, ContextWindow: 8192, Tools: tools})
 	budget := NewExecutionBudget(3)
 	contexts := []string{}
 	err := g.Generate(context.Background(), Request{Budget: budget, Messages: []Message{{Role: "user", Content: "Only CSV: marker,count. Do not add prose."}}, ObserveContext: func(c ContextInspection) { contexts = append(contexts, c.Round) }}, func(Update) error { return nil })

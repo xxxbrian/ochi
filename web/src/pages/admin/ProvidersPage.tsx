@@ -998,11 +998,11 @@ export default function ProvidersPage() {
                       }
                     />
                   </Field>
-                  {modelEditor.kind !== "embedding" && <Field title="最大输出（0 = 自动）">
+                  {modelEditor.kind !== "embedding" && <Field title="输出能力上限（0 = 未知）">
                     <input
                       type="number"
                       min={0}
-                      title="目录值是模型能力上限。未手动覆盖时，常规自动预算取 65,536 tokens 与上下文四分之一的较小值；选择思考 token 预算时至少预留预算加 1,024 tokens，再受模型上限约束。输出上限包含思考与正文。"
+                      title="模型支持的最大输出 tokens，包含思考与正文。用于能力校验和辅助任务预算，不是聊天生成限额；常规聊天不发送输出额度，由服务商决定。"
                       value={modelEditor.max_output_tokens ?? 0}
                       onChange={(event) =>
                         setModelEditor({

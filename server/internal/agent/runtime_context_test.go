@@ -58,11 +58,11 @@ func TestFewHugeMessagesAndUnknownWindowCompactWithoutChangingCanonical(t *testi
 }
 
 func TestContextBudgetAccountsForToolsLiveStateAndOutput(t *testing.T) {
-	g := &OpenAI{config: Config{ContextWindow: 10000, MaxOutputTokens: 4200, MemoryContext: "retrieved lower-authority evidence"}}
+	g := &OpenAI{config: Config{ContextWindow: 10000, ReasoningKind: "budget", ReasoningBudget: 3176, MemoryContext: "retrieved lower-authority evidence"}}
 	history := []wireMessage{{Role: "system", Content: "stable"}, {Role: "user", Content: "current"}}
 	tools := []wireTool{{Type: "function", Function: ToolDefinition{Name: "read", Parameters: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string"}}}`)}}}
 	budget, err := g.contextBudget(context.Background(), Request{Timezone: "Asia/Shanghai", TaskContext: "retained constraints", SkillsIndex: "one skill"}, history, tools)
-	if err != nil || budget.SystemTokens == 0 || budget.HistoryTokens == 0 || budget.ToolTokens == 0 || budget.DynamicTokens == 0 || budget.OutputTokens != 4200 {
+	if err != nil || budget.SystemTokens == 0 || budget.HistoryTokens == 0 || budget.ToolTokens == 0 || budget.DynamicTokens == 0 || budget.OutputReserveTokens != 4200 {
 		t.Fatalf("component budget: %+v err=%v", budget, err)
 	}
 	if budget.InputTokens != budget.SystemTokens+budget.HistoryTokens+budget.ToolTokens+budget.DynamicTokens || budget.LimitInputTokens != 5544 {
@@ -78,7 +78,7 @@ func TestProtectedCurrentInputCannotBeSilentlyTruncated(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests.Add(1) }))
 	defer server.Close()
-	g, _ := NewOpenAI(Config{BaseURL: server.URL, Model: "same", AllowNoKey: true, ContextWindow: 8192, MaxOutputTokens: 512})
+	g, _ := NewOpenAI(Config{BaseURL: server.URL, Model: "same", AllowNoKey: true, ContextWindow: 8192})
 	req := Request{Messages: []Message{{Role: "user", Content: "Do not delete anything. " + strings.Repeat("current input ", 2600)}}}
 	err := g.Generate(context.Background(), req, func(Update) error { return nil })
 	var oversized *ContextBudgetError
@@ -88,7 +88,7 @@ func TestProtectedCurrentInputCannotBeSilentlyTruncated(t *testing.T) {
 }
 
 func TestBeforeCompactionFailureStopsWithoutDiscardingHistory(t *testing.T) {
-	g := &OpenAI{config: Config{ContextWindow: 8192, MaxOutputTokens: 512}}
+	g := &OpenAI{config: Config{ContextWindow: 8192}}
 	messages := []wireMessage{{Role: "system", Content: "stable"}, {Role: "user", Content: "old request"}, {Role: "assistant", Content: strings.Repeat("old output ", 4500)}, {Role: "user", Content: "current"}}
 	req := canonicalFixture(messages)
 	want := errors.New("durable checkpoint failed")
@@ -120,7 +120,7 @@ func TestRepeatedCompactionRetainsOriginalConstraintsAndToolPairs(t *testing.T) 
 		_, _ = w.Write(payload)
 	}))
 	defer server.Close()
-	g, _ := NewOpenAI(Config{BaseURL: server.URL, Model: "same", AllowNoKey: true, ContextWindow: 8192, MaxOutputTokens: 512})
+	g, _ := NewOpenAI(Config{BaseURL: server.URL, Model: "same", AllowNoKey: true, ContextWindow: 8192})
 	current := "Continue the exact requested task."
 	messages := []wireMessage{{Role: "system", Content: "stable"}, {Role: "user", Content: "Prepare requested data.\nMust keep original files.\nNever send private data."}, {Role: "assistant", Content: strings.Repeat("historical response ", 2200)}, {Role: "user", Content: current}}
 	req := canonicalFixture(messages)
@@ -215,7 +215,7 @@ func TestContextOverflowRecoversAtUncommittedBoundaryOnSameModel(t *testing.T) {
 		writeChatAnswer(w, "finished")
 	}))
 	defer server.Close()
-	g, _ := NewOpenAI(Config{BaseURL: server.URL, Model: "frozen-model", AllowNoKey: true, MaxOutputTokens: 512})
+	g, _ := NewOpenAI(Config{BaseURL: server.URL, Model: "frozen-model", AllowNoKey: true})
 	history := []CanonicalMessage{{Seq: 1, Payload: json.RawMessage(`{"role":"user","content":"Compare the sources. Never upload files."}`)}}
 	payload, _ := json.Marshal(wireMessage{Role: "assistant", Content: strings.Repeat("old source evidence ", 650)})
 	history = append(history, CanonicalMessage{Seq: 2, Payload: payload}, CanonicalMessage{Seq: 3, Payload: json.RawMessage(`{"role":"user","content":"Finish now."}`)})
@@ -284,22 +284,22 @@ func TestSafeBoundarySteeringAndFrozenConfiguration(t *testing.T) {
 	}
 }
 
-func TestOutputReservationIncludesSelectedThinkingBudget(t *testing.T) {
+func TestContextReservationIncludesSelectedThinkingBudget(t *testing.T) {
 	config := Config{ContextWindow: 32768, ReasoningKind: "budget", ReasoningBudget: 8192}
-	if outputBudget(config) != 9216 {
+	if contextOutputReserve(config) != 9216 {
 		t.Fatal("thinking budget was not reserved as generated output")
 	}
-	config.MaxOutputTokens = 10000
-	if outputBudget(config) != 10000 {
-		t.Fatal("explicit output cap was changed")
+	config.OutputTokenLimit = 8500
+	if contextOutputReserve(config) != 8500 {
+		t.Fatal("context reservation exceeded the model capability")
 	}
 	config.BaseURL, config.Model, config.AllowNoKey = "http://invalid.test", "frozen", true
-	config.MaxOutputTokens = 4000
+	config.OutputTokenLimit = 4000
 	g, _ := NewOpenAI(config)
-	err := g.Generate(context.Background(), Request{}, func(Update) error { t.Fatal("invalid thinking/output config reached transport"); return nil })
+	err := g.Generate(context.Background(), Request{}, func(Update) error { t.Fatal("impossible thinking capability reached transport"); return nil })
 	var model *ModelError
 	if !errors.As(err, &model) || model.Class != "configuration" {
-		t.Fatalf("invalid cap error=%v", err)
+		t.Fatalf("invalid thinking budget error=%v", err)
 	}
 }
 

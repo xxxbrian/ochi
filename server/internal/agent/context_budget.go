@@ -8,16 +8,16 @@ import (
 )
 
 type ContextBudget struct {
-	Window            int  `json:"window"`
-	UnknownWindow     bool `json:"unknown_window"`
-	SystemTokens      int  `json:"system_tokens"`
-	HistoryTokens     int  `json:"history_tokens"`
-	ToolTokens        int  `json:"tool_tokens"`
-	DynamicTokens     int  `json:"dynamic_tokens"`
-	OutputTokens      int  `json:"output_tokens"`
-	InputTokens       int  `json:"input_tokens"`
-	LimitInputTokens  int  `json:"limit_input_tokens"`
-	TargetInputTokens int  `json:"target_input_tokens"`
+	Window              int  `json:"window"`
+	UnknownWindow       bool `json:"unknown_window"`
+	SystemTokens        int  `json:"system_tokens"`
+	HistoryTokens       int  `json:"history_tokens"`
+	ToolTokens          int  `json:"tool_tokens"`
+	DynamicTokens       int  `json:"dynamic_tokens"`
+	OutputReserveTokens int  `json:"output_reserve_tokens"`
+	InputTokens         int  `json:"input_tokens"`
+	LimitInputTokens    int  `json:"limit_input_tokens"`
+	TargetInputTokens   int  `json:"target_input_tokens"`
 }
 
 const unknownContextWindow = 16384
@@ -29,13 +29,9 @@ func contextWindow(config Config) int {
 	return unknownContextWindow
 }
 
-func outputBudget(config Config) int {
-	if config.MaxOutputTokens > 0 {
-		return config.MaxOutputTokens
-	}
-	// Leave most of the context for input without starving reasoning models.
-	// A catalog ceiling constrains this budget; it is not a generation target.
-	budget := min(65536, contextWindow(config)/4)
+// This headroom only controls input compaction, never the provider's output cap.
+func contextOutputReserve(config Config) int {
+	budget := contextWindow(config) / 4
 	if config.ReasoningKind == "budget" && config.ReasoningBudget > 0 {
 		budget = max(budget, config.ReasoningBudget+1024)
 	}
@@ -43,6 +39,18 @@ func outputBudget(config Config) int {
 		budget = min(budget, config.OutputTokenLimit)
 	}
 	return budget
+}
+
+func (g *OpenAI) validateContextConfig() error {
+	if g.config.ReasoningKind == "budget" && g.config.ReasoningBudget > 0 && g.config.OutputTokenLimit > 0 && g.config.ReasoningBudget >= g.config.OutputTokenLimit {
+		g.observe(Diagnostic{Kind: "request_failed", Class: "configuration", Message: "the model output limit must exceed the selected thinking token budget"})
+		return &ModelError{Class: "configuration"}
+	}
+	if contextOutputReserve(g.config)+256 >= contextWindow(g.config) {
+		g.observe(Diagnostic{Kind: "request_failed", Class: "configuration", Message: "the thinking reservation leaves no input space; configure the model context window or thinking budget"})
+		return &ModelError{Class: "configuration"}
+	}
+	return nil
 }
 
 func (g *OpenAI) contextBudget(ctx context.Context, req Request, messages []wireMessage, tools []wireTool) (ContextBudget, error) {
@@ -55,9 +63,9 @@ func (g *OpenAI) contextBudget(ctx context.Context, req Request, messages []wire
 
 func (g *OpenAI) budgetForInput(history, input []wireMessage, tools []wireTool) ContextBudget {
 	window := contextWindow(g.config)
-	budget := ContextBudget{Window: window, UnknownWindow: g.config.ContextWindow <= 0, OutputTokens: outputBudget(g.config)}
-	budget.LimitInputTokens = max(0, min(window*7/10, window-budget.OutputTokens-256))
-	budget.TargetInputTokens = max(0, min(window*55/100, window-budget.OutputTokens-256))
+	budget := ContextBudget{Window: window, UnknownWindow: g.config.ContextWindow <= 0, OutputReserveTokens: contextOutputReserve(g.config)}
+	budget.LimitInputTokens = max(0, min(window*7/10, window-budget.OutputReserveTokens-256))
+	budget.TargetInputTokens = max(0, min(window*55/100, window-budget.OutputReserveTokens-256))
 	for index, message := range input {
 		tokens := estimateMessageTokens(message, g.config.Protocol)
 		switch {

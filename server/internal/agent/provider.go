@@ -27,7 +27,6 @@ type Config struct {
 	ReasoningBudgetMin int
 	ReasoningBudgetMax int
 	ContextWindow      int
-	MaxOutputTokens    int // Explicit request cap; zero selects an automatic budget.
 	OutputTokenLimit   int // Known model capability; zero means unknown.
 	SupportsTools      bool
 	SupportsVision     bool

@@ -42,7 +42,6 @@ func (g *OpenAI) responsesBody(messages []wireMessage, tools []wireTool, stream 
 		}
 		body["tools"] = items
 	}
-	body["max_output_tokens"] = outputBudget(g.config)
 	if g.config.Effort != "" && g.config.EffortParameter != "" && len(g.config.EffortValue) > 0 {
 		path := g.config.EffortParameter
 		if path == "reasoning_effort" {

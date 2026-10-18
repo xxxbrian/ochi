@@ -76,7 +76,6 @@ func (g *OpenAI) requestBody(messages []wireMessage, tools []wireTool, stream bo
 	if len(tools) > 0 {
 		body["tools"] = tools
 	}
-	body["max_tokens"] = outputBudget(g.config)
 	if g.config.Effort != "" && g.config.EffortParameter != "" && len(g.config.EffortValue) > 0 {
 		setRequestParameter(body, g.config.EffortParameter, g.config.EffortValue)
 	}

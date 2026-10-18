@@ -33,17 +33,8 @@ func (g *OpenAI) generate(ctx context.Context, req Request, emit func(Update) er
 	if g.config.BaseURL == "" || (g.config.APIKey == "" && !g.config.AllowNoKey) || g.config.Model == "" {
 		return errors.New("请先在管理后台配置可用模型")
 	}
-	if g.config.ReasoningKind == "budget" && g.config.ReasoningBudget > 0 && outputBudget(g.config) <= g.config.ReasoningBudget {
-		g.observe(Diagnostic{Kind: "request_failed", Class: "configuration", Message: "output cap must exceed the selected thinking token budget"})
-		return &ModelError{Class: "configuration"}
-	}
-	if g.config.OutputTokenLimit > 0 && outputBudget(g.config) > g.config.OutputTokenLimit {
-		g.observe(Diagnostic{Kind: "request_failed", Class: "configuration", Message: "the requested output cap exceeds the model output limit"})
-		return &ModelError{Class: "configuration"}
-	}
-	if outputBudget(g.config)+256 >= contextWindow(g.config) {
-		g.observe(Diagnostic{Kind: "request_failed", Class: "configuration", Message: "the selected output/thinking cap leaves no input space; configure the model context window or output cap"})
-		return &ModelError{Class: "configuration"}
+	if err := g.validateContextConfig(); err != nil {
+		return err
 	}
 	messages := []wireMessage{{Role: "system", Content: g.stablePrompt(req)}}
 	if req.Compaction != nil && req.Compaction.Summary != "" {
