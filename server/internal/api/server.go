@@ -43,6 +43,9 @@ type Server struct {
 	providerDebugWG     sync.WaitGroup
 	providerDebugClosed bool
 	queueCancel         context.CancelFunc
+	queueAdmissionMu    sync.Mutex
+	queueAdmissions     sync.WaitGroup
+	draining            bool
 	resources           *resourceManager
 	desktops            *desktopHub
 	permissionMu        sync.Mutex
@@ -71,18 +74,49 @@ func NewServer(store *storage.Store, generator agent.Generator, accounts []Accou
 	return s, nil
 }
 
-func (s *Server) Shutdown(ctx context.Context) error {
-	s.desktops.Close()
+// Drain pauses queue claims, lets their in-flight preparation finish, and then
+// waits for current runs. New inputs stay queued in PostgreSQL for the restart.
+func (s *Server) Drain(ctx context.Context) error {
+	s.stopQueueAdmissions()
+	if err := s.waitQueueAdmissions(ctx); err != nil {
+		return err
+	}
+	return s.runtime.Drain(ctx)
+}
+
+func (s *Server) stopQueueAdmissions() {
+	s.queueAdmissionMu.Lock()
+	s.draining = true
+	s.queueAdmissionMu.Unlock()
 	if s.schedulerCancel != nil {
 		s.schedulerCancel()
 	}
 	if s.queueCancel != nil {
 		s.queueCancel()
 	}
+}
+
+func (s *Server) waitQueueAdmissions(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() { s.queueAdmissions.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	s.stopQueueAdmissions()
+	s.desktops.Close()
 	s.backgroundMu.Lock()
 	s.backgroundCancel()
 	s.backgroundMu.Unlock()
 	if err := s.runtime.Shutdown(ctx); err != nil {
+		return err
+	}
+	if err := s.waitQueueAdmissions(ctx); err != nil {
 		return err
 	}
 	done := make(chan struct{})

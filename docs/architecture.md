@@ -30,7 +30,11 @@ and then sequenced deltas. Reconnecting must not require replaying every token.
 Pending inputs are durable PostgreSQL records. Turns within one conversation
 are sequential; different conversations may run concurrently. Switching to a new
 conversation does not cancel an existing run. On process restart, started work
-is interrupted, while unstarted inputs remain queued; this is not crash replay.
+that has not drained is interrupted, while unstarted inputs remain queued; this
+is not crash replay. A normal deployment SIGTERM pauses queue claims and waits
+up to ten minutes for current work before forced cancellation. New inputs stay
+durably queued during this wait. Run ownership remains single-process; there
+is no rolling multi-replica execution or zero-downtime guarantee.
 
 Canonical model messages, completed tool calls and provider replay metadata are
 stored separately from visible chat messages. Never reconstruct model context

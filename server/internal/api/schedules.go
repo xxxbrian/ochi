@@ -191,7 +191,9 @@ func (s *Server) StartScheduler(parent context.Context) {
 	cancelRecovery()
 	ctx, cancel := context.WithCancel(parent)
 	s.schedulerCancel = cancel
+	s.backgroundWG.Add(1)
 	go func() {
+		defer s.backgroundWG.Done()
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 		for {

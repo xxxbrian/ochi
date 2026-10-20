@@ -121,9 +121,10 @@ func (s *Server) StartQueue(parent context.Context) {
 }
 
 func (s *Server) launchQueued(sessionID string) {
-	if s.backgroundCtx.Err() != nil {
+	if !s.beginQueueAdmission() {
 		return
 	}
+	defer s.queueAdmissions.Done()
 	// Admission serializes only one session's short row-lock transaction. Its
 	// canonical user turn is appended only after this pending input is claimed.
 	ctx, cancel := context.WithTimeout(s.backgroundCtx, 15*time.Second)
@@ -146,16 +147,30 @@ func (s *Server) launchQueued(sessionID string) {
 	if err == nil {
 		return
 	}
-	snapshot, readErr := s.store.GetRun(context.Background(), v.UserID, v.RunID)
+	persist, finish := context.WithTimeout(context.Background(), checkpointTimeout)
+	defer finish()
+	snapshot, readErr := s.store.GetRun(persist, v.UserID, v.RunID)
 	if readErr == nil {
 		snapshot.Status, snapshot.Error = runtime.StatusFailed, err.Error()
 		snapshot.Seq++
 		snapshot.UpdatedAt = time.Now().UTC()
-		_ = s.store.CompleteRun(context.Background(), snapshot)
+		_ = s.store.CompleteRun(persist, snapshot)
 		s.runtime.ApplySnapshot(snapshot)
 	}
-	_ = s.store.DiscardRunRequest(context.Background(), v.RunID)
+	_ = s.store.DiscardRunRequest(persist, v.RunID)
 	log.Printf("start queued run %s: %v", v.RunID, err)
+}
+
+func (s *Server) beginQueueAdmission() bool {
+	s.queueAdmissionMu.Lock()
+	defer s.queueAdmissionMu.Unlock()
+	if s.draining || s.backgroundCtx.Err() != nil {
+		return false
+	}
+	// Add and the drain boundary share a lock: Wait cannot miss a claimed run
+	// that has not reached runtime.Start yet.
+	s.queueAdmissions.Add(1)
+	return true
 }
 
 func (s *Server) cancelSessionActive(ctx context.Context, userID, sessionID string) {

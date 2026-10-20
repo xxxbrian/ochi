@@ -239,18 +239,29 @@ func (r *Run) SetResource(resource string) {
 	r.publishLocked(Event{Type: "status", RunID: r.snapshot.RunID, Seq: r.snapshot.Seq, Status: r.snapshot.Status, Resource: resource})
 }
 
+// Drain closes admission and waits for current executions without cancelling
+// them. A deadline does not cancel runs; Shutdown remains the forced fallback.
+func (m *Manager) Drain(ctx context.Context) error {
+	m.mu.Lock()
+	m.stopped = true
+	m.mu.Unlock()
+	return m.wait(ctx)
+}
+
 // Shutdown asks all manager-owned runs to stop and waits for their execution
-// functions before the caller closes its database.
+// functions before the caller closes its database, including after Drain.
 func (m *Manager) Shutdown(ctx context.Context) error {
 	m.mu.Lock()
-	if !m.stopped {
-		m.stopped = true
-		m.cancel()
-		for _, run := range m.runs {
-			run.requestContextCancel()
-		}
+	m.stopped = true
+	m.cancel()
+	for _, run := range m.runs {
+		run.requestContextCancel()
 	}
 	m.mu.Unlock()
+	return m.wait(ctx)
+}
+
+func (m *Manager) wait(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() { m.wg.Wait(); close(done) }()
 	select {

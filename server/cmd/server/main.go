@@ -72,28 +72,43 @@ func main() {
 
 	stopped := make(chan os.Signal, 1)
 	signal.Notify(stopped, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(stopped)
 	log.Printf("server listening on %s", addr)
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
 	select {
-	case <-stopped:
+	case sig := <-stopped:
+		if sig == syscall.SIGTERM {
+			drain, cancelDrain := context.WithTimeout(context.Background(), 10*time.Minute)
+			go func() {
+				select {
+				case <-stopped:
+					cancelDrain()
+				case <-drain.Done():
+				}
+			}()
+			log.Print("server draining: new inputs stay queued; waiting up to 10 minutes for active runs")
+			if err := application.Drain(drain); err != nil {
+				log.Printf("run drain: %v; cancelling remaining work", err)
+			}
+			cancelDrain()
+		}
 	case err := <-serveErr:
 		if err != nil && err != http.ErrServerClosed {
 			log.Printf("HTTP server: %v", err)
 		}
 	}
-	shutdown, cancelShutdown := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancelShutdown()
+	shutdown, cancelShutdown := context.WithTimeout(context.Background(), 30*time.Second)
 	// Drain producers before closing the pool, then allow SSE handlers to finish.
 	if err := application.Shutdown(shutdown); err != nil {
-		log.Printf("run shutdown: %v", err)
-		// Never close the database while an agent callback can still persist its
-		// terminal snapshot. A stubborn external tool is drained before exit.
-		if waitErr := application.Shutdown(context.Background()); waitErr != nil {
-			log.Printf("run shutdown drain: %v", waitErr)
-		}
+		// Exit without closing the pool under a callback that ignored cancellation.
+		// The next startup marks unfinished runs interrupted, as after a crash.
+		log.Fatalf("run shutdown exceeded cleanup deadline: %v", err)
 	}
-	if err := srv.Shutdown(shutdown); err != nil {
+	cancelShutdown()
+	httpShutdown, cancelHTTP := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancelHTTP()
+	if err := srv.Shutdown(httpShutdown); err != nil {
 		log.Printf("HTTP shutdown: %v", err)
 		_ = srv.Close()
 	}
