@@ -24,6 +24,7 @@ Run the relevant commands from the repository root:
 
 ```sh
 (cd server && go test ./... && go vet ./...)
+python3 -B -m unittest discover -s scripts/tests -v
 python3 -B -m unittest discover -s workspace/tests -v
 pnpm --dir web build
 pnpm --dir web test

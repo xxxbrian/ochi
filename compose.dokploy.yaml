@@ -1,0 +1,81 @@
+name: ochi
+
+services:
+  db:
+    image: ${OCHI_POSTGRES_IMAGE:?Use the Compose file from the container workflow}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ochi
+      POSTGRES_USER: ochi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Dokploy}
+    volumes:
+      - database:/var/lib/postgresql/data
+    networks: [app]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U ochi -d ochi"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  # Pull the tool image onto this Engine without starting another desktop.
+  workspace-image:
+    image: ${OCHI_WORKSPACE_IMAGE:?Use the Compose file from the container workflow}
+    entrypoint: [/bin/true]
+    command: []
+    working_dir: /tmp
+    restart: "no"
+    network_mode: none
+    tmpfs: [/data]
+
+  server:
+    image: ${OCHI_SERVER_IMAGE:?Use the Compose file from the container workflow}
+    restart: unless-stopped
+    environment:
+      ADDR: :8080
+      DATABASE_URL: postgres://ochi:${POSTGRES_PASSWORD}@db:5432/ochi?sslmode=disable
+      OCHI_USERS: ${OCHI_USERS:-}
+      SECURE_COOKIES: "true"
+      RUNNER: ${RUNNER:-openai}
+      MODEL_BASE_URL: ${MODEL_BASE_URL:-}
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+      MODEL_NAME: ${MODEL_NAME:-}
+      WORKSPACE_ENABLED: ${WORKSPACE_ENABLED:-true}
+      WORKSPACE_IMAGE: ${OCHI_WORKSPACE_IMAGE:?Use the Compose file from the container workflow}
+      WORKSPACE_NETWORK: ${OCHI_NETWORK_NAME:-ochi}
+      COMPUTE_NETWORK: ${OCHI_COMPUTE_NETWORK_NAME:-ochi-compute}
+      ARTIFACTS_ROOT: /var/lib/ochi/artifacts
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - artifacts:/var/lib/ochi/artifacts
+    depends_on:
+      db: {condition: service_healthy}
+      workspace-image: {condition: service_completed_successfully}
+    networks: [app, compute]
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/healthz]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    stop_grace_period: 700s
+
+  web:
+    image: ${OCHI_WEB_IMAGE:?Use the Compose file from the container workflow}
+    restart: unless-stopped
+    depends_on:
+      server: {condition: service_healthy}
+    networks: [app, dokploy]
+
+volumes:
+  database:
+    name: ${OCHI_DATABASE_VOLUME:-ochi-database}
+  artifacts:
+    name: ${OCHI_ARTIFACTS_VOLUME:-ochi-artifacts}
+
+networks:
+  app:
+    name: ${OCHI_NETWORK_NAME:-ochi}
+  compute:
+    name: ${OCHI_COMPUTE_NETWORK_NAME:-ochi-compute}
+  dokploy:
+    external: true
+    name: dokploy-network

@@ -1,0 +1,212 @@
+name: Containers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - server/**
+      - web/**
+      - db/**
+      - workspace/**
+      - compose.dokploy.yaml
+      - scripts/deploy.py
+      - scripts/tests/**
+      - .github/workflows/containers.yml
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: Rebuild unchanged images too (refresh base images and packages)
+        type: boolean
+        default: false
+
+# Never cancel a deployment during graceful shutdown. Only the newest pending
+# workflow is retained, and obsolete builds do not trigger deployment.
+concurrency:
+  group: ochi-containers-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27'
+          cache-dependency-path: server/go.sum
+      - name: Check deployment tooling and server
+        run: |
+          python3 -B -m unittest discover -s scripts/tests -v
+          python3 -B -m unittest discover -s workspace/tests -v
+          cd server
+          go test ./...
+          go vet ./...
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [server, web, postgres, workspace]
+        target:
+          - {arch: amd64, runner: ubuntu-24.04}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.target.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Identify image context
+        id: context
+        env:
+          COMPONENT: ${{ matrix.component }}
+          ARCH: ${{ matrix.target.arch }}
+        run: |
+          directory="$COMPONENT"
+          if [ "$COMPONENT" = postgres ]; then directory=db; fi
+          image="ghcr.io/${GITHUB_REPOSITORY,,}-$COMPONENT"
+          tree="$(git rev-parse "HEAD:$directory")"
+          echo "directory=$directory" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "tag=$image:ctx-$tree-$ARCH" >> "$GITHUB_OUTPUT"
+      - name: Reuse unchanged component
+        id: reuse
+        env:
+          TAG: ${{ steps.context.outputs.tag }}
+          REBUILD: ${{ inputs.rebuild || false }}
+        run: |
+          if [ "$REBUILD" != true ]; then
+            if digest="$(docker buildx imagetools inspect "$TAG" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+              echo "digest=$digest" >> "$GITHUB_OUTPUT"
+              echo "found=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+      - name: Build and publish component
+        if: steps.reuse.outputs.found != 'true'
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./${{ steps.context.outputs.directory }}
+          platforms: linux/${{ matrix.target.arch }}
+          tags: ${{ steps.context.outputs.tag }}
+          push: true
+          pull: true
+          provenance: mode=max
+          sbom: true
+          cache-from: type=registry,ref=${{ steps.context.outputs.image }}:cache-${{ matrix.target.arch }}
+          cache-to: type=registry,ref=${{ steps.context.outputs.image }}:cache-${{ matrix.target.arch }},mode=max
+          labels: |
+            org.opencontainers.image.title=Ochi ${{ matrix.component }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+      - name: Save component identity
+        env:
+          COMPONENT: ${{ matrix.component }}
+          ARCH: ${{ matrix.target.arch }}
+          IMAGE: ${{ steps.context.outputs.image }}
+          DIGEST: ${{ steps.reuse.outputs.digest || steps.build.outputs.digest }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          mkdir -p digests
+          printf '%s@%s\n' "$IMAGE" "$DIGEST" > "digests/$COMPONENT-$ARCH"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: digest-${{ matrix.component }}-${{ matrix.target.arch }}
+          path: digests/*
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      - name: Assemble multi-platform deployment bundle
+        env:
+          IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+        run: |
+          mkdir -p bundle
+          tag="sha-$GITHUB_SHA-run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          for component in server web postgres workspace; do
+            image="${IMAGE_PREFIX,,}-$component"
+            docker buildx imagetools create --tag "$image:$tag" \
+              "$(cat "digests/$component-amd64")" "$(cat "digests/$component-arm64")"
+            digest="$(docker buildx imagetools inspect "$image:$tag" --format '{{.Manifest.Digest}}')"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            printf '%s@%s\n' "$image" "$digest" > "bundle/$component"
+          done
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          images = {name: Path(f"bundle/{name}").read_text().strip() for name in ("server", "web", "postgres", "workspace")}
+          Path("bundle/images.json").write_text(json.dumps({"revision": os.environ["GITHUB_SHA"], "images": images}, indent=2) + "\n")
+          PY
+          python3 scripts/deploy.py render --bundle bundle/images.json --output bundle/compose.yaml
+          POSTGRES_PASSWORD=compose-validation OCHI_USERS='[]' docker compose --env-file /dev/null -f bundle/compose.yaml config --quiet
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: deployment-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            bundle/images.json
+            bundle/compose.yaml
+          retention-days: 90
+      - name: Check main before deployment
+        id: current
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          head="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          git fetch --no-tags --depth=1 origin "$head"
+          # A newer documentation/mobile-only commit will not start this workflow.
+          # Do not strand this deployment just because main's SHA changed.
+          if git diff --quiet "$GITHUB_SHA" "$head" -- \
+            server web db workspace compose.dokploy.yaml scripts/deploy.py \
+            scripts/tests .github/workflows/containers.yml; then
+            echo 'latest=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Build kept for inspection; a newer commit will deploy.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Update edge aliases
+        if: steps.current.outputs.latest == 'true'
+        run: |
+          for component in server web postgres workspace; do
+            ref="$(cat "bundle/$component")"
+            docker buildx imagetools create --tag "${ref%@*}:edge" "$ref"
+          done
+      - name: Deploy to Dokploy
+        if: steps.current.outputs.latest == 'true' && vars.DOKPLOY_DEPLOY_ENABLED == 'true'
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+        run: python3 scripts/deploy.py deploy --bundle bundle/images.json
+      - name: Explain build-only mode
+        if: steps.current.outputs.latest == 'true' && vars.DOKPLOY_DEPLOY_ENABLED != 'true'
+        run: echo 'Images and Compose bundle are ready. Dokploy auto-deploy is off until DOKPLOY_DEPLOY_ENABLED=true.' >> "$GITHUB_STEP_SUMMARY"

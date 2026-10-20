@@ -20,6 +20,27 @@ foreground includes safe margins; iOS receives an opaque square without baked-in
 rounding. A contact sheet and checksum manifest go under ignored `build/branding/`,
 not into the source documentation. The original source bytes are never modified.
 
+## Container Deployment
+
+`deploy.py` uses only Python's standard library. It renders the production
+Compose template from the four digest-pinned images in a workflow bundle:
+
+```sh
+python3 scripts/deploy.py render --bundle /path/to/images.json --output /tmp/ochi-compose.yaml
+```
+
+The `deploy` command reads `DOKPLOY_URL`, `DOKPLOY_API_KEY` and
+`DOKPLOY_COMPOSE_ID` from the environment. It updates only the Raw Compose
+template, preserving Dokploy's environment and domains, and waits for that
+specific deployment to complete. It refuses Git auto-deploy and Swarm services.
+Run it from the checkout corresponding to the bundle when changing topology;
+its template comes from this checkout. See [setup and rollback](../docs/deployment.md).
+
+```sh
+python3 scripts/deploy.py deploy --bundle /path/to/images.json
+python3 -B -m unittest discover -s scripts/tests -v
+```
+
 ## Module Tools
 
 - `web/scripts/`: shared-token generation and Web contract regressions; use

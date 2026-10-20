@@ -49,6 +49,10 @@ only the rules needed for that area. Private discussions, research captures,
 credentials, device QA recordings and signed packages are not source documents
 and are not included in this repository.
 
+Production uses GitHub Actions to publish multi-platform images to GHCR, then
+Dokploy pulls a digest-pinned Compose bundle. GitHub Releases and version tags
+are optional; see [deployment setup](docs/deployment.md#github-actions-and-dokploy).
+
 ## Publication Status
 
 Source and artwork licensing must be settled before public distribution.
