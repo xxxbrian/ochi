@@ -6,13 +6,28 @@ The container workflow in the root README needs Docker Engine and Compose.
 Source-level checks additionally need Go 1.23 or newer, Node.js 22 or newer, pnpm (use
 the pinned `packageManager` in each client), and Python 3. Native builds need
 Xcode/CocoaPods or a JDK and Android SDK; see [Releasing](releasing.md). The
-server container pins the tested toolchain in `server/Dockerfile`.
+root `Dockerfile` pins the tested Web/server toolchains. Its production build
+embeds the Vite output in the Go executable; no separate Web container is needed.
 
 ```sh
 pnpm --dir web install --frozen-lockfile
 pnpm --dir mobile install --frozen-lockfile
 VITE_DEV_API_TARGET=http://127.0.0.1:8090 pnpm --dir web dev
 ```
+
+Ordinary `go run ./cmd/server` remains API-only for Vite development. To check
+the same combined application used in a release without publishing anything:
+
+```sh
+docker build -t ochi-server:check .
+```
+
+This local build deliberately identifies itself as a development build and
+does not enable application self-update. Release CI supplies its full revision,
+UTC build time and `BUILD_TYPE=release` to the Docker build. The `binary` target
+exports the identical statically linked Linux executable for update archives.
+`scripts/release.py` packages it and validates both-platform update manifests;
+see [Repository Tools](../scripts/README.md).
 
 The native client has a configurable server origin. Simulator loopback and
 physical-device addresses differ; release builds require a reachable HTTPS

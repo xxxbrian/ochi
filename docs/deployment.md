@@ -34,123 +34,177 @@ is required behind production HTTPS. The local Compose file uses
 `ochi-workspace:local`; production uses exact GHCR digests. Workspace traffic
 stays on private Docker networks.
 
-## GitHub Actions And Dokploy
+## Builds And The Update Channel
 
 Builds run on GitHub, not on the deployment server or the developer's laptop:
 
 ```text
-push main -> checks -> build/reuse four GHCR images -> save Compose bundle
-          -> update Dokploy Raw Compose -> wait for deployment completion
+push main -> checks -> native amd64/arm64 images + combined Web/server binary
+          -> GHCR deployment bundle + rolling edge update manifest
+          -> no deployment or restart
+
+administrator clicks Update in Ochi -> verify and replace application binary
+administrator clicks Restart       -> drain runs, restart the same container
 ```
 
-`.github/workflows/containers.yml` publishes `<repo>-server`, `<repo>-web`,
-`<repo>-postgres` and `<repo>-workspace` under `ghcr.io/<repository-owner>/`.
-Each includes Linux amd64 and arm64 variants built on native GitHub-hosted
-runners, without CPU emulation. The workflow uses the repository `GITHUB_TOKEN`
-to publish; no registry password is needed for GitHub's build jobs.
+`.github/workflows/containers.yml` publishes three multi-platform images:
+`<repo>-server`, `<repo>-postgres` and `<repo>-workspace` under
+`ghcr.io/<repository-owner>/`. The server image contains the Go API and embedded
+Vite production output in `/app/ochi-server`; there is no separate nginx/Web
+container. Native GitHub runners build Linux amd64 and arm64 without CPU
+emulation. `GITHUB_TOKEN` publishes the images and update assets; no Dokploy API
+key, deployment webhook or registry password is required in GitHub Secrets.
 
-Images with unchanged directory trees are reused, including across skipped
-commits or a previous partially failed build. Registry layer caches accelerate
-changed contexts. The first workspace build/download is large; later Web/server
-changes do not rebuild the desktop image. To refresh unchanged base images or
-OS packages, run **Actions > Containers > Run workflow** with **rebuild** checked.
-Review upstream versions separately; this does not change Dockerfile pins.
+The application is built for the exact source revision. Unchanged database and
+workspace trees reuse existing images, and registry caches accelerate builds.
+To refresh unchanged base images and OS packages, run **Actions > Containers >
+Run workflow** with **rebuild** checked. Review upstream pins separately.
 
-Each workflow saves `images.json` and `compose.yaml` as a 90-day Actions artifact.
-Images receive unique `sha-<full-commit>-run-<run-id>-<attempt>` tags; the Compose
-file pins all four `@sha256:...` digests, including the workspace configuration.
-`edge` is only a convenience alias, never a production dependency. Keep known
-deployment bundles and their GHCR images for as long as rollback is needed;
-artifact retention is not a backup policy. No Git tag, GitHub Release or product
-version bump is required. Mobile builds remain a separate release process.
+The workflow saves `images.json` and digest-pinned Dokploy `compose.yaml` in a
+90-day Actions artifact. Images also receive immutable
+`sha-<full-commit>-run-<run-id>-<attempt>` tags and an `edge` convenience alias.
+Keep known deployment bundles and image digests for as long as recovery is
+needed; Actions retention is not a backup policy.
 
-Workflows are serialized and an active deployment is never auto-cancelled.
-Superseded pending workflows are skipped. Before deploying, the job checks
-whether main has newer deploy-relevant changes; a documentation/mobile-only
-commit does not strand a completed server build. All images must succeed before
-any deployment starts. Never enable Dokploy's independent Git-push auto-deploy:
-that could deploy before images are ready.
+### Rolling Prerelease, Not Per-Commit Versions
 
-### First Setup
+CI maintains one GitHub prerelease and moving tag named `edge`; it never marks
+this as the latest formal release. Each build uploads two uniquely named
+`ochi-linux-<arch>-<full-commit>-run-<run-id>-<attempt>.tar.gz` assets, each
+containing only the `ochi-server` executable. They are not overwritten while
+installations may be downloading them. Only after both assets are available
+does CI replace `update.json` and move the development tag to the build's SHA.
+The manifest records the product version, full revision, UTC build time, schema
+hash and each archive's exact HTTPS URL, SHA-256 and byte size.
 
-1. Enable GitHub Actions for the repository. Push the workflow to `main` or run
-   it manually. It initially builds only: auto-deployment is off by default.
-   Make the four GHCR packages public in their package settings so the server
-   can pull anonymously. A public Git repository does not by itself guarantee
-   that a newly created GHCR package is public. For private packages instead,
-   configure read access to GHCR on the target Docker Engine/Dokploy.
-2. In Dokploy create a **Docker Compose** service using **Raw** source, not
-   Docker Stack/Swarm. Paste `compose.yaml` from the completed workflow's
-   deployment artifact. Keep service names `db`, `server`, `web`,
-   `workspace-image`; Dokploy domain settings attach to those names.
-3. Paste a configured copy of `.env.dokploy.example` into that service's
-   **Environment**. Use a URL-safe random database password (for example hex),
-   since Compose embeds it in `DATABASE_URL`. Supply a strong bootstrap admin
-   password. Provider settings can be configured after login. These values stay
-   in Dokploy, not Actions artifacts or repository secrets.
-4. Add the public HTTPS domain to service **web**, container port **80**. The
-   template joins `dokploy-network`; no host port, database or desktop port is
-   published. Deploy once and check `/healthz`, login and a Computer task. The
-   Web health URL now proxies the actual API rather than returning SPA HTML.
-5. Create a Dokploy API key with permission to read/update/deploy this Compose
-   service and read its deployments. In GitHub **Settings > Secrets and
-   variables > Actions**, add these repository secrets:
+This is a technical download channel, not a manual release ceremony: normal
+commits do not need semantic-version bumps, release notes or a milestone tag.
+The product can stay at `0.1.0`; update availability is determined by the full
+source revision. Build time is display metadata: rebuilding the same SHA does
+not offer another application update. Formal releases remain optional, and
+native client builds remain a separate process. The channel uses GitHub Release
+assets rather than expiring Actions download links. Archived assets require
+deliberate retention/cleanup; never remove the current manifest's assets or a
+build still needed for recovery.
 
-   | Secret | Value |
-   | --- | --- |
-   | `DOKPLOY_URL` | The Dokploy origin, e.g. `https://deploy.example.com` |
-   | `DOKPLOY_API_KEY` | The Dokploy API key |
-   | `DOKPLOY_COMPOSE_ID` | The service's Compose ID, not its project/environment ID |
+## First Installation
 
-   GitHub-hosted runners must be able to reach this API. Set repository
-   **variable** `DOKPLOY_DEPLOY_ENABLED=true` only after initial setup succeeds.
-   Leave Dokploy Git/webhook auto-deploy off. Re-run the workflow to exercise the
-   integration; it patches only the public Compose file, never the saved
-   environment or domain records. The helper uses the current Dokploy API's
-   `x-api-key` header, not a browser login cookie.
+### Docker Compose
 
-The workflow uses ordinary Compose on one Docker Engine. There is no extra
-worker, container registry server, VM, Kubernetes, or distributed execution
-layer to operate. GitHub performs the heavy build; Dokploy performs the pulls
-and container replacement. This setup needs a brief restart interval, not an
-additional high-availability architecture.
+Use `compose.yaml` for a single Docker Engine without Dokploy. For source
+experimentation, follow the root README; those development builds intentionally
+do not enable self-update. To install published release images instead:
 
-`workspace-image` is a short-lived preload service: it runs `/bin/true` with a
-temporary `/data`, not another desktop. The API starts only after this succeeds,
-so dynamic user containers can find the configured image on the same Engine.
-The database and artifacts have explicit physical volume names; do not change
-them during routine updates. When adopting existing data, set the existing
-volume/network names explicitly before the first deploy. The template does not
-copy a local database, credentials, login state or uploads onto a new server.
+1. Enable Actions and complete a container workflow. Make the three GHCR
+   packages public for anonymous pulls, or configure private registry read
+   access on the target Engine. A public source repository alone does not make
+   newly created container packages public.
+2. Copy `.env.example` into a private `.env`, set database/admin credentials,
+   and set `OCHI_SERVER_IMAGE`, `OCHI_POSTGRES_IMAGE`, `OCHI_WORKSPACE_IMAGE` to
+   the exact digest references from that build's `images.json`. Preserve this
+   configuration and all volume/network names across updates.
+3. Run `docker compose pull db server workspace-image`, then
+   `docker compose up -d --no-build db server`. The image override selects a
+   release build; do not run a source `build` with those production image names.
+4. Put an HTTPS reverse proxy in front of loopback port `8090` and set
+   `SECURE_COOKIES=true`. Verify `/healthz`, sign-in and a Computer task.
 
-### Updating And Rolling Back
+The short-lived `workspace-image` service only preloads the desktop image onto
+this Engine by running `/bin/true` with a temporary `/data`. It is not another
+desktop; the API creates the real user containers. The database, Computer image
+and app image are separate units, not three things to upgrade on each UI click.
 
-Push to `main` for normal automatic updates. Use the Dokploy log for pull/start
-details; the workflow waits for its own uniquely identified deployment to reach
-`done`, `error` or `cancelled`, rather than treating a queued API response as
-success. Check the public `/healthz` and application after an initial deployment.
-If the workflow times out, inspect Dokploy before retrying: an already queued
-deployment is not cancelled by a GitHub timeout.
+### Optional Dokploy Installation
 
-To pause automatic deployments, set `DOKPLOY_DEPLOY_ENABLED=false`. To roll back,
-paste a previous bundle's `compose.yaml` into the same Dokploy Raw service and
-deploy, retaining its environment, domains and volumes. Or use `scripts/deploy.py`
-from the corresponding source checkout with that bundle's `images.json` and
-the three `DOKPLOY_*` variables. Do not delete old digests needed for rollback.
-An image rollback does not undo schema changes or restore overwritten data.
-For schema changes, pause automation, back up, apply the explicit maintenance
-plan, then resume; this workflow intentionally does not invent migrations.
+Dokploy may manage the container, domain, logs and host without participating
+in application self-update:
 
-Dokploy's ordinary Compose update stops/recreates changed containers, not a
-rolling second API replica. On SIGTERM the API stops claiming queued work and
-pauses scheduling, while current runs get up to ten minutes to finish. New
-inputs remain queued in PostgreSQL and resume on startup. Long-running or
-waiting-for-user runs still get cancelled at the deadline. Forced cleanup and
-HTTP shutdown fit inside the Compose `700s` stop grace. SIGINT or a second
-signal requests immediate cancellation. Crash/power loss cannot drain runs.
-This drain covers API restarts while its dependencies remain available. Treat
-PostgreSQL image/schema changes as explicit maintenance too: Compose may replace
-the database before dependent API work has finished.
+1. Create a **Docker Compose** service with **Raw** source, not Docker
+   Stack/Swarm. Paste `compose.yaml` from the completed workflow artifact.
+   Retain the service names `db`, `server` and `workspace-image`.
+2. Save a configured copy of `.env.dokploy.example` in the service's
+   **Environment**. Use a URL-safe random database password (hex works), since
+   Compose embeds it in `DATABASE_URL`. Supply a strong bootstrap administrator
+   password. Provider configuration can be completed after sign-in.
+3. Add the public HTTPS domain to **server**, container port **8080**. The
+   template attaches this service to `dokploy-network`. No database, desktop or
+   host application port is published by this template.
+4. Keep Git/webhook auto-deploy disabled. Deploy the initial bundle manually,
+   then verify public `/healthz`, login and a Computer task.
+
+Environment values stay in Dokploy, not Actions artifacts or source control.
+No Dokploy API credentials are used by Ochi or the workflow. Creating or updating
+an image does not automatically replace the running application.
+
+## Application Self-Update
+
+Linux amd64/arm64 **release** builds with the embedded Web app expose update
+controls in **Administration > System**. Source/API-only development processes
+and unsupported platforms cannot install updates. The default manifest is:
+
+```text
+https://github.com/xxxbrian/ochi/releases/download/edge/update.json
+```
+
+`OCHI_UPDATE_URL` optionally selects another HTTPS manifest, for example in a
+maintained fork. It is not a deployment-service endpoint. Clicking **Update**
+downloads the selected build, verifies its declared size and mandatory SHA-256,
+checks that it contains the single expected executable and replaces the running
+binary while retaining a backup. This changes the on-disk executable, not the
+current process. The administrator explicitly requests **Restart** to run it.
+The page reconnects after the process restarts; an interrupted HTTP response is
+not proof of an unsuccessful update.
+
+The restart drains active work before exiting. The Docker configuration uses
+`restart: unless-stopped`, so Docker restarts the same container after process
+exit. A directly managed binary installation needs an equivalent service
+supervisor with restart-on-exit; the application does not launch its own
+replacement process. A source development server is not such an installation.
+
+### Writable Layer And Recovery
+
+The executable, update record and backup live in the container's writable
+`/app` directory, **not** in the database/artifact volumes. Do not make the
+container read-only or bind-mount a single executable file. This deliberately
+follows the simple in-container binary update model:
+
+| Operation | Application used afterward |
+| --- | --- |
+| Ochi restart or Docker restart of the same container | Updated executable |
+| Delete/recreate container from the original image | Executable from that image |
+| Pull a newer pinned image and recreate container | Executable from the new image |
+
+Dokploy still manages the container, but its image identity does not change
+when Ochi changes the executable. Ochi's build information is the authority for
+which application revision is running. A Dokploy redeploy/recreate or
+`docker compose up --force-recreate` may revert it to the configured image;
+this is expected, not a durable image upgrade. When deliberately refreshing the
+base image, update the server image digest to the desired build first and
+preserve environment, routes, networks and volumes.
+
+The retained application backup can be restored through the same administrator
+controls while Ochi is running. If a new binary cannot start, use host/container
+access to restore `/app/ochi-server.backup` to `/app/ochi-server`, or deliberately
+recreate just the server from a known-good pinned image. Do not remove database,
+artifacts or workspace volumes. Binary recovery does not roll back schema/data,
+base OS packages or the desktop image. This is not an automatic health rollback
+or zero-downtime deployment system.
+
+Application self-update requires the target schema hash to match the running
+schema. A schema change needs a verified backup and explicit one-off maintenance
+before starting the matching image; there is no silent runtime migration chain.
+Database major versions, OS/runtime dependencies, Compose topology and Computer
+images likewise remain explicit maintenance rather than ordinary app updates.
+
+### Graceful Restart
+
+On SIGTERM or an administrator-requested restart the API stops claiming queued
+work and pauses scheduling. Current runs get up to ten minutes to finish; new
+inputs remain queued in PostgreSQL and resume on startup. Runs still active or
+waiting for a user at the deadline are cancelled. Forced cleanup and HTTP
+shutdown fit inside Compose's `700s` stop grace. SIGINT or a second signal
+requests immediate cancellation; crashes and power loss cannot drain work.
+This protects API restarts only while its dependencies remain available.
 
 ### Computer Image Updates
 
@@ -182,8 +236,8 @@ session-deletion operation to perform an image upgrade.
 ## Start And Expose
 
 ```sh
-docker compose --profile build build
-docker compose up -d db server web
+docker compose build
+docker compose up -d db server
 docker compose ps
 docker compose exec -T server wget -qO- http://127.0.0.1:8080/healthz
 ```
@@ -193,7 +247,7 @@ the Web/API origin for physical-device access. Forward SSE without response
 buffering and support WebSocket upgrade for the computer viewer. Set sensible
 upload/timeouts for intended use. Do not expose PostgreSQL, Docker, bridge, CDP
 or VNC ports publicly. The Docker socket remains a private server capability;
-the deployment uses the same single Dokploy host.
+the application and its workspaces use the same single Docker Engine.
 
 ## Persistent Data
 
@@ -226,6 +280,6 @@ finished deploying. Retain data volumes and verify the actual deployment state.
 - [GitHub: publishing Docker images](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images)
 - [GitHub: container registry and visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [Dokploy: Docker Compose](https://docs.dokploy.com/docs/core/docker-compose)
-- [Dokploy: Compose API](https://docs.dokploy.com/docs/api/compose)
-- [Dokploy: deployment API](https://docs.dokploy.com/docs/api/deployment)
+- [GitHub: release assets](https://docs.github.com/en/rest/releases/assets)
+- [Docker: container restart policies](https://docs.docker.com/engine/containers/start-containers-automatically/)
 - [Docker: Compose stop grace](https://docs.docker.com/reference/compose-file/services/#stop_grace_period)

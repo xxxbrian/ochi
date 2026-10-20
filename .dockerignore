@@ -1,0 +1,15 @@
+*
+!server/
+!server/**
+!web/
+!web/**
+**/node_modules/
+**/dist/
+**/build/
+**/*.log
+**/*.test
+**/*.tsbuildinfo
+**/.env*
+**/.DS_Store
+**/AGENTS.md
+**/README.md

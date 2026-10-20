@@ -3,7 +3,8 @@ name: ochi
 services:
   db:
     build: ./db
-    image: ochi-postgres:local
+    image: ${OCHI_POSTGRES_IMAGE:-ochi-postgres:local}
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ochi
       POSTGRES_USER: ochi
@@ -18,7 +19,10 @@ services:
       retries: 15
 
   server:
-    build: ./server
+    build: .
+    image: ${OCHI_SERVER_IMAGE:-ochi-server:local}
+    restart: unless-stopped
+    ports: ["127.0.0.1:8090:8080"]
     environment:
       ADDR: :8080
       DATABASE_URL: postgres://ochi:${POSTGRES_PASSWORD}@db:5432/ochi?sslmode=disable
@@ -29,15 +33,17 @@ services:
       MODEL_API_KEY: ${MODEL_API_KEY:-}
       MODEL_NAME: ${MODEL_NAME:-}
       WORKSPACE_ENABLED: ${WORKSPACE_ENABLED:-true}
-      WORKSPACE_IMAGE: ochi-workspace:local
+      WORKSPACE_IMAGE: ${OCHI_WORKSPACE_IMAGE:-ochi-workspace:local}
       WORKSPACE_NETWORK: ochi
       COMPUTE_NETWORK: ochi-compute
       ARTIFACTS_ROOT: /var/lib/ochi/artifacts
+      OCHI_UPDATE_URL: ${OCHI_UPDATE_URL:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - artifacts:/var/lib/ochi/artifacts
     depends_on:
       db: {condition: service_healthy}
+      workspace-image: {condition: service_completed_successfully}
     networks: [app, compute]
     healthcheck:
       test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/healthz]
@@ -46,18 +52,16 @@ services:
       retries: 15
     stop_grace_period: 700s
 
-  web:
-    build: ./web
-    ports: ["127.0.0.1:8090:80"]
-    depends_on: [server]
-    networks: [app]
-
-  # Build-only template. The Go service creates a container/volume for each user.
+  # Preload the tool image. The Go service creates each user's real desktop.
   workspace-image:
     build: ./workspace
-    image: ochi-workspace:local
-    profiles: [build]
-    networks: [app]
+    image: ${OCHI_WORKSPACE_IMAGE:-ochi-workspace:local}
+    entrypoint: [/bin/true]
+    command: []
+    working_dir: /tmp
+    restart: "no"
+    network_mode: none
+    tmpfs: [/data]
 
 volumes:
   database:

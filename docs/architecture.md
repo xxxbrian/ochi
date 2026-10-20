@@ -13,6 +13,7 @@ describe local contracts; `docs/design.md` covers presentation.
 | `server/internal/storage` | PostgreSQL schema and persistence |
 | `server/internal/runtime` | Run state, event publication and subscriptions |
 | `server/internal/workspace` | Docker provisioning and private bridge access |
+| `server/internal/webui` | Embedded production Web assets and SPA routing |
 | `web/src` | Browser routing, state and rendering |
 | `mobile/app`, `mobile/src` | Native routing, state and rendering |
 | `workspace/` | Scoped Linux shell/files, browser, desktop and extensions |
@@ -20,6 +21,15 @@ describe local contracts; `docs/design.md` covers presentation.
 The Go API and PostgreSQL are shared by all clients. No Redis, separate worker
 or distributed queue is required. Docker Engine runs on Linux; macOS development
 uses an engine-provided Linux VM.
+
+The production Web build is embedded in the Go executable and served by the same
+process as the API. Vite remains separate during source development. Linux
+release installations can replace this executable through the administrator's
+explicit update action, then restart the same container; no Dokploy API or
+temporary updater service participates. GitHub publishes images and a rolling
+update manifest but never triggers an installation update. PostgreSQL and
+Computer images remain independently managed. See [Deployment](deployment.md)
+for the writable-layer/recreation boundary and schema maintenance rules.
 
 ## Conversation And Run Lifetime
 

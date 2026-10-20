@@ -20,24 +20,42 @@ foreground includes safe margins; iOS receives an opaque square without baked-in
 rounding. A contact sheet and checksum manifest go under ignored `build/branding/`,
 not into the source documentation. The original source bytes are never modified.
 
-## Container Deployment
+## Build And Release Tools
 
 `deploy.py` uses only Python's standard library. It renders the production
-Compose template from the four digest-pinned images in a workflow bundle:
+Dokploy Compose template from the three digest-pinned images in a workflow
+bundle (the Web app is embedded in the server image):
 
 ```sh
 python3 scripts/deploy.py render --bundle /path/to/images.json --output /tmp/ochi-compose.yaml
 ```
 
-The `deploy` command reads `DOKPLOY_URL`, `DOKPLOY_API_KEY` and
-`DOKPLOY_COMPOSE_ID` from the environment. It updates only the Raw Compose
-template, preserving Dokploy's environment and domains, and waits for that
-specific deployment to complete. It refuses Git auto-deploy and Swarm services.
-Run it from the checkout corresponding to the bundle when changing topology;
-its template comes from this checkout. See [setup and rollback](../docs/deployment.md).
+This is a pure renderer: it never reads private environment values, calls a
+deployment service, updates a running installation or needs API credentials.
+Use the checkout corresponding to the bundle; its production template comes
+from that checkout. See [setup and recovery](../docs/deployment.md).
+
+`release.py` also uses only the standard library. `metadata` reads the current
+product version/schema and emits UTC build metadata. `package` validates a
+Linux amd64/arm64 ELF binary and creates an immutable run-specific archive with
+exactly one `ochi-server` executable. `manifest` requires both architectures,
+validates their payloads, and writes HTTPS asset URLs, sizes and SHA-256 values
+to `update.json`. It reads no configured `.env` and performs no publishing:
 
 ```sh
-python3 scripts/deploy.py deploy --bundle /path/to/images.json
+python3 scripts/release.py metadata
+docker build --target binary --output type=local,dest=build/binary .
+python3 scripts/release.py package --binary build/binary/ochi-server --arch arm64 \
+  --directory build/release --revision "$(git rev-parse HEAD)" --run-id 1 --attempt 1
+```
+
+The example exports the local Docker Engine's architecture. CI supplies release
+build arguments and runs natively for each architecture; it uploads the unique
+archives before replacing the rolling prerelease's manifest. Existing archive
+assets are never clobbered. The workflow automatically builds/publishes only;
+installed Ochi applications require an explicit administrator update/restart.
+
+```sh
 python3 -B -m unittest discover -s scripts/tests -v
 ```
 

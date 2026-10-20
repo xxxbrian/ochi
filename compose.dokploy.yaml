@@ -44,26 +44,20 @@ services:
       WORKSPACE_NETWORK: ${OCHI_NETWORK_NAME:-ochi}
       COMPUTE_NETWORK: ${OCHI_COMPUTE_NETWORK_NAME:-ochi-compute}
       ARTIFACTS_ROOT: /var/lib/ochi/artifacts
+      OCHI_UPDATE_URL: ${OCHI_UPDATE_URL:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - artifacts:/var/lib/ochi/artifacts
     depends_on:
       db: {condition: service_healthy}
       workspace-image: {condition: service_completed_successfully}
-    networks: [app, compute]
+    networks: [app, compute, dokploy]
     healthcheck:
       test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/healthz]
       interval: 5s
       timeout: 3s
       retries: 15
     stop_grace_period: 700s
-
-  web:
-    image: ${OCHI_WEB_IMAGE:?Use the Compose file from the container workflow}
-    restart: unless-stopped
-    depends_on:
-      server: {condition: service_healthy}
-    networks: [app, dokploy]
 
 volumes:
   database:

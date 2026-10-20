@@ -15,8 +15,8 @@ not on the host desktop.
 cp .env.example .env
 # Set a database password and an initial administrator in .env.
 # Configure a provider here, or after login in the administrator UI.
-docker compose --profile build build
-docker compose up -d db server web
+docker compose build
+docker compose up -d db server
 ```
 
 Open <http://127.0.0.1:8090>. The default binding is loopback-only.
@@ -27,7 +27,7 @@ fallback for a missing provider. Provider keys stay on the server.
 
 | Path | Responsibility |
 | --- | --- |
-| `server/` | Go HTTP API, agent execution, storage, provider adapters |
+| `server/` | Go HTTP API, agent execution, storage, embedded production Web app |
 | `web/` | React, TypeScript and Vite Web client |
 | `mobile/` | Expo/React Native clients and versioned native projects |
 | `workspace/` | Private Linux tool bridge, browser and XFCE desktop |
@@ -49,9 +49,12 @@ only the rules needed for that area. Private discussions, research captures,
 credentials, device QA recordings and signed packages are not source documents
 and are not included in this repository.
 
-Production uses GitHub Actions to publish multi-platform images to GHCR, then
-Dokploy pulls a digest-pinned Compose bundle. GitHub Releases and version tags
-are optional; see [deployment setup](docs/deployment.md#github-actions-and-dokploy).
+GitHub Actions builds multi-platform images and the combined Web/server binary.
+An administrator explicitly requests application updates inside Ochi; a code
+push never deploys or restarts an installation. The rolling `edge` prerelease is
+an automated update channel, not a requirement to publish a milestone or bump
+the product version on every change. Docker Compose and optional Dokploy setup
+are described in [Deployment](docs/deployment.md).
 
 ## Publication Status
 

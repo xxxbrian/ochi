@@ -19,7 +19,7 @@ entry point small; detailed rules belong with the module that owns them.
 - Product name: Ochi. iOS Bundle ID and Android application ID: `co.bojin.ochi`.
 - One Go API serves the existing Vite Web app and Expo native clients. Share
   tokens and domain contracts, not Web DOM/CSS or a WebView chat wrapper.
-- Keep deployment to PostgreSQL, the Go service, Web and Docker workspaces.
+- Keep deployment to PostgreSQL, one Go service with embedded Web, and Docker workspaces.
   Do not add queues, workers or abstraction frameworks without a concrete need.
 - Runs outlive HTTP/SSE connections. Queue turns within a session; preserve
   canonical provider/tool history separately from visible message projections.
