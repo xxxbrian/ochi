@@ -258,6 +258,20 @@ function composerHarness(native, patch = {}) {
 
 for (const native of [false, true]) {
   const platform = native ? 'native' : 'web';
+  test(`${platform} supplements reuse the existing toolbar and input instead of increasing the composer height`, async () => {
+    const h = composerHarness(native); await h.settle();
+    const input = h.input(), supplement = h.find('补充当前任务要求');
+    assert.equal(input.props.placeholder, '补充内容…');
+    assert.equal(supplement.props.children.props?.children ?? supplement.props.children, '补充');
+    const parent = walk(h.tree).find((node) => Array.isArray(node.props.children) && node.props.children.includes(supplement));
+    assert.ok(parent && walk(parent).some((node) => (node.props.accessibilityLabel ?? node.props['aria-label'] ?? node.props.label) === (native ? '加入队列' : '排队发送')));
+    h.render({ onSupplement: undefined }); await h.settle();
+    assert.equal(h.find('补充当前任务要求'), undefined);
+    assert.equal(h.input().type, input.type);
+    assert.equal(h.input().props.ref, input.props.ref);
+    assert.equal(h.input().props.placeholder, native ? '问点什么…' : '你想做些什么？');
+    h.unmount();
+  });
   test(`${platform} actual composer supplements the draft without ordinary send, remount or an input-focus cycle`, async () => {
     let calls = 0, ordinary = 0;
     const h = composerHarness(native, { onSupplement: async (content) => { calls++; assert.equal(content, 'Preserve CSV'); return true; }, onSubmit: async () => { ordinary++; return true; } });

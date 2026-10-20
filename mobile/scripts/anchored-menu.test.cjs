@@ -454,3 +454,82 @@ test('landscape editing budgets the full attachment row before growing the input
   assert.equal(h.input.focused, true);
   assert.deepEqual(h.keyboardCalls, []); h.unmount();
 });
+
+test('supplement availability changes only existing input copy and toolbar actions, never its row, draft, height or keyboard ownership', () => {
+  for (const platform of ['android', 'ios']) {
+    for (const [width, height] of [[320, 852], [393, 852], [852, 393]]) {
+      const h = harness({ platform, composer: true, width, height });
+      const original = find(h.composerTree, 'TextInput');
+      const surfaceChildren = () => find(h.composerTree, 'GlassSurface').props.children.filter(Boolean).length;
+      const rows = surfaceChildren();
+      h.render({ running: true, onSupplement: async () => true }); h.settle();
+      const input = find(h.composerTree, 'TextInput');
+      const supplement = find(h.composerTree, 'Pressable', (props) => props.accessibilityLabel === '补充当前任务要求');
+      const send = find(h.composerTree, 'IconButton', (props) => props.label === '加入队列');
+      const toolbar = walk(h.composerTree).find((node) => node.type === 'View' &&
+        node.props.children?.includes?.(supplement) && node.props.children?.includes?.(send));
+      assert.equal(surfaceChildren(), rows);
+      assert.ok(toolbar, 'Supplement and queue remain in the existing toolbar');
+      assert.equal(input.props.placeholder, '补充内容…');
+      assert.equal(input.props.ref, original.props.ref);
+      assert.equal(input.props.value, 'Keep this draft');
+      assert.equal(flattenStyle(input.props.style).height, flattenStyle(original.props.style).height);
+      assert.equal(flattenStyle(supplement.props.style).minHeight, 44);
+      assert.equal(flattenStyle(supplement.props.style).minWidth, 40);
+      assert.equal(input.props.accessibilityLabel, '消息');
+      assert.ok(input.props.accessibilityHint.includes('加入队列'));
+      assert.equal(h.input.focused, true);
+      assert.deepEqual(h.keyboardCalls, []); h.unmount();
+    }
+  }
+});
+
+test('compact supplemental action preserves separate supplement and queued-message dispatch and clears only the accepted draft', async () => {
+  const h = harness({ composer: true, width: 320 });
+  const supplements = [], submissions = [];
+  let acknowledge;
+  const input = () => find(h.composerTree, 'TextInput');
+  const supplement = () => find(h.composerTree, 'Pressable', (props) => props.accessibilityLabel === '补充当前任务要求');
+  h.render({ running: true, initialDraft: '', onSupplement: (text) => {
+    supplements.push(text); return new Promise((resolve) => { acknowledge = resolve; });
+  }, onSubmit: async (submission) => { submissions.push(submission); return true; } }); h.settle();
+  assert.equal(supplement().props.disabled, true);
+  input().props.onChangeText('  Additional constraint  '); h.settle();
+  assert.equal(supplement().props.disabled, false);
+  supplement().props.onPress(); h.settle();
+  assert.deepEqual(supplements, ['Additional constraint']);
+  assert.deepEqual(submissions, []);
+  assert.equal(supplement().props.disabled, true);
+  input().props.onChangeText('Newer unsent draft'); h.settle();
+  acknowledge(true); await new Promise(setImmediate); h.settle();
+  assert.equal(input().props.value, 'Newer unsent draft');
+  find(h.composerTree, 'IconButton', (props) => props.label === '加入队列').props.onPress();
+  await new Promise(setImmediate); h.settle();
+  assert.equal(submissions.length, 1);
+  assert.equal(submissions[0].text, 'Newer unsent draft');
+  assert.deepEqual(supplements, ['Additional constraint']);
+  assert.equal(input().props.value, '');
+  input().props.onChangeText('Accepted supplement'); h.settle();
+  supplement().props.onPress(); h.settle(); acknowledge(true); await new Promise(setImmediate); h.settle();
+  assert.equal(input().props.value, '');
+  assert.deepEqual(supplements, ['Additional constraint', 'Accepted supplement']);
+  assert.deepEqual(h.keyboardCalls, []); h.unmount();
+});
+
+test('supplement rejection retains draft and editing hides supplemental actions without remounting the input', async () => {
+  const h = harness({ composer: true });
+  const original = find(h.composerTree, 'TextInput').props.ref;
+  h.render({ running: true, onSupplement: async () => false }); h.settle();
+  find(h.composerTree, 'Pressable', (props) => props.accessibilityLabel === '补充当前任务要求').props.onPress();
+  await new Promise(setImmediate); h.settle();
+  assert.equal(find(h.composerTree, 'TextInput').props.value, 'Keep this draft');
+  h.render({ editingMessage: { id: 'revision', content: 'Edit separately', attachments: [] } }); h.settle();
+  assert.equal(find(h.composerTree, 'Pressable', (props) => props.accessibilityLabel === '补充当前任务要求'), undefined);
+  assert.equal(find(h.composerTree, 'TextInput').props.placeholder, '问点什么…');
+  assert.ok(find(h.composerTree, 'IconButton', (props) => props.label === '重新发送'));
+  h.render({ editingMessage: undefined, onSupplement: undefined, running: false }); h.settle();
+  assert.equal(find(h.composerTree, 'TextInput').props.ref, original);
+  assert.equal(find(h.composerTree, 'TextInput').props.value, 'Keep this draft');
+  assert.equal(find(h.composerTree, 'TextInput').props.placeholder, '问点什么…');
+  assert.deepEqual(h.keyboardCalls, []); h.unmount();
+});

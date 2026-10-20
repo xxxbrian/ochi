@@ -113,6 +113,8 @@ export const Composer = memo(function Composer({
   const insets = useSafeAreaInsets();
   const shortViewport = width > height && height < 600;
   const compact = width < 430;
+  const supplementAvailable = Boolean(onSupplement) && !editingMessage;
+  const compactSupplementTools = supplementAvailable && (width < 360 || shortViewport);
   const inputScope = `${draftKey}:${editingMessage?.id ?? "draft"}`;
   const [draft, setDraft] = useState(initialDraft ?? "");
   const [files, setFiles] = useState<Artifact[]>([]);
@@ -504,21 +506,13 @@ export const Composer = memo(function Composer({
             />
           </ScrollView>
         )}
-        {onSupplement && !editingMessage && <View style={styles.supplementRow}>
-          <Pressable accessibilityRole="button" accessibilityLabel="补充当前任务要求"
-            accessibilityHint={displayedFiles.length ? "补充要求暂不支持附件" : undefined}
-            disabled={!displayedDraft.trim() || displayedFiles.length > 0 || busy}
-            onPress={() => void supplement()} style={({ pressed }) => [styles.supplement,
-              { backgroundColor: pressed ? colors.hover : "transparent", opacity: !displayedDraft.trim() || displayedFiles.length || busy ? 0.4 : 1 }]}>
-            <AppText muted size={12}>补充要求</AppText>
-          </Pressable>
-        </View>}
         <View style={[styles.entry, shortViewport && styles.entryCompact]}>
         <TextInput
           ref={inputRef}
           accessibilityLabel={editingMessage ? "编辑消息" : "消息"}
           testID="chat-input"
-          placeholder="问点什么…"
+          placeholder={supplementAvailable ? "补充内容…" : "问点什么…"}
+          accessibilityHint={supplementAvailable ? "可补充当前任务，或将新消息加入队列" : undefined}
           placeholderTextColor={colors.subtle}
           selectionColor={colors.text}
           textBreakStrategy="simple"
@@ -597,7 +591,7 @@ export const Composer = memo(function Composer({
               ]}
             >
               <ModelIcon model={model} size={18} />
-              {!compact && (
+              {!compact && !compactSupplementTools && (
                 <>
                   <AppText
                     size={13}
@@ -624,14 +618,15 @@ export const Composer = memo(function Composer({
                 accessibilityRole="button"
                 accessibilityLabel={`思考程度 ${effort || "默认"}`}
                 disabled={busy}
+                hitSlop={2}
                 style={styles.effortTrigger}
               >
                 <Brain size={17} color={colors.muted} />
-                <AppText size={12} muted>
+                {!compactSupplementTools && <AppText size={12} muted>
                   {model?.reasoning_kind === "budget"
                     ? Number(budgetValue).toLocaleString()
                     : effort || "默认"}
-                </AppText>
+                </AppText>}
               </Pressable>
             </View>
           )}
@@ -653,6 +648,16 @@ export const Composer = memo(function Composer({
               />
             </View>
           </View>
+          {supplementAvailable && (
+            <Pressable accessibilityRole="button" accessibilityLabel="补充当前任务要求"
+              accessibilityHint={displayedFiles.length ? "补充要求暂不支持附件" : undefined}
+              accessibilityState={{ disabled: !displayedDraft.trim() || displayedFiles.length > 0 || busy }}
+              disabled={!displayedDraft.trim() || displayedFiles.length > 0 || busy}
+              onPress={() => void supplement()} style={({ pressed }) => [styles.supplement,
+                { backgroundColor: pressed ? colors.hover : "transparent", opacity: !displayedDraft.trim() || displayedFiles.length || busy ? 0.4 : 1 }]}>
+              <AppText muted size={12} numberOfLines={1}>补充</AppText>
+            </Pressable>
+          )}
           {posting || uploading ? (
             <View style={[styles.send, { backgroundColor: colors.text }]}>
               <ActivityIndicator size="small" color={colors.canvas} />
@@ -768,8 +773,7 @@ const styles = StyleSheet.create({
   inputProbe: { position: "absolute", top: 0, left: 0, opacity: 0 },
   toolbar: { flexDirection: "row", alignItems: "center", gap: 2 },
   toolbarCompact: { flexShrink: 0 },
-  supplementRow: { flexDirection: "row", justifyContent: "flex-end", marginTop: -4 },
-  supplement: { minHeight: 44, paddingHorizontal: 10, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  supplement: { minWidth: 40, minHeight: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   editHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: -7, marginBottom: 8, paddingLeft: 10, paddingRight: 1, borderBottomWidth: StyleSheet.hairlineWidth },
   modelTrigger: {
     minHeight: 40,
@@ -782,6 +786,7 @@ const styles = StyleSheet.create({
   },
   effortTrigger: {
     minHeight: 40,
+    minWidth: 40,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,

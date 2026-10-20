@@ -24,8 +24,7 @@
 }
 .composer.ochi-composer textarea::placeholder { color: var(--muted); }
 .ochi-composer__toolbar, .ochi-composer__tools, .ochi-composer__send-tools { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.ochi-composer__supplement-row { display: flex; justify-content: flex-end; margin-top: -4px; }
-.ochi-composer__supplement { min-height: 28px; padding: 4px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; line-height: 20px; }
+.ochi-composer__supplement { flex-shrink: 0; min-width: 40px; min-height: 32px; padding: 4px 8px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 12px; line-height: 20px; white-space: nowrap; }
 .ochi-composer__supplement:hover:not(:disabled) { color: var(--ink); background: var(--hover); }
 .ochi-composer__supplement:disabled { opacity: 0.4; }
 .ochi-composer__toolbar { justify-content: space-between; }
@@ -76,6 +75,11 @@
     .ochi-composer__model .choice-trigger .choice-value, .ochi-composer__model .choice-trigger .choice-chevron, .ochi-composer__reasoning .choice-trigger .choice-value, .ochi-composer__reasoning .choice-trigger .choice-chevron, .ochi-composer__budget-trigger > span, .ochi-composer__reasoning-toggle > span { display: none; }
     .ochi-composer__effort-dot { display: block; position: absolute; top: 8px; right: 8px; width: 4px; height: 4px; border-radius: 50%; background: var(--ink); pointer-events: none; }
     .ochi-composer__computer { min-height: 44px; padding-inline: 4px; }
+}
+@container ochi-input (max-width: 330px) {
+    .ochi-composer__tools { overflow-x: auto; scrollbar-width: none; }
+    .ochi-composer__tools::-webkit-scrollbar { display: none; }
+    .ochi-composer__tools > * { flex-shrink: 0; }
 }
 @media (max-width: 760px), (pointer: coarse) {
     .ochi-composer__supplement { min-height: 44px; }

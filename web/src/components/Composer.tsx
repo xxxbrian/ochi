@@ -343,15 +343,9 @@ export const Composer = memo(function Composer({
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={keyDown}
         rows={1}
-        placeholder="你想做些什么？"
+        placeholder={onSupplement ? "补充内容…" : "你想做些什么？"}
         aria-label="发消息"
       />
-      {onSupplement && <div className="ochi-composer__supplement-row">
-        <button type="button" className="ochi-composer__supplement"
-          aria-label="补充当前任务要求" title={files.length ? "补充要求暂不支持附件" : "补充当前任务要求"}
-          disabled={!draft.trim() || files.length > 0 || unavailable || submitting || supplementBusy || uploading}
-          onMouseDown={(event) => event.preventDefault()} onClick={() => void supplement()}>补充要求</button>
-      </div>}
       <div className="ochi-composer__toolbar">
         <div className="ochi-composer__tools">
           <input
@@ -446,6 +440,12 @@ export const Composer = memo(function Composer({
           </button>
         </div>
         <div className="ochi-composer__send-tools">
+          {onSupplement && (
+            <button type="button" className="ochi-composer__supplement"
+              aria-label="补充当前任务要求" title={files.length ? "补充要求暂不支持附件" : "补充当前任务要求"}
+              disabled={!draft.trim() || files.length > 0 || unavailable || submitting || supplementBusy || uploading}
+              onMouseDown={(event) => event.preventDefault()} onClick={() => void supplement()}>补充</button>
+          )}
           {voiceAvailable && (
             <button
               type="button"
