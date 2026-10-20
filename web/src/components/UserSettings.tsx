@@ -182,7 +182,7 @@ export default function UserSettings({
             插件
           </button>
         </nav>
-        <div className="ochi-settings__content">
+        <div className="ochi-settings__content" key={section}>
           {section === "appearance" ? (
             <section className="ochi-settings__panel ochi-settings__appearance" id="settings-appearance" aria-label="外观">
               <h3>外观</h3>

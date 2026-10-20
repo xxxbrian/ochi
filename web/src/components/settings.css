@@ -1,7 +1,7 @@
-/* Settings uses the same compact rail/list grammar as the reference while
-   keeping the memory controls content-sized for a small personal deployment. */
+/* Keep the shell stable across sections; only its content pane scrolls. */
 .modal.ochi-settings-modal {
     width: min(760px, calc(100% - 32px));
+    height: min(680px, calc(100dvh - 32px));
     border-radius: var(--radius-dialog);
 }
 .modal-body.ochi-settings-body {
@@ -15,10 +15,13 @@
     grid-template-columns: 168px minmax(0, 1fr);
     flex: 1;
     min-height: 0;
-    max-height: min(620px, calc(100dvh - 96px));
 }
 .ochi-settings__rail {
     min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
     padding: var(--space-4) var(--space-3);
     border-right: 1px solid var(--line);
     background: var(--canvas);
@@ -48,8 +51,10 @@
 }
 .ochi-settings__content {
     min-width: 0;
+    min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;
 }
@@ -276,17 +281,18 @@
 @media (max-width: 760px) {
     .modal.ochi-settings-modal {
         width: calc(100% - 24px);
+        height: min(680px, calc(100dvh - 24px));
     }
     .ochi-settings {
         display: flex;
         flex-direction: column;
         min-height: 0;
-        max-height: calc(100dvh - 80px);
     }
     .ochi-settings__rail {
         display: flex;
         align-items: center;
         gap: var(--space-1);
+        flex-shrink: 0;
         overflow-x: auto;
         padding: var(--space-2) var(--space-3);
         border-right: 0;
