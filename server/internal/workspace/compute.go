@@ -42,10 +42,23 @@ func (d *Docker) ensureCompute(ctx context.Context, userID, sessionID string) (s
 		return address, nil
 	}
 	delete(d.urls, name)
-	var inspect struct{ State struct{ Running bool } }
+	var inspect struct {
+		Image string
+		State struct{ Running bool }
+	}
 	status, err := d.request(ctx, http.MethodGet, "/containers/"+name+"/json", nil, &inspect)
 	if err != nil && status != http.StatusNotFound {
 		return "", err
+	}
+	if status != http.StatusNotFound && !inspect.State.Running && inspect.Image != "" {
+		if imageID, err := d.configuredImageID(ctx); err == nil && imageID != "" && imageID != inspect.Image {
+			// A stopped scratch container can adopt the new image without touching
+			// its named data volume. Running work is never replaced on attachment.
+			if _, err := d.request(ctx, http.MethodDelete, "/containers/"+name, nil, nil); err != nil {
+				return "", fmt.Errorf("replace stopped computation: %w", err)
+			}
+			status = http.StatusNotFound
+		}
 	}
 	if status == http.StatusNotFound {
 		container := map[string]any{

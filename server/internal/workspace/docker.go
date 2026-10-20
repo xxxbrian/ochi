@@ -229,16 +229,22 @@ func (d *Docker) Bridge(ctx context.Context, userID, method, path string, data [
 }
 
 type State struct {
-	UserID    string `json:"user_id"`
-	Container string `json:"container"`
-	State     string `json:"state"`
-	Running   bool   `json:"running"`
-	Image     string `json:"image"`
+	UserID            string `json:"user_id"`
+	Container         string `json:"container"`
+	State             string `json:"state"`
+	Running           bool   `json:"running"`
+	Image             string `json:"image"`
+	ImageID           string `json:"image_id,omitempty"`
+	ConfiguredImage   string `json:"configured_image"`
+	ConfiguredImageID string `json:"configured_image_id,omitempty"`
+	// Unknown when the configured image has not been pulled or cannot be inspected.
+	UpdateAvailable *bool `json:"update_available"`
 }
 
 func (d *Docker) Inspect(ctx context.Context, userID string) (State, error) {
-	state := State{UserID: userID, Container: userContainer(userID), State: "not_created", Image: d.config.Image}
+	state := State{UserID: userID, Container: userContainer(userID), State: "not_created", Image: d.config.Image, ConfiguredImage: d.config.Image}
 	var inspect struct {
+		Image  string                 `json:"Image"`
 		Config struct{ Image string } `json:"Config"`
 		State  struct {
 			Running bool
@@ -253,7 +259,19 @@ func (d *Docker) Inspect(ctx context.Context, userID string) (State, error) {
 		return state, err
 	}
 	state.State, state.Running, state.Image = inspect.State.Status, inspect.State.Running, inspect.Config.Image
+	state.ImageID = inspect.Image
+	state.ConfiguredImageID, _ = d.configuredImageID(ctx)
+	if state.ImageID != "" && state.ConfiguredImageID != "" {
+		available := state.ImageID != state.ConfiguredImageID
+		state.UpdateAvailable = &available
+	}
 	return state, nil
+}
+
+func (d *Docker) configuredImageID(ctx context.Context) (string, error) {
+	var image struct{ ID string }
+	_, err := d.request(ctx, http.MethodGet, "/images/"+url.PathEscape(d.config.Image)+"/json", nil, &image)
+	return image.ID, err
 }
 
 func (d *Docker) Manage(ctx context.Context, userID, action string) (State, error) {
@@ -264,6 +282,15 @@ func (d *Docker) Manage(ctx context.Context, userID, action string) (State, erro
 			return State{}, err
 		}
 	case "stop", "rebuild":
+		if action == "rebuild" {
+			imageID, err := d.configuredImageID(ctx)
+			if err != nil {
+				return State{}, fmt.Errorf("configured workspace image is unavailable: %w", err)
+			}
+			if imageID == "" {
+				return State{}, errors.New("configured workspace image has no image ID")
+			}
+		}
 		d.mu.Lock()
 		delete(d.urls, userID)
 		d.mu.Unlock()
