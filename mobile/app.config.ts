@@ -12,7 +12,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   ios: {
     bundleIdentifier: 'co.bojin.ochi',
-    buildNumber: '7',
+    buildNumber: '8',
     appleTeamId: process.env.OCHI_APPLE_TEAM_ID,
     supportsTablet: true,
     privacyManifests: {
@@ -30,7 +30,8 @@ const config: ExpoConfig = {
     },
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
-      NSAppTransportSecurity: { NSAllowsArbitraryLoads: false, NSAllowsLocalNetworking: true },
+      // Self-hosted server addresses are supplied at runtime, including HTTP origins.
+      NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
       NSLocalNetworkUsageDescription: `连接你的 ${brand.displayName} 服务。`,
       NSCameraUsageDescription: '拍摄照片并添加到对话。',
       NSPhotoLibraryUsageDescription: '选择照片并添加到对话。',
@@ -38,7 +39,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'co.bojin.ochi',
-    versionCode: 7,
+    versionCode: 8,
     softwareKeyboardLayoutMode: 'resize',
     permissions: ['CAMERA'],
     adaptiveIcon: { foregroundImage: './assets/adaptive-icon.png', backgroundColor: '#313235' },
@@ -51,7 +52,7 @@ const config: ExpoConfig = {
     'expo-status-bar',
     'expo-splash-screen',
     ['expo-image-picker', { cameraPermission: '拍摄照片并添加到对话。', photosPermission: '选择照片并添加到对话。', microphonePermission: false }],
-    ['expo-build-properties', { ios: { enableSceneSupport: true }, android: { usesCleartextTraffic: false } }],
+    ['expo-build-properties', { ios: { enableSceneSupport: true }, android: { usesCleartextTraffic: true } }],
     './plugins/withLocalReleaseSigning.cjs',
   ],
   experiments: { typedRoutes: true },

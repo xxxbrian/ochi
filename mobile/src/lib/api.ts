@@ -1,7 +1,7 @@
 import { fetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
-import { Platform, type ImageURISource } from 'react-native';
+import type { ImageURISource } from 'react-native';
 import type {
   ApiError, Artifact, Memory, Message, Model, NativeUpload,
   PendingRun, Project, ProjectDetail, RunOptions, RunStatus, Schedule, ScheduleExecution,
@@ -12,7 +12,8 @@ import type {
 const AUTH_KEY = 'ochi.auth.v1';
 const SERVER_KEY = 'ochi.server.v1';
 const storageOptions = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY };
-let serverURL = initialServerURL(process.env.EXPO_PUBLIC_API_URL?.trim() || (__DEV__ ? (Platform.OS === 'android' ? 'http://10.0.2.2:8090' : 'http://127.0.0.1:8090') : ''));
+export const DEFAULT_API_BASE_URL = 'https://ochi.bojin.co';
+let serverURL = initialServerURL(process.env.EXPO_PUBLIC_API_URL?.trim() || DEFAULT_API_BASE_URL);
 let accessToken: string | null = null;
 let onUnauthorized: (() => void) | undefined;
 
@@ -21,7 +22,7 @@ export function getAPIBaseURL() { return serverURL; }
 function normalizeAPIBaseURL(value: string) {
   let url: URL;
   try { url = new URL(value.trim()); } catch { throw new Error('请输入有效的服务地址'); }
-  if (url.protocol !== 'https:' && !(__DEV__ && url.protocol === 'http:')) throw new Error('请输入 HTTPS 服务地址');
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('请输入 HTTP 或 HTTPS 服务地址');
   if (url.username || url.password || url.search || url.hash || !['/', '/api', '/api/'].includes(url.pathname)) throw new Error('请输入服务根地址，不要包含账号、路径或查询参数');
   return url.origin;
 }
@@ -35,7 +36,7 @@ export function isConfiguredAPIBaseURL(value = serverURL) {
 }
 
 function requireAPIBaseURL() {
-  if (!isConfiguredAPIBaseURL()) throw new Error(__DEV__ ? '请先设置服务地址' : '请先设置 HTTPS 服务地址');
+  if (!isConfiguredAPIBaseURL()) throw new Error('请先设置服务地址');
   return serverURL;
 }
 

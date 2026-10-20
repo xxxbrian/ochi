@@ -9,7 +9,7 @@ import { ChevronDown, ChevronUp } from "lucide-react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { getAPIBaseURL, isConfiguredAPIBaseURL } from "../lib/api";
+import { DEFAULT_API_BASE_URL, getAPIBaseURL, isConfiguredAPIBaseURL } from "../lib/api";
 import { useApp } from "../providers/AppProvider";
 import { brand } from "../../brand.config";
 import {
@@ -27,7 +27,7 @@ export function LoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [server, setServer] = useState(getAPIBaseURL());
-  const [serverOpen, setServerOpen] = useState(() => !isConfiguredAPIBaseURL());
+  const [serverOpen, setServerOpen] = useState(() => !isConfiguredAPIBaseURL() || getAPIBaseURL() !== DEFAULT_API_BASE_URL);
   const [error, setError] = useState("");
   async function login() {
     if (!username.trim() || !password || loading || !isConfiguredAPIBaseURL(server)) return;
@@ -94,11 +94,14 @@ export function LoginScreen() {
             登录
           </Button>
           <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: serverOpen }}
+            disabled={loading}
             onPress={() => setServerOpen(!serverOpen)}
             style={styles.serverToggle}
           >
             <AppText muted size={13}>
-              服务地址
+              使用自部署后端
             </AppText>
             {serverOpen ? (
               <ChevronUp size={14} color={colors.muted} />
@@ -107,15 +110,35 @@ export function LoginScreen() {
             )}
           </Pressable>
           {serverOpen && (
-            <Field
-              label="URL"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder="https://example.com"
-              value={server}
-              onChangeText={setServer}
-            />
+            <View>
+              <Field
+                label="服务地址"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="https://your-server.com"
+                value={server}
+                onChangeText={setServer}
+                editable={!loading}
+              />
+              <AppText muted size={12}>
+                支持 HTTP 和 HTTPS。HTTP 不加密，请仅在可信网络使用。
+              </AppText>
+              {server.trim() !== DEFAULT_API_BASE_URL && (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={loading}
+                  onPress={() => {
+                    setServer(DEFAULT_API_BASE_URL);
+                    setServerOpen(false);
+                    setError("");
+                  }}
+                  style={styles.defaultServer}
+                >
+                  <AppText muted size={13}>使用 Ochi 默认服务</AppText>
+                </Pressable>
+              )}
+            </View>
           )}
         </View>
       </KeyboardAwareScrollView>
@@ -137,4 +160,5 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingVertical: 18,
   },
+  defaultServer: { alignSelf: "center", minHeight: 44, justifyContent: "center" },
 });

@@ -12,8 +12,18 @@ Developer account in Xcode, select the intended team and verify the Bundle ID.
 For App Store Connect/TestFlight, create a matching App ID and app record first.
 
 Increment the release build number and keep app config/native metadata aligned.
-Supply a public HTTPS `EXPO_PUBLIC_API_URL` if a default server is wanted; no
-provider key or bearer token belongs in a client build.
+The default server is `https://ochi.bojin.co`; no build-time environment override
+is needed. `EXPO_PUBLIC_API_URL` can explicitly select another default, and users
+can enter their own HTTP or HTTPS origin through **使用自部署后端** on the login
+page. No provider key or bearer token belongs in a client build.
+
+iOS allows arbitrary loads and Android allows cleartext traffic because users
+supply self-hosted origins at runtime, which cannot be enumerated at build time.
+Keep the native projects and Expo config aligned. Do not add
+`NSAllowsLocalNetworking` alongside `NSAllowsArbitraryLoads`: on current iOS it
+overrides the latter and would break non-local HTTP servers. Explain the
+user-supplied server requirement if App Review asks for an ATS justification.
+HTTPS remains the default; the login page warns when an HTTP address is entered.
 
 ```sh
 bash mobile/scripts/ios-release.sh archive

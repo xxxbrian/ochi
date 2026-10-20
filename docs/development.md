@@ -29,9 +29,12 @@ exports the identical statically linked Linux executable for update archives.
 `scripts/release.py` packages it and validates both-platform update manifests;
 see [Repository Tools](../scripts/README.md).
 
-The native client has a configurable server origin. Simulator loopback and
-physical-device addresses differ; release builds require a reachable HTTPS
-origin. Never put provider secrets in `VITE_*` or `EXPO_PUBLIC_*` values.
+The native client defaults to `https://ochi.bojin.co`. `EXPO_PUBLIC_API_URL`
+explicitly overrides that default; a saved self-hosted origin takes precedence.
+The login page accepts HTTPS and HTTP self-hosted origins. HTTP sends credentials
+and conversation content without transport encryption; prefer HTTPS outside
+trusted local networks. Simulator loopback and physical-device addresses differ.
+Never put provider secrets in `VITE_*` or `EXPO_PUBLIC_*` values.
 
 ## Checks
 

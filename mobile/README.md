@@ -21,10 +21,13 @@ These commands build the development client. Subsequent JS/TypeScript changes
 use Fast Refresh with `pnpm start`; native dependency changes require a rebuild.
 Expo Go does not contain the required native Markdown and UI modules.
 
-Configure the service root on the sign-in screen. Development simulator defaults
-are `http://127.0.0.1:8090` on iOS and `http://10.0.2.2:8090` on Android. A physical
-device needs a reachable address. An optional `EXPO_PUBLIC_API_URL` is compiled
-into the app; it must never contain credentials. Release builds require HTTPS.
+The app defaults to `https://ochi.bojin.co`. Use **使用自部署后端** on the sign-in
+screen to select an HTTP or HTTPS service root; saved server choices take
+precedence over the build default. For local development, iOS simulator loopback
+is `http://127.0.0.1:8090` and Android emulator loopback is
+`http://10.0.2.2:8090`; physical devices need a reachable address. An optional
+`EXPO_PUBLIC_API_URL` overrides the build default and must never contain
+credentials. Prefer HTTPS: HTTP does not encrypt credentials or chat content.
 Login tokens stay in SecureStore; provider keys stay on the server.
 
 ## Native Projects
