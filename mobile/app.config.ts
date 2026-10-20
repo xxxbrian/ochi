@@ -12,7 +12,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: 'automatic',
   ios: {
     bundleIdentifier: 'co.bojin.ochi',
-    buildNumber: '8',
+    buildNumber: '9',
     appleTeamId: process.env.OCHI_APPLE_TEAM_ID,
     supportsTablet: true,
     privacyManifests: {
@@ -39,7 +39,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: 'co.bojin.ochi',
-    versionCode: 8,
+    versionCode: 9,
     softwareKeyboardLayoutMode: 'resize',
     permissions: ['CAMERA'],
     adaptiveIcon: { foregroundImage: './assets/adaptive-icon.png', backgroundColor: '#313235' },
