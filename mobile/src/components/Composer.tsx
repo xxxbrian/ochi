@@ -642,7 +642,7 @@ export const Composer = memo(function Composer({
                 onValueChange={onComputer}
                 trackColor={computerTrack}
                 thumbColor={Platform.OS === "ios" ? undefined : "#ffffff"}
-                hitSlop={{ top: 20, bottom: 20, left: 5, right: 5 }}
+                hitSlop={{ top: 20, bottom: 20, left: 12, right: 12 }}
                 ios_backgroundColor={computerTrack.false}
                 style={styles.switch}
               />
@@ -796,10 +796,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     minHeight: 44,
-    gap: 1,
-    marginRight: 3,
+    gap: 2,
   },
-  switchTarget: { width: 50, height: 44, alignItems: "center", justifyContent: "center" },
+  // Centered native scaling leaves equal visual gutters; match the surrounding toolbar gap.
+  switchTarget: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   switch: { transform: [{ scale: 0.65 }] },
   send: {
     width: 38,

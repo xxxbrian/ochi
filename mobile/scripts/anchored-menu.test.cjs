@@ -533,3 +533,38 @@ test('supplement rejection retains draft and editing hides supplemental actions 
   assert.equal(find(h.composerTree, 'TextInput').props.placeholder, '问点什么…');
   assert.deepEqual(h.keyboardCalls, []); h.unmount();
 });
+
+test('native Computer switch has symmetric visual spacing and a centered 44pt touch area without changing its controls or input ownership', () => {
+  for (const platform of ['android', 'ios']) {
+    for (const [width, height] of [[320, 852], [393, 852], [852, 393]]) {
+      const h = harness({ platform, composer: true, width, height });
+      const input = find(h.composerTree, 'TextInput').props.ref;
+      const changes = [];
+      h.render({ onComputer: (value) => changes.push(value) }); h.settle();
+      const toggle = find(h.composerTree, 'Switch', (props) => props.testID === 'computer-toggle');
+      const target = walk(h.composerTree).find((node) => node.type === 'View' && node.props.children === toggle);
+      const group = walk(h.composerTree).find((node) => node.type === 'View' && node.props.children?.includes?.(target));
+      const toolbar = walk(h.composerTree).find((node) => node.type === 'View' && node.props.children?.includes?.(group));
+      const targetStyle = flattenStyle(target.props.style), groupStyle = flattenStyle(group.props.style);
+      assert.equal(targetStyle.width, 44);
+      assert.equal(targetStyle.height, 44);
+      assert.equal(targetStyle.alignItems, 'center');
+      assert.equal(targetStyle.justifyContent, 'center');
+      assert.equal(groupStyle.gap, flattenStyle(toolbar.props.style).gap);
+      assert.equal(groupStyle.marginRight ?? 0, 0);
+      assert.equal(groupStyle.marginLeft ?? 0, 0);
+      assert.equal(toggle.props.hitSlop.left, toggle.props.hitSlop.right);
+      assert.ok(toggle.props.hitSlop.left >= 12);
+      assert.equal(toggle.props.accessibilityLabel, '允许使用电脑');
+      assert.notEqual(toggle.props.trackColor.false, toggle.props.trackColor.true);
+      toggle.props.onValueChange(true);
+      assert.deepEqual(changes, [true]);
+      h.render({ computerEnabled: true, computerBusy: true }); h.settle();
+      assert.equal(find(h.composerTree, 'Switch').props.value, true);
+      assert.equal(find(h.composerTree, 'Switch').props.disabled, true);
+      assert.equal(find(h.composerTree, 'TextInput').props.ref, input);
+      assert.equal(find(h.composerTree, 'TextInput').props.value, 'Keep this draft');
+      assert.deepEqual(h.keyboardCalls, []); h.unmount();
+    }
+  }
+});
