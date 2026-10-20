@@ -20,6 +20,7 @@ import (
 
 	"ochi/server/internal/agent"
 	"ochi/server/internal/runtime"
+	"ochi/server/internal/selfupdate"
 	"ochi/server/internal/storage"
 
 	"github.com/jackc/pgx/v5"
@@ -54,6 +55,7 @@ type Server struct {
 	scopePreparations   sync.Map
 	memoryWorkerOnce    sync.Once
 	extensionMu         sync.Mutex
+	updater             *selfupdate.Manager
 }
 
 func NewServer(store *storage.Store, generator agent.Generator, accounts []Account, secureCookies bool) (*Server, error) {
@@ -140,6 +142,10 @@ func (s *Server) SetTools(source agent.ToolSource) {
 	s.tools = s.wrapTools(source)
 }
 
+func (s *Server) SetUpdater(updater *selfupdate.Manager) {
+	s.updater = updater
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -167,6 +173,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerProjectRoutes(mux)
 	s.registerQueueRoutes(mux)
 	s.registerAdminRoutes(mux)
+	s.registerUpdateRoutes(mux)
 	s.registerExtraRoutes(mux)
 	s.registerTaskRoutes(mux)
 	s.registerContextRoutes(mux)

@@ -12,7 +12,10 @@ import (
 
 	"ochi/server/internal/agent"
 	"ochi/server/internal/api"
+	"ochi/server/internal/product"
+	"ochi/server/internal/selfupdate"
 	"ochi/server/internal/storage"
+	"ochi/server/internal/webui"
 	"ochi/server/internal/workspace"
 )
 
@@ -60,13 +63,29 @@ func main() {
 		log.Fatal(err)
 	}
 	application.SetTools(tools)
+	restart := make(chan struct{}, 1)
+	updater := selfupdate.New(selfupdate.Config{
+		Current: selfupdate.Build{
+			Version: product.Version, Revision: product.Revision, BuiltAt: product.BuiltAt,
+			SchemaSHA256: storage.SchemaSHA256(),
+		},
+		BuildType: product.BuildType, EmbeddedWeb: webui.Embedded,
+		ManifestURL: os.Getenv("OCHI_UPDATE_URL"),
+		Restart: func() {
+			select {
+			case restart <- struct{}{}:
+			default:
+			}
+		},
+	})
+	application.SetUpdater(updater)
 	application.StartQueue(context.Background())
 	application.StartScheduler(context.Background())
 	application.StartMemoryWorker(context.Background())
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           application.Handler(),
+		Handler:           webui.Wrap(application.Handler()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -76,27 +95,33 @@ func main() {
 	log.Printf("server listening on %s", addr)
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()
+	drainRequested := false
 	select {
 	case sig := <-stopped:
-		if sig == syscall.SIGTERM {
-			drain, cancelDrain := context.WithTimeout(context.Background(), 10*time.Minute)
-			go func() {
-				select {
-				case <-stopped:
-					cancelDrain()
-				case <-drain.Done():
-				}
-			}()
-			log.Print("server draining: new inputs stay queued; waiting up to 10 minutes for active runs")
-			if err := application.Drain(drain); err != nil {
-				log.Printf("run drain: %v; cancelling remaining work", err)
-			}
-			cancelDrain()
-		}
+		drainRequested = sig == syscall.SIGTERM
+	case <-restart:
+		drainRequested = true
+		log.Print("application update prepared; restarting after active runs drain")
 	case err := <-serveErr:
 		if err != nil && err != http.ErrServerClosed {
 			log.Printf("HTTP server: %v", err)
 		}
+	}
+	updater.StopAdmission()
+	if drainRequested {
+		drain, cancelDrain := context.WithTimeout(context.Background(), 10*time.Minute)
+		go func() {
+			select {
+			case <-stopped:
+				cancelDrain()
+			case <-drain.Done():
+			}
+		}()
+		log.Print("server draining: new inputs stay queued; waiting up to 10 minutes for active runs")
+		if err := application.Drain(drain); err != nil {
+			log.Printf("run drain: %v; cancelling remaining work", err)
+		}
+		cancelDrain()
 	}
 	shutdown, cancelShutdown := context.WithTimeout(context.Background(), 30*time.Second)
 	// Drain producers before closing the pool, then allow SSE handlers to finish.
