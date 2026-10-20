@@ -10,9 +10,9 @@ root `Dockerfile` pins the tested Web/server toolchains. Its production build
 embeds the Vite output in the Go executable; no separate Web container is needed.
 
 ```sh
-pnpm --dir web install --frozen-lockfile
-pnpm --dir mobile install --frozen-lockfile
-VITE_DEV_API_TARGET=http://127.0.0.1:8090 pnpm --dir web dev
+(cd web && pnpm install --frozen-lockfile)
+(cd mobile && pnpm install --frozen-lockfile)
+(cd web && VITE_DEV_API_TARGET=http://127.0.0.1:8090 pnpm dev)
 ```
 
 Ordinary `go run ./cmd/server` remains API-only for Vite development. To check
@@ -35,17 +35,16 @@ origin. Never put provider secrets in `VITE_*` or `EXPO_PUBLIC_*` values.
 
 ## Checks
 
-Run the relevant commands from the repository root:
+Run the relevant commands from the repository root. Enter each client directory
+before invoking pnpm so Corepack reads that client's `packageManager`:
 
 ```sh
 (cd server && go test ./... && go vet ./...)
 python3 -B -m unittest discover -s scripts/tests -v
 python3 -B -m unittest discover -s workspace/tests -v
-pnpm --dir web build
-pnpm --dir web test
-pnpm --dir mobile typecheck
-pnpm --dir mobile test
-pnpm --dir mobile exec expo install --check
+(cd web && pnpm build && pnpm test)
+(cd mobile && pnpm typecheck && pnpm test)
+(cd mobile && pnpm exec expo install --check)
 ```
 
 Workspace fixture tests run with the Python standard library and mock external

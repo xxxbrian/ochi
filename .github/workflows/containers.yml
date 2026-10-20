@@ -60,10 +60,11 @@ jobs:
           go test ./...
           go vet ./...
       - name: Check Web and cross-client contracts
+        working-directory: web
         run: |
           corepack enable
-          pnpm --dir web install --frozen-lockfile
-          pnpm --dir web test
+          pnpm install --frozen-lockfile
+          pnpm test
 
   build:
     needs: check
