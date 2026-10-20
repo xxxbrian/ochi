@@ -6,6 +6,29 @@ export type User = {
   enabled?: boolean;
 };
 
+export type UpdateBuild = {
+  version: string;
+  revision: string;
+  built_at: string;
+  schema_sha256: string;
+};
+
+export type UpdateState = {
+  current: UpdateBuild;
+  latest?: UpdateBuild;
+  supported: boolean;
+  unsupported_reason?: string;
+  available: boolean;
+  blocked_reason?: string;
+  phase: "idle" | "checking" | "downloading" | "ready" | "restarting" | "failed";
+  downloaded_bytes: number;
+  total_bytes: number;
+  pending?: UpdateBuild;
+  backup?: UpdateBuild;
+  error?: string;
+  checked_at?: string;
+};
+
 export type UserPreferences = {
   memory_enabled: boolean;
   computer_default: boolean;

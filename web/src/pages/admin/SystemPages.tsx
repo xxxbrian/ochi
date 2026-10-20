@@ -21,6 +21,7 @@ import { ErrorNotice, Field, Toggle } from "./Fields";
 import { StepList } from "../../components/ProcessDetails";
 import { FileCards } from "../../components/FileCards";
 import { RequestDiagnostics } from "./RequestDiagnostics";
+import { UpdateCard } from "./UpdateCard";
 
 const MarkdownContent = lazy(() => import("../../components/MarkdownContent"));
 
@@ -414,6 +415,7 @@ export function SystemPage() {
           </button>
         </div>
       </form>
+      <UpdateCard />
     </>
   );
 }

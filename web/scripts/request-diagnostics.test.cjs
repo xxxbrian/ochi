@@ -239,6 +239,7 @@ function settingsHarness(saveSettings, settings = { debug_mode: false, system_pr
     './Fields': { ErrorNotice: 'ErrorNotice', Field: 'Field', Toggle: 'Toggle' },
     '../../components/ProcessDetails': { StepList: 'StepList' }, '../../components/FileCards': { FileCards: 'FileCards' },
     './RequestDiagnostics': { RequestDiagnostics: 'RequestDiagnostics' },
+    './UpdateCard': { UpdateCard: 'UpdateCard' },
   });
 }
 const debugToggle = (harness) => harness.nodes().find((node) => node.type === 'Toggle' && node.props.title.includes('Debug'));

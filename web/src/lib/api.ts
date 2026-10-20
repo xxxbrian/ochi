@@ -31,6 +31,7 @@ import type {
   Snapshot,
   User,
   UserPreferences,
+  UpdateState,
   Workspace,
 } from "./types";
 
@@ -75,6 +76,7 @@ function userFacingError(path: string, status: number, detail: string): string {
 export async function request<T>(
   path: string,
   init: RequestInit = {},
+  options: { quiet?: boolean } = {},
 ): Promise<T> {
   let response: Response;
   try {
@@ -91,7 +93,7 @@ export async function request<T>(
     });
   } catch (reason) {
     if (init.signal?.aborted) throw reason;
-    console.error("API connection failed", path, reason);
+    if (!options.quiet) console.error("API connection failed", path, reason);
     throw new Error("暂时无法连接");
   }
   if (!response.ok) {
@@ -102,7 +104,7 @@ export async function request<T>(
     } catch {
       /* non-JSON error */
     }
-    if (!(path === "/api/auth/me" && response.status === 401))
+    if (!options.quiet && !(path === "/api/auth/me" && response.status === 401))
       console.error("API request failed", path, response.status, detail);
     const error = new Error(
       userFacingError(path, response.status, detail),
@@ -390,6 +392,24 @@ export const adminApi = {
   clearProviderRequests: (runID?: string, signal?: AbortSignal) =>
     request<void>(providerRequestsPath(runID), { method: "DELETE", signal }),
   settings: () => request<Record<string, unknown>>("/api/admin/settings"),
+  updates: (signal?: AbortSignal) =>
+    request<UpdateState>("/api/admin/updates", { signal }, { quiet: true }),
+  checkUpdate: (signal?: AbortSignal) =>
+    request<UpdateState>("/api/admin/updates/check", {
+      method: "POST", body: "{}", signal,
+    }, { quiet: true }),
+  applyUpdate: (revision: string, signal?: AbortSignal) =>
+    request<UpdateState>("/api/admin/updates/apply", {
+      method: "POST", body: JSON.stringify({ revision }), signal,
+    }, { quiet: true }),
+  restartUpdate: (signal?: AbortSignal) =>
+    request<UpdateState>("/api/admin/updates/restart", {
+      method: "POST", body: "{}", signal,
+    }, { quiet: true }),
+  rollbackUpdate: (signal?: AbortSignal) =>
+    request<UpdateState>("/api/admin/updates/rollback", {
+      method: "POST", body: "{}", signal,
+    }, { quiet: true }),
   catalogProviders: () =>
     request<{ id: string; name: string; model_count?: number }[]>(
       "/api/admin/catalog/providers",
