@@ -22,7 +22,7 @@ function harness(width = 852, height = 393, insets = { top: 0, left: 59, right: 
   };
   const primitives = new Proxy({}, { get: (_target, key) => key });
   const native = {
-    ...Object.fromEntries(['View', 'Text', 'TextInput', 'ScrollView', 'FlatList', 'Pressable', 'Switch', 'ActivityIndicator', 'Image'].map((name) => [name, name])),
+    ...Object.fromEntries(['View', 'Text', 'TextInput', 'ScrollView', 'FlatList', 'Pressable', 'Switch', 'ActivityIndicator', 'Image', 'Modal'].map((name) => [name, name])),
     Platform: { OS: 'android' }, Alert: { alert() {} }, Linking: { openURL() {} },
     StyleSheet: { create: (value) => value, hairlineWidth: 0.5 },
     useWindowDimensions: () => state.viewport,
@@ -31,9 +31,11 @@ function harness(width = 852, height = 393, insets = { top: 0, left: 59, right: 
     react: hooks, 'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' }, 'react-native': native,
     'lucide-react-native': primitives,
     'expo-router': { router: { push() {}, replace() {}, back() {}, canGoBack: () => true }, useFocusEffect() {}, useLocalSearchParams: () => ({ memoryId: 'new' }) },
-    'react-native-safe-area-context': { useSafeAreaInsets: () => state.insets },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => state.insets, SafeAreaView: 'SafeAreaView', SafeAreaProvider: 'SafeAreaProvider' },
     'react-native-keyboard-controller': { KeyboardAvoidingView: 'KeyboardAvoidingView', KeyboardAwareScrollView: 'KeyboardAwareScrollView' },
     'react-native-webview': { WebView: 'WebView' },
+    'react-native-pdf': { default: 'Pdf', __esModule: true },
+    'expo-file-system/legacy': {}, 'expo-status-bar': { StatusBar: 'StatusBar' },
     '../providers/AppProvider': { useTheme: () => theme, useApp: () => ({ ...theme, models: [], preferences: {} }) },
     '../lib/api': { getAPIBaseURL: () => 'https://ochi.example', isConfiguredAPIBaseURL: () => true, resourceHeaders: () => ({}), api: {} },
     '../lib/processTimeline': { unrepresentedOutput: () => '' },
@@ -134,8 +136,9 @@ test('project entry retains its virtualized list with a keyboard-aware scroller 
 
 test('document preview uses its actual short viewport and unsupported files can scroll rather than overflowing the toolbar', () => {
   const h = harness();
-  const module = h.load('src/components/Artifacts.tsx', '\nexports.DocumentViewer = DocumentViewer;');
-  const tree = module.DocumentViewer({ file: { id: 'file', name: 'File.bin', size: 1, url: '/file' } });
+  const module = h.load('src/components/DocumentViewer.tsx', '\nexports.DocumentPreview = DocumentPreview;');
+  const tree = module.DocumentPreview({ file: { id: 'file', name: 'File.bin', size: 1, url: '/file' } });
+  assert.equal(find(tree, 'Modal').props.presentationStyle, 'fullScreen');
   const preview = walk(tree).find((node) => style(node.props.style).minHeight === 0 && style(node.props.style).flex === 1);
   assert.ok(preview);
   assert.ok(find(preview, 'ScrollView'));

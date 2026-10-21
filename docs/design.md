@@ -59,6 +59,11 @@ uses React Native/Expo surfaces with accessible opaque fallbacks.
   previews. Rename uses an iOS system prompt or a centered Android dialog.
 - Images open a black full-screen viewer animated from the thumbnail. Downward
   dismissal applies at fit scale; zoomed dragging pans instead.
+- Documents use a full-screen page, not a bottom drawer. PDFs render locally
+  with native scrolling/zoom and page counts on both platforms. Download private
+  bytes before rendering, cancel and clear previews when closed or changed, and
+  never pass bearer headers to a renderer or external artifact origin. Text and
+  HTML retain isolated previews; unsupported formats keep download/share actions.
 - Landscape uses actual window size and safe areas, bounds overlays to the
   available height and accounts for keyboard, navigation and composer occlusion.
 

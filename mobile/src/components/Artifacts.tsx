@@ -1,11 +1,8 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Linking,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
@@ -13,18 +10,15 @@ import {
   FileText,
   ImageIcon,
   Play,
-  Share2,
   X,
 } from "lucide-react-native";
-import { WebView } from "react-native-webview";
 import { resourceHeaders, fileURL, imageSource } from "../lib/api";
 import type { Artifact } from "../lib/types";
 import { useTheme } from "../providers/AppProvider";
-import { Sheet } from "../ui/Sheet";
-import { ActionIcon, AppText, Button, ErrorNotice } from "./ScreenChrome";
-import { Markdown } from "./Markdown";
+import { ActionIcon, AppText, ErrorNotice } from "./ScreenChrome";
 import { ImageViewer, measureImageOrigin, type ImageOrigin } from "./ImageViewer";
-import { fileSize, fileType, shareArtifact } from "./artifactFiles";
+import { DocumentViewer } from "./DocumentViewer";
+import { fileSize, fileType } from "./artifactFiles";
 export { fileSize, fileType } from "./artifactFiles";
 
 export const ArtifactCards = memo(function ArtifactCards({
@@ -198,174 +192,6 @@ export function ArtifactViewer({
     : <DocumentViewer file={file} onClose={onClose} />;
 }
 
-function DocumentViewer({ file, onClose }: { file: Artifact; onClose: () => void }) {
-  const { colors } = useTheme();
-  const type = fileType(file);
-  const [source, setSource] = useState("");
-  const headers = useMemo(() => resourceHeaders(file), [file.url]);
-  const [loading, setLoading] = useState(
-    ["html", "markdown", "code"].includes(type),
-  );
-  const [error, setError] = useState("");
-  const [mode, setMode] = useState<"preview" | "source">("preview");
-  const [sharing, setSharing] = useState(false);
-  useEffect(() => {
-    const controller = new AbortController();
-    void (async () => {
-      if (!["html", "markdown", "code"].includes(type)) return;
-      try {
-        const response = await fetch(fileURL(file.url), {
-          headers,
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error("无法加载文件");
-        const text = await response.text();
-        if (!controller.signal.aborted) setSource(text);
-      } catch (reason) {
-        if (!controller.signal.aborted)
-          setError(reason instanceof Error ? reason.message : "无法加载文件");
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    })();
-    return () => controller.abort();
-  }, [file.url, type]);
-  async function share() {
-    if (sharing) return;
-    setSharing(true);
-    setError("");
-    try {
-      await shareArtifact(file);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "下载失败");
-    } finally {
-      setSharing(false);
-    }
-  }
-  const lang =
-    (
-      {
-        py: "python",
-        js: "javascript",
-        ts: "typescript",
-        sh: "bash",
-        yml: "yaml",
-        svg: "xml",
-      } as Record<string, string>
-    )[file.name.split(".").pop() ?? ""] ??
-    file.name.split(".").pop() ??
-    "text";
-  const fence = "`".repeat(
-    Math.max(
-      3,
-      ...(source.match(/`+/g) ?? []).map((value) => value.length + 1),
-    ),
-  );
-  return (
-    <Sheet
-      visible
-      title={file.name}
-      onClose={onClose}
-      height="full"
-    >
-      <View style={styles.toolbar}>
-        {["html", "markdown"].includes(type) && (
-          <View style={[styles.segment, { backgroundColor: colors.hover }]}>
-            {(["preview", "source"] as const).map((value) => (
-              <Pressable
-                key={value}
-                onPress={() => setMode(value)}
-                style={[
-                  styles.segmentItem,
-                  mode === value && { backgroundColor: colors.raised },
-                ]}
-              >
-                <AppText size={13} weight="medium">
-                  {value === "preview" ? "预览" : "源码"}
-                </AppText>
-              </Pressable>
-            ))}
-          </View>
-        )}
-        <View style={{ flex: 1 }} />
-        <AppText muted size={12}>
-          {fileSize(file.size)}
-        </AppText>
-        <ActionIcon
-          icon={Share2}
-          label="下载或分享"
-          disabled={sharing}
-          onPress={() => void share()}
-        />
-      </View>
-      <ErrorNotice error={error} />
-      <View style={styles.preview}>
-        {loading ? (
-          <ActivityIndicator color={colors.muted} style={{ flex: 1 }} />
-        ) : type === "html" && mode === "preview" ? (
-          <WebView
-            incognito
-            source={{ html: source, baseUrl: "about:blank" }}
-            startInLoadingState
-            renderLoading={() => (
-              <View
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    justifyContent: "center",
-                    backgroundColor: colors.canvas,
-                  },
-                ]}
-              >
-                <ActivityIndicator color={colors.muted} />
-              </View>
-            )}
-            onError={() => setError("无法打开预览")}
-            originWhitelist={["*"]}
-            javaScriptEnabled
-            mixedContentMode="never"
-            setSupportMultipleWindows={false}
-            onShouldStartLoadWithRequest={(request) => {
-              if (
-                request.url === "about:blank" ||
-                request.url.startsWith("data:")
-              )
-                return true;
-              if (request.isTopFrame && /^https?:/.test(request.url)) {
-                void Linking.openURL(request.url).catch(() => undefined);
-                return false;
-              }
-              return !request.isTopFrame;
-            }}
-            style={{ flex: 1, backgroundColor: colors.canvas }}
-          />
-        ) : type === "markdown" && mode === "preview" ? (
-          <ScrollView contentContainerStyle={styles.textPreview}>
-            <Markdown content={source} />
-          </ScrollView>
-        ) : type === "code" || mode === "source" ? (
-          <ScrollView contentContainerStyle={styles.textPreview}>
-            <Markdown content={`${fence}${lang}\n${source}\n${fence}`} />
-          </ScrollView>
-        ) : type === "pdf" && Platform.OS === "ios" ? (
-          <WebView
-            source={{ uri: fileURL(file.url), headers }}
-            style={{ flex: 1 }}
-          />
-        ) : (
-          <ScrollView contentContainerStyle={styles.binary}>
-            <FileText size={44} color={colors.subtle} />
-            <AppText numberOfLines={2}>{file.name}</AppText>
-            <Button busy={sharing} onPress={() => void share()}>
-              下载文件
-            </Button>
-          </ScrollView>
-        )}
-      </View>
-    </Sheet>
-  );
-}
-
 const styles = StyleSheet.create({
   files: { width: "100%", gap: 10, marginVertical: 8 },
   compactFiles: {
@@ -395,24 +221,5 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     width: "100%",
     maxWidth: 520,
-  },
-  toolbar: {
-    flexShrink: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  segment: { flexDirection: "row", padding: 3, borderRadius: 10 },
-  segmentItem: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 7 },
-  preview: { flex: 1, minHeight: 0 },
-  textPreview: { width: "100%", maxWidth: 720, alignSelf: "center", padding: 18 },
-  binary: {
-    flexGrow: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    padding: 24,
   },
 });
