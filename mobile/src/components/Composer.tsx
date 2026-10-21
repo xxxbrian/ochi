@@ -578,7 +578,7 @@ export const Composer = memo(function Composer({
               <Plus size={22} color={colors.text} strokeWidth={1.8} />
             </View>
           </MenuTrigger>
-          <View ref={modelRef} collapsable={false} style={{ minWidth: 0 }}>
+          <View ref={modelRef} collapsable={false} style={{ minWidth: 0, flexShrink: 1 }}>
             <Pressable
               onPress={() => openMenu("models", modelRef)}
               accessibilityRole="button"
@@ -597,7 +597,7 @@ export const Composer = memo(function Composer({
                     size={13}
                     weight="medium"
                     numberOfLines={1}
-                    style={{ maxWidth: 88 }}
+                    style={{ maxWidth: 88, minWidth: 0, flexShrink: 1 }}
                   >
                     {model?.name ?? "模型"}
                   </AppText>
@@ -798,9 +798,9 @@ const styles = StyleSheet.create({
     minHeight: 44,
     gap: 2,
   },
-  // Centered native scaling leaves equal visual gutters; match the surrounding toolbar gap.
   switchTarget: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  switch: { transform: [{ scale: 0.65 }] },
+  // iOS Switch defaults to flex-start, overriding its parent's alignItems.
+  switch: { alignSelf: "center", transform: [{ scale: 0.65 }] },
   send: {
     width: 38,
     height: 38,

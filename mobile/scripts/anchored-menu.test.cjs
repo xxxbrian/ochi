@@ -534,9 +534,9 @@ test('supplement rejection retains draft and editing hides supplemental actions 
   assert.deepEqual(h.keyboardCalls, []); h.unmount();
 });
 
-test('native Computer switch has symmetric visual spacing and a centered 44pt touch area without changing its controls or input ownership', () => {
+test('native Computer switch overrides iOS alignment and stays visually inside its slot without changing controls or input ownership', () => {
   for (const platform of ['android', 'ios']) {
-    for (const [width, height] of [[320, 852], [393, 852], [852, 393]]) {
+    for (const [width, height] of [[320, 852], [393, 852], [430, 932], [440, 956], [956, 440]]) {
       const h = harness({ platform, composer: true, width, height });
       const input = find(h.composerTree, 'TextInput').props.ref;
       const changes = [];
@@ -550,6 +550,18 @@ test('native Computer switch has symmetric visual spacing and a centered 44pt to
       assert.equal(targetStyle.height, 44);
       assert.equal(targetStyle.alignItems, 'center');
       assert.equal(targetStyle.justifyContent, 'center');
+      // React Native's iOS Switch adds its own flex-start; wrapper centering alone is ineffective.
+      const switchStyle = flattenStyle([{ alignSelf: platform === 'ios' ? 'flex-start' : 'auto' }, toggle.props.style]);
+      const alignment = switchStyle.alignSelf === 'auto' ? targetStyle.alignItems : switchStyle.alignSelf;
+      assert.equal(alignment, 'center');
+      const scale = switchStyle.transform.find((value) => 'scale' in value).scale;
+      for (const intrinsicWidth of platform === 'ios' ? [53, 65] : [52]) {
+        const nativeLeft = (targetStyle.width - intrinsicWidth) / 2;
+        const visualLeft = nativeLeft + intrinsicWidth * (1 - scale) / 2;
+        const visualRight = visualLeft + intrinsicWidth * scale;
+        assert.ok(visualLeft >= 0 && visualRight <= targetStyle.width,
+          `${platform} ${intrinsicWidth}pt switch must not extend into adjacent controls`);
+      }
       assert.equal(groupStyle.gap, flattenStyle(toolbar.props.style).gap);
       assert.equal(groupStyle.marginRight ?? 0, 0);
       assert.equal(groupStyle.marginLeft ?? 0, 0);
@@ -562,6 +574,33 @@ test('native Computer switch has symmetric visual spacing and a centered 44pt to
       h.render({ computerEnabled: true, computerBusy: true }); h.settle();
       assert.equal(find(h.composerTree, 'Switch').props.value, true);
       assert.equal(find(h.composerTree, 'Switch').props.disabled, true);
+      assert.equal(find(h.composerTree, 'TextInput').props.ref, input);
+      assert.equal(find(h.composerTree, 'TextInput').props.value, 'Keep this draft');
+      assert.deepEqual(h.keyboardCalls, []); h.unmount();
+    }
+  }
+});
+
+test('long model labels yield toolbar width to running controls without remounting the input', () => {
+  for (const platform of ['android', 'ios']) {
+    for (const width of [430, 440]) {
+      const h = harness({ platform, composer: true, width });
+      const input = find(h.composerTree, 'TextInput').props.ref;
+      h.render({
+        models: [{ ...models(1)[0], name: 'A long model name that fills the label' }],
+        effort: 'medium', running: true, onSupplement: async () => false,
+      }); h.settle();
+      const trigger = find(h.composerTree, 'Pressable', (props) => props.accessibilityLabel.startsWith('模型 '));
+      const anchor = walk(h.composerTree).find((node) => node.type === 'View' && node.props.children === trigger);
+      const label = find(trigger, 'AppText');
+      assert.equal(flattenStyle(anchor.props.style).flexShrink, 1);
+      assert.equal(flattenStyle(anchor.props.style).minWidth, 0);
+      assert.equal(flattenStyle(label.props.style).flexShrink, 1);
+      assert.equal(flattenStyle(label.props.style).minWidth, 0);
+      assert.equal(label.props.numberOfLines, 1);
+      assert.ok(find(h.composerTree, 'Switch'));
+      assert.ok(find(h.composerTree, 'Pressable', (props) => props.accessibilityLabel === '补充当前任务要求'));
+      assert.ok(find(h.composerTree, 'IconButton', (props) => props.label === '加入队列'));
       assert.equal(find(h.composerTree, 'TextInput').props.ref, input);
       assert.equal(find(h.composerTree, 'TextInput').props.value, 'Keep this draft');
       assert.deepEqual(h.keyboardCalls, []); h.unmount();
