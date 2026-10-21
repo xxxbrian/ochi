@@ -5,15 +5,16 @@ const test = require('node:test');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-const jsx = (type, props) => ({ type, props: props ?? {} });
+const jsx = (type, props, key) => ({ type, key, props: props ?? {} });
 const walk = (node) => Array.isArray(node) ? node.flatMap(walk) : node && typeof node === 'object' && 'type' in node ? [node, ...walk(node.props.children)] : [];
 const flatten = (style) => typeof style === 'function' ? flatten(style()) : Array.isArray(style) ? Object.assign({}, ...style.map(flatten)) : style ?? {};
 
 // Exercise the real geometry/effect closures; native layout and hit-testing remain device QA.
-function harness(file, name, props, { width = 393, height = 852, insets = { top: 59, bottom: 34, left: 0, right: 0 } } = {}) {
+function harness(file, name, props, { width = 393, height = 852, insets = { top: 59, bottom: 34, left: 0, right: 0 }, platform = 'ios', keyboardHeight = 0 } = {}) {
   const slots = [], effects = [], frames = new Map(), timers = new Map(), shared = [], modules = new Map();
   const dimensions = { width, height, fontScale: 1 }, animations = [];
   let keyboardHandler;
+  const keyboard = { height: { value: -keyboardHeight }, progress: { value: keyboardHeight > 0 ? 1 : 0 } };
   const keyboardCalls = [];
   const theme = { fonts: { medium: 'medium', regular: 'regular', semibold: 'semibold' }, colors: { surface: '#fff', text: '#111', muted: '#777' } };
   const navigation = { setParams() {}, isFocused: () => true };
@@ -78,14 +79,14 @@ function harness(file, name, props, { width = 393, height = 852, insets = { top:
         if (imported === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'Fragment' };
         if (imported === 'react-native') return {
           ...Object.fromEntries(['View', 'Text', 'Image', 'Modal', 'ScrollView', 'Pressable', 'ActivityIndicator'].map((name) => [name, name])),
-          Platform: { OS: 'ios' }, Dimensions: { get: () => dimensions }, Keyboard: { dismiss() { keyboardCalls.push('dismiss'); } }, useWindowDimensions: () => dimensions,
+          Platform: { OS: platform }, Dimensions: { get: () => dimensions }, Keyboard: { dismiss() { keyboardCalls.push('dismiss'); } }, useWindowDimensions: () => dimensions,
           Animated: nativeAnimated, PanResponder: { create: () => ({ panHandlers: {} }) },
           StyleSheet: { create: (value) => value, absoluteFill: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }, hairlineWidth: 0.5 },
         };
         if (imported === 'react-native-reanimated') return motion;
         if (imported === 'react-native-gesture-handler') return { GestureDetector: 'GestureDetector', GestureHandlerRootView: 'GestureHandlerRootView', Gesture: new Proxy({}, { get: () => chain }) };
         if (imported === 'react-native-safe-area-context') return { SafeAreaListener: 'SafeAreaListener', useSafeAreaInsets: () => insets };
-        if (imported === 'react-native-keyboard-controller') return { KeyboardAvoidingView: 'KeyboardAvoidingView', useKeyboardState: (select) => select({ isVisible: true }), useGenericKeyboardHandler(handler) { keyboardHandler = handler; }, useKeyboardContext: () => ({ reanimated: { height: { value: 0 }, progress: { value: 0 } } }) };
+        if (imported === 'react-native-keyboard-controller') return { KeyboardAvoidingView: 'KeyboardAvoidingView', useKeyboardState: (select) => select({ isVisible: keyboard.height.value < 0 }), useGenericKeyboardHandler(handler) { keyboardHandler = handler; }, useKeyboardContext: () => ({ reanimated: keyboard }) };
         if (imported === '../providers/AppProvider') return { useTheme: () => theme, useApp: () => app };
         if (imported === 'expo-router') return { router: {}, useNavigation: () => navigation, useIsFocused: () => true };
         if (imported === '../hooks/useSessionChat') return { useSessionChat: () => chat };
@@ -118,7 +119,7 @@ function harness(file, name, props, { width = 393, height = 852, insets = { top:
   render(); settle();
   return {
     get tree() { return tree; }, shared, animations, keyboardCalls,
-    keyboard(height) { keyboardHandler.onMove({ height, progress: height > 0 ? 1 : 0 }); settle(); },
+    keyboard(height, progress = height > 0 ? 1 : 0) { keyboard.height.value = -height; keyboard.progress.value = progress; keyboardHandler?.onMove({ height, progress }); render(); settle(); },
     resize(width, height, nextInsets) { Object.assign(dimensions, { width, height }); Object.assign(insets, nextInsets); render(); settle(); },
     settle,
     expireTimers() { for (const [key, callback] of [...timers]) { timers.delete(key); callback(); } settle(); },
@@ -256,6 +257,45 @@ test('short-height chat composer scrolls to keep its input/send tail visible onl
     assert.equal(calls.every((animated) => animated === false), true);
     assert.deepEqual(h.keyboardCalls, []);
   }
+});
+
+test('Android chat uses the live IME inset on every frame, independent of previous layouts and open heights', () => {
+  const h = harness('src/screens/ChatScreen.tsx', 'ChatScreen', {}, { platform: 'android', keyboardHeight: 312 });
+  const area = () => walk(h.tree).find((node) => node.type === 'Animated.View' && typeof flatten(node.props.style).paddingBottom === 'number');
+  const composer = () => walk(walk(h.tree).find((node) => node.type === 'BlurScene').props.overlay).find((node) => node.type === 'Composer');
+  const originalKey = composer().key;
+  const originalScroll = () => walk(walk(h.tree).find((node) => node.type === 'BlurScene').props.overlay).find((node) => node.type === 'ScrollView').props.ref;
+  const scrollRef = originalScroll();
+  assert.equal(originalKey, 0);
+  assert.equal(walk(h.tree).some((node) => node.type === 'KeyboardAvoidingView'), false);
+  assert.equal(flatten(area().props.style).paddingBottom, 312, 'mounting over an already-open keyboard needs no new start event');
+  for (const [height, progress] of [[0, 0], [110, 0.4], [340, 1], [240, 1], [0, 0], [96, 0.3], [288, 1], [0, 0], [340, 1]]) {
+    h.keyboard(height, progress);
+    const current = area();
+    assert.equal(flatten(current.props.style).paddingBottom, height);
+    // A changed or late body-layout event must not become the next IME baseline.
+    current.props.children.props.onLayout({ nativeEvent: { layout: { height: 852 - 105 - height } } });
+    h.settle();
+    assert.equal(flatten(area().props.style).paddingBottom, height);
+    assert.equal(composer().key, originalKey);
+    assert.equal(originalScroll(), scrollRef);
+  }
+  h.resize(852, 393, { top: 0, bottom: 0, left: 24, right: 0 });
+  h.keyboard(178);
+  assert.equal(flatten(area().props.style).paddingBottom, 178);
+  h.resize(852, 393, { left: 0, right: 24 });
+  assert.equal(flatten(area().props.style).paddingBottom, 178);
+  assert.equal(originalScroll(), scrollRef);
+  assert.deepEqual(h.keyboardCalls, []);
+});
+
+test('iOS chat retains native frame-aware keyboard avoidance without applying Android IME padding', () => {
+  const h = harness('src/screens/ChatScreen.tsx', 'ChatScreen', {}, { platform: 'ios', keyboardHeight: 320 });
+  const area = walk(h.tree).find((node) => node.type === 'KeyboardAvoidingView');
+  assert.equal(area.props.behavior, 'padding');
+  assert.equal(area.props.automaticOffset, true);
+  assert.equal(flatten(area.props.style).paddingBottom, undefined);
+  assert.deepEqual(h.keyboardCalls, []);
 });
 
 test('shared menu triggers reject late measurements after a same-width safe-area flip and accept a fresh press', () => {

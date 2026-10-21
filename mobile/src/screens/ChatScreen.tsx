@@ -5,6 +5,7 @@ import {
   BackHandler,
   Keyboard,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,9 +32,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   KeyboardAvoidingView,
+  useKeyboardContext,
   useKeyboardState,
 } from "react-native-keyboard-controller";
-import { useReducedMotion } from "react-native-reanimated";
+import Reanimated, { useAnimatedStyle, useReducedMotion } from "react-native-reanimated";
 import { api, isActiveStatus } from "../lib/api";
 import { useApp } from "../providers/AppProvider";
 import { useSessionChat } from "../hooks/useSessionChat";
@@ -59,6 +61,8 @@ import { SessionDrawer } from "../components/SessionDrawer";
 import { brand } from "../../brand.config";
 import type { Message, PendingRun } from "../lib/types";
 
+const KeyboardArea = Platform.OS === "android" ? Reanimated.View : KeyboardAvoidingView;
+
 export function ChatScreen({
   sessionId,
   projectId,
@@ -81,6 +85,11 @@ export function ChatScreen({
   const viewport = useWindowDimensions();
   const shortViewport = viewport.width > viewport.height && viewport.height < 600;
   const keyboardVisible = useKeyboardState((state) => state.isVisible);
+  const { reanimated: keyboard } = useKeyboardContext();
+  // Android's edge-to-edge root stays full height; use live IME insets, not a cached view frame.
+  const androidKeyboardPadding = useAnimatedStyle(() => ({
+    paddingBottom: Math.max(0, -keyboard.height.value),
+  }));
   const reducedMotion = useReducedMotion();
   const drawerWidth = Math.min(320 + insets.left, viewport.width * 0.84);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -642,7 +651,10 @@ export function ChatScreen({
                   : undefined
               }
             />
-            <KeyboardAvoidingView behavior="padding" automaticOffset style={{ flex: 1 }}>
+            <KeyboardArea
+              {...(Platform.OS === "android" ? {} : { behavior: "padding" as const, automaticOffset: true })}
+              style={[{ flex: 1 }, Platform.OS === "android" && androidKeyboardPadding]}
+            >
               <View style={{ flex: 1, minHeight: 0, paddingLeft: insets.left, paddingRight: insets.right }} onLayout={(event) => {
                 const height = Math.round(event.nativeEvent.layout.height);
                 setBodyHeight((current) => current === height ? current : height);
@@ -677,7 +689,7 @@ export function ChatScreen({
                 )}
               </BlurScene>
               </View>
-            </KeyboardAvoidingView>
+            </KeyboardArea>
             {!keyboardVisible && insets.bottom > 0 && (
               <Animated.View
                 pointerEvents="none"
