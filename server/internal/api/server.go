@@ -898,6 +898,12 @@ func (s *Server) selectedModel(ctx context.Context, id, effort string) (storage.
 		models, err = s.store.Models(ctx, true)
 		if len(models) > 0 {
 			model = models[0]
+			for _, candidate := range models {
+				if candidate.IsDefault {
+					model = candidate
+					break
+				}
+			}
 		}
 	}
 	if err != nil {

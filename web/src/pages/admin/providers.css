@@ -52,6 +52,18 @@
     background: var(--muted);
 }
 .provider-detail { min-width: 0; }
+.model-order-body { min-height: 200px; }
+.model-order-hint { margin: 0 0 16px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.model-order-list { list-style: none; margin: 0; padding: 0; }
+.model-order-list > li { display: flex; align-items: center; gap: 8px; min-height: 60px; border-bottom: 1px solid var(--line); }
+.model-order-default { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+.model-order-default input { margin: 0; accent-color: var(--ink); flex-shrink: 0; }
+.model-order-default > span:not(.model-default) { min-width: 0; }
+.model-order-default strong, .model-order-default small { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.model-order-default strong { font-size: 14px; font-weight: 500; }
+.model-order-default small { margin-top: 3px; font-size: 12px; color: var(--muted); }
+.model-order-actions { display: flex; flex-shrink: 0; }
+.model-order-actions .icon-button { width: 30px; height: 36px; }
 .provider-heading {
     display: flex;
     align-items: flex-start;

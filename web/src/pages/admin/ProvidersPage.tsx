@@ -16,8 +16,13 @@ import {
   ImagePlus,
   Wrench,
   Brain,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpToLine,
+  ListOrdered,
 } from "lucide-react";
 import { adminApi } from "../../lib/api";
+import { moveModel } from "../../lib/modelSelection";
 import type { CatalogModel, Model, Provider } from "../../lib/types";
 import { Modal } from "../../components/Modal";
 import { BrandIcon } from "../../components/BrandIcon";
@@ -93,6 +98,9 @@ export default function ProvidersPage() {
   const [catalogProvider, setCatalogProvider] = useState("");
   const [catalogModels, setCatalogModels] = useState<CatalogModel[]>([]);
   const [catalogQuery, setCatalogQuery] = useState("");
+  const [modelOrder, setModelOrder] = useState<string[] | null>(null);
+  const [defaultModel, setDefaultModel] = useState("");
+  const [orderError, setOrderError] = useState("");
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -117,6 +125,26 @@ export default function ProvidersPage() {
     void refresh();
   }, [refresh]);
   const provider = providers.find((item) => item.id === selected);
+  function editModelOrder() {
+    const published = models.filter((model) => model.enabled && model.available !== false &&
+      (!model.kind || model.kind === "chat") && providers.some((item) => item.id === model.provider_id && item.enabled));
+    setModelOrder(published.map((model) => model.id));
+    setDefaultModel((published.find((model) => model.is_default) ?? published[0])?.id ?? "");
+    setOrderError("");
+  }
+  async function saveModelOrder() {
+    if (!modelOrder) return;
+    setBusy("model-order");
+    setOrderError("");
+    try {
+      await adminApi.saveModelOrder(modelOrder, defaultModel);
+      await refresh();
+      setModelOrder(null);
+      setNotice("模型顺序和默认模型已保存");
+    } catch (reason) {
+      setOrderError(reason instanceof Error ? reason.message : "保存失败");
+    } finally { setBusy(""); }
+  }
   const filtered = useMemo(
     () =>
       models.filter(
@@ -397,12 +425,54 @@ export default function ProvidersPage() {
     <>
       <div className="admin-page-heading">
         <h2>模型服务</h2>
-        <button className="primary-button" onClick={() => editProvider()}>
-          <Plus size={16} />
-          添加 Provider
-        </button>
+        <div className="toolbar-actions">
+          <button className="secondary-button" onClick={editModelOrder} disabled={loading}>
+            <ListOrdered size={16} />
+            顺序与默认模型
+          </button>
+          <button className="primary-button" onClick={() => editProvider()}>
+            <Plus size={16} />
+            添加 Provider
+          </button>
+        </div>
       </div>
       <ErrorNotice error={error} notice={notice} />
+      {modelOrder && <Modal title="顺序与默认模型" onClose={() => { if (busy !== "model-order") setModelOrder(null); }}
+        bodyClassName="model-order-body"
+        footer={<>
+          <button className="secondary-button" onClick={() => setModelOrder(null)} disabled={busy === "model-order"}>取消</button>
+          <button className="primary-button" onClick={() => void saveModelOrder()} disabled={busy === "model-order"}>
+            {busy === "model-order" && <LoaderCircle size={15} className="spin" />}保存
+          </button>
+        </>}>
+        <p className="model-order-hint">所有服务共用此顺序。新用户使用默认模型，已选过模型的用户保留自己的选择。</p>
+        <ErrorNotice error={orderError} />
+        <ol className="model-order-list">
+          {modelOrder.map((id, index) => {
+            const model = models.find((item) => item.id === id);
+            if (!model) return null;
+            const name = model.name || model.model;
+            return <li key={id}>
+              <label className="model-order-default">
+                <input type="radio" name="default-model" checked={defaultModel === id} onChange={() => setDefaultModel(id)}
+                  disabled={busy === "model-order"} aria-label={`默认模型：${name}`} />
+                <BrandIcon src={model.icon} size={20} />
+                <span><strong>{name}</strong><small>{model.provider_name}</small></span>
+                {defaultModel === id && <span className="model-default">默认</span>}
+              </label>
+              <div className="model-order-actions">
+                <button className="icon-button" aria-label={`置顶 ${name}`} title="置顶" disabled={!index || busy === "model-order"}
+                  onClick={() => setModelOrder([id, ...modelOrder.filter((item) => item !== id)])}><ArrowUpToLine size={15} /></button>
+                <button className="icon-button" aria-label={`上移 ${name}`} title="上移" disabled={!index || busy === "model-order"}
+                  onClick={() => setModelOrder(moveModel(modelOrder, id, -1))}><ArrowUp size={15} /></button>
+                <button className="icon-button" aria-label={`下移 ${name}`} title="下移" disabled={index === modelOrder.length - 1 || busy === "model-order"}
+                  onClick={() => setModelOrder(moveModel(modelOrder, id, 1))}><ArrowDown size={15} /></button>
+              </div>
+            </li>;
+          })}
+        </ol>
+        {!modelOrder.length && <div className="empty-page">暂无已启用的对话模型</div>}
+      </Modal>}
       {loading && !providers.length ? (
         <div className="panel-loading">
           <LoaderCircle className="spin" size={22} />

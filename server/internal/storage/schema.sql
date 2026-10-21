@@ -162,6 +162,7 @@ CREATE TABLE models (
     model text NOT NULL,
     enabled boolean DEFAULT true NOT NULL,
     is_default boolean DEFAULT false NOT NULL,
+    sort_order integer DEFAULT 2147483647 NOT NULL,
     context_window integer DEFAULT 64000 NOT NULL,
     supports_tools boolean DEFAULT true NOT NULL,
     supports_vision boolean DEFAULT false NOT NULL,
@@ -409,7 +410,8 @@ CREATE TABLE user_preferences (
     user_id text NOT NULL,
     memory_enabled boolean DEFAULT true NOT NULL,
     memory_revision bigint DEFAULT 0 NOT NULL,
-    computer_default boolean DEFAULT false NOT NULL
+    computer_default boolean DEFAULT false NOT NULL,
+    preferred_model_id text DEFAULT ''::text NOT NULL
 );
 
 CREATE TABLE users (

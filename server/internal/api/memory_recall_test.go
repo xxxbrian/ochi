@@ -66,7 +66,7 @@ func TestMemorySearchDatabaseInflightUserMutations(t *testing.T) {
 	for _, mutation := range []string{"disable", "edit", "delete"} {
 		t.Run(mutation, func(t *testing.T) {
 			on := true
-			if _, err := store.PatchPreferences(ctx, user.ID, &on, nil); err != nil {
+			if _, err := store.PatchPreferences(ctx, user.ID, storage.PreferencesPatch{MemoryEnabled: &on}); err != nil {
 				t.Fatal(err)
 			}
 			record, err := store.SaveMemoryRecord(ctx, user.ID, storage.Memory{Content: "Private preference " + mutation, Source: "user"})
@@ -96,7 +96,7 @@ func TestMemorySearchDatabaseInflightUserMutations(t *testing.T) {
 			switch mutation {
 			case "disable":
 				off := false
-				_, err = store.PatchPreferences(ctx, user.ID, &off, nil)
+				_, err = store.PatchPreferences(ctx, user.ID, storage.PreferencesPatch{MemoryEnabled: &off})
 			case "edit":
 				record.Content += " changed"
 				_, err = store.SaveMemoryRecord(ctx, user.ID, record)

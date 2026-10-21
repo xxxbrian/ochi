@@ -92,7 +92,7 @@ func TestCoreMemoryStartQueuedPersistsRecallDiagnostics(t *testing.T) {
 		t.Fatal("initial pre-admission recall diagnostics were missing or leaked provider content")
 	}
 	off := false
-	if _, err := f.server.store.PatchPreferences(ctx, f.owner, &off, nil); err != nil {
+	if _, err := f.server.store.PatchPreferences(ctx, f.owner, storage.PreferencesPatch{MemoryEnabled: &off}); err != nil {
 		t.Fatal(err)
 	}
 	update, err := request.AtBoundary(ctx)
@@ -146,14 +146,14 @@ func TestCoreMemoryBoundaryInvalidationAndSteering(t *testing.T) {
 		t.Fatal("delete without steering left old personal facts")
 	}
 	off, on := false, true
-	if _, err := f.server.store.PatchPreferences(ctx, f.owner, &off, nil); err != nil {
+	if _, err := f.server.store.PatchPreferences(ctx, f.owner, storage.PreferencesPatch{MemoryEnabled: &off}); err != nil {
 		t.Fatal(err)
 	}
 	update, err = request.AtBoundary(ctx)
 	if err != nil || update.MemoryContext == nil || *update.MemoryContext != "" || calls.Load() != 1 {
 		t.Fatal("disable without steering retained related recall")
 	}
-	if _, err := f.server.store.PatchPreferences(ctx, f.owner, &on, nil); err != nil {
+	if _, err := f.server.store.PatchPreferences(ctx, f.owner, storage.PreferencesPatch{MemoryEnabled: &on}); err != nil {
 		t.Fatal(err)
 	}
 	expires := time.Now().Add(200 * time.Millisecond)

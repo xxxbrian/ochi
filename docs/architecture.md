@@ -116,6 +116,14 @@ search services. Users see published capabilities and supported reasoning
 controls, never provider credentials. Search adapters are server-side; results
 are grouped in the clients rather than one row for every fetched page.
 
+Published chat models have one administrator-managed order across providers and
+an independent initial default. An explicit user choice is stored with that
+account's preferences and is reused for new conversations and after restart.
+Opening history retains the conversation's model without changing this account
+preference. An unpublished/removed preference falls back to the administrator
+default, then the first published model; newly published models append after
+the explicitly ordered list.
+
 Plugins are administrator-managed bundles of Skills and MCP. Mandatory defaults
 cannot be disabled by users; optional plugins have per-user switches. Discovery
 and dispatch both enforce the current policy. There is no third-party catalog

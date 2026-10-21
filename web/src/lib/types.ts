@@ -32,6 +32,7 @@ export type UpdateState = {
 export type UserPreferences = {
   memory_enabled: boolean;
   computer_default: boolean;
+  preferred_model_id: string;
 };
 
 export type ReasoningOption = {
@@ -52,6 +53,7 @@ export type Model = {
   enabled: boolean;
   available?: boolean;
   is_default: boolean;
+  sort_order?: number;
   context_window: number;
   max_output_tokens?: number;
   supports_tools: boolean;

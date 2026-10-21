@@ -16,9 +16,15 @@ import (
 )
 
 type Preferences struct {
-	MemoryEnabled   bool  `json:"memory_enabled"`
-	ComputerDefault bool  `json:"computer_default"`
-	MemoryRevision  int64 `json:"-"`
+	MemoryEnabled    bool   `json:"memory_enabled"`
+	ComputerDefault  bool   `json:"computer_default"`
+	PreferredModelID string `json:"preferred_model_id"`
+	MemoryRevision   int64  `json:"-"`
+}
+type PreferencesPatch struct {
+	MemoryEnabled    *bool   `json:"memory_enabled"`
+	ComputerDefault  *bool   `json:"computer_default"`
+	PreferredModelID *string `json:"preferred_model_id"`
 }
 type Memory struct {
 	ID               string     `json:"id"`
@@ -52,25 +58,34 @@ func scanMemory(row pgx.Row, extra ...any) (Memory, error) {
 }
 func (s *Store) Preferences(ctx context.Context, userID string) (Preferences, error) {
 	v := Preferences{MemoryEnabled: true}
-	err := s.db.QueryRow(ctx, `SELECT COALESCE((SELECT memory_enabled FROM user_preferences WHERE user_id=$1),true),COALESCE((SELECT memory_revision FROM user_preferences WHERE user_id=$1),0),COALESCE((SELECT computer_default FROM user_preferences WHERE user_id=$1),false)`, userID).Scan(&v.MemoryEnabled, &v.MemoryRevision, &v.ComputerDefault)
+	err := s.db.QueryRow(ctx, `SELECT COALESCE((SELECT memory_enabled FROM user_preferences WHERE user_id=$1),true),COALESCE((SELECT memory_revision FROM user_preferences WHERE user_id=$1),0),COALESCE((SELECT computer_default FROM user_preferences WHERE user_id=$1),false),COALESCE((SELECT preferred_model_id FROM user_preferences WHERE user_id=$1),'')`, userID).Scan(&v.MemoryEnabled, &v.MemoryRevision, &v.ComputerDefault, &v.PreferredModelID)
 	return v, err
 }
 func (s *Store) SavePreferences(ctx context.Context, userID string, v Preferences) error {
-	_, err := s.PatchPreferences(ctx, userID, &v.MemoryEnabled, &v.ComputerDefault)
+	_, err := s.PatchPreferences(ctx, userID, PreferencesPatch{MemoryEnabled: &v.MemoryEnabled, ComputerDefault: &v.ComputerDefault, PreferredModelID: &v.PreferredModelID})
 	return err
 }
 
-func (s *Store) PatchPreferences(ctx context.Context, userID string, memoryEnabled, computerDefault *bool) (Preferences, error) {
+func (s *Store) PatchPreferences(ctx context.Context, userID string, patch PreferencesPatch) (Preferences, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return Preferences{}, err
 	}
 	defer tx.Rollback(context.Background())
-	_, err = tx.Exec(ctx, `INSERT INTO user_preferences(user_id,memory_enabled,computer_default) VALUES($1,COALESCE($2,true),COALESCE($3,false)) ON CONFLICT(user_id) DO UPDATE SET memory_enabled=COALESCE($2,user_preferences.memory_enabled),computer_default=COALESCE($3,user_preferences.computer_default),memory_revision=user_preferences.memory_revision+CASE WHEN $2 IS NOT NULL AND user_preferences.memory_enabled<>$2 THEN 1 ELSE 0 END`, userID, memoryEnabled, computerDefault)
+	if patch.PreferredModelID != nil && *patch.PreferredModelID != "" {
+		var available bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM models m JOIN providers p ON p.id=m.provider_id WHERE m.id::text=$1 AND m.enabled AND p.enabled AND m.available AND m.kind='chat')`, *patch.PreferredModelID).Scan(&available); err != nil {
+			return Preferences{}, err
+		}
+		if !available {
+			return Preferences{}, ErrModelSelection
+		}
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO user_preferences(user_id,memory_enabled,computer_default,preferred_model_id) VALUES($1,COALESCE($2,true),COALESCE($3,false),COALESCE($4,'')) ON CONFLICT(user_id) DO UPDATE SET memory_enabled=COALESCE($2,user_preferences.memory_enabled),computer_default=COALESCE($3,user_preferences.computer_default),preferred_model_id=COALESCE($4,user_preferences.preferred_model_id),memory_revision=user_preferences.memory_revision+CASE WHEN $2 IS NOT NULL AND user_preferences.memory_enabled<>$2 THEN 1 ELSE 0 END`, userID, patch.MemoryEnabled, patch.ComputerDefault, patch.PreferredModelID)
 	if err != nil {
 		return Preferences{}, err
 	}
-	if memoryEnabled != nil {
+	if patch.MemoryEnabled != nil {
 		if _, err = tx.Exec(ctx, `UPDATE sessions SET memory_context=NULL WHERE user_id=$1`, userID); err != nil {
 			return Preferences{}, err
 		}

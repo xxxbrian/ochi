@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Check, ChevronRight, Folder, LoaderCircle, SquarePen, X } from "lucide-react";
 import { api, isActiveStatus } from "./lib/api";
+import { preferredChatModel } from "./lib/modelSelection";
 import type {
   Artifact,
   Message,
@@ -126,6 +127,11 @@ export default function App() {
   const selectedRef = useRef<string | null>(null);
   const selectedSessionRef = useRef<Session | null>(null);
   const modelsRef = useRef<Model[]>([]);
+  const preferredModelRef = useRef("");
+  const confirmedModelRef = useRef("");
+  const modelPreferenceWrites = useRef(Promise.resolve());
+  const modelPreferenceRevision = useRef(0);
+  const modelPreferenceOwner = useRef<object | null>(null);
   const selectionGeneration = useRef(0);
   userRef.current = user;
   modelsRef.current = models;
@@ -210,6 +216,9 @@ export default function App() {
     [replaceSessions, updateSelectedSession],
   );
   const expired = useCallback(() => {
+    modelPreferenceOwner.current = null;
+    preferredModelRef.current = "";
+    confirmedModelRef.current = "";
     selectionGeneration.current += 1;
     selectedRef.current = null;
     setSelectedId(null);
@@ -342,6 +351,11 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (!user) return;
+    const preferenceOwner = {};
+    modelPreferenceOwner.current = preferenceOwner;
+    modelPreferenceWrites.current = Promise.resolve();
+    preferredModelRef.current = "";
+    confirmedModelRef.current = "";
     railGeneration.current += 1;
     let cancelled = false;
     setLoading(true);
@@ -359,8 +373,9 @@ export default function App() {
         replaceSessions(list, true);
         setComputerDefault(preferences.computer_default);
         setDraftComputerEnabled(preferences.computer_default);
-        const defaultModel =
-          available?.find((model) => model.is_default) ?? available?.[0];
+        preferredModelRef.current = preferences.preferred_model_id;
+        confirmedModelRef.current = preferences.preferred_model_id;
+        const defaultModel = preferredChatModel(available ?? [], preferences.preferred_model_id);
         if (defaultModel) {
           setModelId(defaultModel.id);
           setEffort(defaultModel.default_effort ?? "");
@@ -395,6 +410,7 @@ export default function App() {
     return () => {
       cancelled = true;
       clearInterval(poll);
+      if (modelPreferenceOwner.current === preferenceOwner) modelPreferenceOwner.current = null;
     };
   }, [user, selectSession, navigate, replaceSessions]);
   useEffect(() => {
@@ -411,6 +427,11 @@ export default function App() {
       setMessages([]);
       setQueue([]);
       setDraftComputerEnabled(computerDefault);
+      const chosen = preferredChatModel(modelsRef.current, preferredModelRef.current);
+      setModelId(chosen?.id ?? "");
+      setEffort(chosen?.default_effort ?? "");
+      setBudget(chosen?.reasoning_budget_default);
+      setReasoningEnabled(true);
       setRevision(null);
       setComposerKey((value) => value + 1);
     }
@@ -510,6 +531,11 @@ export default function App() {
     setDrawerOpen(false);
     setRevision(null);
     setDraftComputerEnabled(computerDefault);
+    const chosen = preferredChatModel(modelsRef.current, preferredModelRef.current);
+    setModelId(chosen?.id ?? "");
+    setEffort(chosen?.default_effort ?? "");
+    setBudget(chosen?.reasoning_budget_default);
+    setReasoningEnabled(true);
     navigate("/");
     setOlderAvailable(false);
     setQueue([]);
@@ -660,22 +686,33 @@ export default function App() {
   const changeModel = useCallback(
     async (id: string) => {
       const next = models.find((model) => model.id === id);
-      if (!next) return;
+      const owner = modelPreferenceOwner.current;
+      if (!next || !owner) return;
       const nextEffort = next.efforts?.includes(effort)
         ? effort
         : (next.default_effort ?? "");
+      const sessionID = route.kind === "chat" && !isActiveStatus(snapshotRef.current?.status) ? selectedRef.current : null;
+      const revision = ++modelPreferenceRevision.current;
+      preferredModelRef.current = id;
+      setModelId(id);
+      setBudget(next.reasoning_budget_default);
+      setReasoningEnabled(true);
+      setEffort(nextEffort);
+      const write = modelPreferenceWrites.current.catch(() => undefined).then(async () => {
+        if (modelPreferenceOwner.current !== owner) return;
+        const saved = await api.updatePreferences({ preferred_model_id: id });
+        if (modelPreferenceOwner.current !== owner) return;
+        confirmedModelRef.current = saved.preferred_model_id;
+        if (modelPreferenceRevision.current === revision) preferredModelRef.current = saved.preferred_model_id;
+        if (sessionID) await api.updateSession(sessionID, { model_id: id, effort: nextEffort });
+      });
+      modelPreferenceWrites.current = write;
       try {
-        if (route.kind === "chat" && selectedRef.current && !isActiveStatus(snapshotRef.current?.status))
-          await api.updateSession(selectedRef.current, {
-            model_id: id,
-            effort: nextEffort,
-          });
-        setModelId(id);
-        setBudget(next.reasoning_budget_default);
-        setReasoningEnabled(true);
-        setEffort(nextEffort);
+        await write;
       } catch (reason) {
-        setError(errorText(reason, "切换失败"));
+        if (modelPreferenceOwner.current !== owner) return;
+        if (modelPreferenceRevision.current === revision) preferredModelRef.current = confirmedModelRef.current;
+        setError(errorText(reason, "记住模型失败"));
       }
     },
     [models, effort, route.kind],
@@ -854,8 +891,7 @@ export default function App() {
       const available = await api.models();
       setModels(available ?? []);
       if (!available?.some((model) => model.id === modelId)) {
-        const chosen =
-          available?.find((model) => model.is_default) ?? available?.[0];
+        const chosen = preferredChatModel(available ?? [], preferredModelRef.current);
         setModelId(chosen?.id ?? "");
         setEffort(chosen?.default_effort ?? "");
       }

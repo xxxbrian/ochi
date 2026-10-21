@@ -337,6 +337,11 @@ function providerRequestsPath(runID?: string) {
 export const adminApi = {
   providers: () => request<Provider[]>("/api/admin/providers"),
   models: () => request<Model[]>("/api/admin/models"),
+  saveModelOrder: (model_ids: string[], default_model_id: string) =>
+    request<void>("/api/admin/models/order", {
+      method: "PUT",
+      body: JSON.stringify({ model_ids, default_model_id }),
+    }),
   resolveMetadata: (providerId: string, model: string) =>
     request<{ matched: boolean; model?: Model; metadata_match: string }>(
       `/api/admin/catalog/resolve?provider_id=${encodeURIComponent(providerId)}&model=${encodeURIComponent(model)}`,

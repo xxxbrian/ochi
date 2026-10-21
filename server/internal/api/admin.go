@@ -35,6 +35,7 @@ func (s *Server) registerAdminRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/catalog/models", s.auth.admin(s.modelCatalog))
 	mux.HandleFunc("POST /api/admin/models/{id}/test", s.auth.admin(s.testModel))
 	mux.HandleFunc("POST /api/admin/models/{id}/catalog", s.auth.admin(s.applyModelCatalog))
+	mux.HandleFunc("PUT /api/admin/models/order", s.auth.admin(s.adminModelOrder))
 	for _, path := range []string{"GET /api/admin/models", "POST /api/admin/models", "PATCH /api/admin/models/{id}", "DELETE /api/admin/models/{id}"} {
 		mux.HandleFunc(path, s.auth.admin(s.adminModels))
 	}

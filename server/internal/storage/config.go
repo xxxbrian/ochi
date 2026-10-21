@@ -65,6 +65,7 @@ type Model struct {
 	Model                   string                     `json:"model"`
 	Enabled                 bool                       `json:"enabled"`
 	IsDefault               bool                       `json:"is_default"`
+	SortOrder               int                        `json:"sort_order"`
 	ContextWindow           int                        `json:"context_window"`
 	SupportsTools           bool                       `json:"supports_tools"`
 	SupportsVision          bool                       `json:"supports_vision"`
@@ -282,13 +283,13 @@ func (s *Store) DeleteProvider(ctx context.Context, id string) error {
 	return err
 }
 
-const modelColumns = `m.id::text,m.provider_id::text,p.name,m.name,m.model,m.enabled,m.is_default,m.context_window,m.supports_tools,m.supports_vision,m.efforts,m.default_effort,m.effort_parameter,m.effort_mapping,m.source,m.available,m.max_output_tokens,m.modalities,m.structured_output,m.reasoning_kind,m.reasoning_options,m.reasoning_budget_min,m.reasoning_budget_max,m.reasoning_budget_default,m.metadata_source,m.metadata_updated_at,m.catalog_provider_id,m.catalog_model_id,m.last_test,m.kind,m.metadata_overrides,m.metadata_known,m.metadata_match,p.catalog_provider_id,p.base_url,m.supports_image_generation,m.image_config`
+const modelColumns = `m.id::text,m.provider_id::text,p.name,m.name,m.model,m.enabled,m.is_default,m.context_window,m.supports_tools,m.supports_vision,m.efforts,m.default_effort,m.effort_parameter,m.effort_mapping,m.source,m.available,m.max_output_tokens,m.modalities,m.structured_output,m.reasoning_kind,m.reasoning_options,m.reasoning_budget_min,m.reasoning_budget_max,m.reasoning_budget_default,m.metadata_source,m.metadata_updated_at,m.catalog_provider_id,m.catalog_model_id,m.last_test,m.kind,m.metadata_overrides,m.metadata_known,m.metadata_match,p.catalog_provider_id,p.base_url,m.supports_image_generation,m.image_config,m.sort_order`
 
 func scanModel(row pgx.Row) (Model, error) {
 	var m Model
 	var efforts, mapping, modalities, options, overrides, known, imageConfig []byte
 	var catalogProvider, baseURL string
-	err := row.Scan(&m.ID, &m.ProviderID, &m.ProviderName, &m.Name, &m.Model, &m.Enabled, &m.IsDefault, &m.ContextWindow, &m.SupportsTools, &m.SupportsVision, &efforts, &m.DefaultEffort, &m.EffortParameter, &mapping, &m.Source, &m.Available, &m.MaxOutputTokens, &modalities, &m.StructuredOutput, &m.ReasoningKind, &options, &m.ReasoningBudgetMin, &m.ReasoningBudgetMax, &m.ReasoningBudgetDefault, &m.MetadataSource, &m.MetadataUpdatedAt, &m.CatalogProviderID, &m.CatalogModelID, &m.LastTest, &m.Kind, &overrides, &known, &m.MetadataMatch, &catalogProvider, &baseURL, &m.SupportsImageGeneration, &imageConfig)
+	err := row.Scan(&m.ID, &m.ProviderID, &m.ProviderName, &m.Name, &m.Model, &m.Enabled, &m.IsDefault, &m.ContextWindow, &m.SupportsTools, &m.SupportsVision, &efforts, &m.DefaultEffort, &m.EffortParameter, &mapping, &m.Source, &m.Available, &m.MaxOutputTokens, &modalities, &m.StructuredOutput, &m.ReasoningKind, &options, &m.ReasoningBudgetMin, &m.ReasoningBudgetMax, &m.ReasoningBudgetDefault, &m.MetadataSource, &m.MetadataUpdatedAt, &m.CatalogProviderID, &m.CatalogModelID, &m.LastTest, &m.Kind, &overrides, &known, &m.MetadataMatch, &catalogProvider, &baseURL, &m.SupportsImageGeneration, &imageConfig, &m.SortOrder)
 	if err != nil {
 		return m, err
 	}
@@ -320,7 +321,7 @@ func (s *Store) modelsOfKind(ctx context.Context, published bool, kind string) (
 		}
 		args = append(args, kind)
 	}
-	query += ` ORDER BY m.is_default DESC,m.created_at,m.id`
+	query += ` ORDER BY m.sort_order,m.created_at,m.id`
 	rows, err := s.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err

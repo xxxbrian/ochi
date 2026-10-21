@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/storage"
 )
 
 type personalTools struct {
@@ -300,14 +301,15 @@ func (s *Server) registerPersonalRoutes(mux *http.ServeMux) {
 		writeJSON(w, http.StatusOK, value)
 	}))
 	mux.HandleFunc("PATCH /api/preferences", s.auth.require(func(w http.ResponseWriter, r *http.Request) {
-		var patch struct {
-			MemoryEnabled   *bool `json:"memory_enabled"`
-			ComputerDefault *bool `json:"computer_default"`
-		}
+		var patch storage.PreferencesPatch
 		if !decodeRequest(w, r, &patch) {
 			return
 		}
-		value, err := s.store.PatchPreferences(r.Context(), currentUser(r).ID, patch.MemoryEnabled, patch.ComputerDefault)
+		value, err := s.store.PatchPreferences(r.Context(), currentUser(r).ID, patch)
+		if errors.Is(err, storage.ErrModelSelection) {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
 		if err != nil {
 			writeStoreError(w, err)
 			return

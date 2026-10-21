@@ -45,7 +45,7 @@ func artifactPolicyFixture(t *testing.T) (coreHTTPFixture, *artifactPolicyFiles,
 	t.Setenv("ARTIFACTS_ROOT", t.TempDir())
 	ctx := context.Background()
 	off := false
-	if _, err := f.server.store.PatchPreferences(ctx, f.owner, &off, nil); err != nil {
+	if _, err := f.server.store.PatchPreferences(ctx, f.owner, storage.PreferencesPatch{MemoryEnabled: &off}); err != nil {
 		t.Fatal(err)
 	}
 	source := &artifactPolicyFiles{coreEvalFilesystem: coreEvalFilesystem{root: t.TempDir(), userID: f.owner}}

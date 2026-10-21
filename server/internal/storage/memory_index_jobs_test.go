@@ -193,7 +193,7 @@ func TestMemoryIndexDatabaseMutationConfigAndDimensionGuards(t *testing.T) {
 	}
 	job, batch = memoryIndexBatch(t, s)
 	off, on := false, true
-	if _, err = s.PatchPreferences(ctx, memoryQAUser, &off, nil); err != nil {
+	if _, err = s.PatchPreferences(ctx, memoryQAUser, PreferencesPatch{MemoryEnabled: &off}); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.CompleteMemoryIndexBatch(ctx, job, batch, memoryIndexVectors(batch)); !errors.Is(err, ErrMemoryChanged) {
@@ -209,7 +209,7 @@ func TestMemoryIndexDatabaseMutationConfigAndDimensionGuards(t *testing.T) {
 	if candidate, err := s.ClaimMemoryIndexJob(ctx); err != nil || candidate != nil {
 		t.Fatal("disabled user was queued after model change")
 	}
-	if _, err = s.PatchPreferences(ctx, memoryQAUser, &on, nil); err != nil {
+	if _, err = s.PatchPreferences(ctx, memoryQAUser, PreferencesPatch{MemoryEnabled: &on}); err != nil {
 		t.Fatal(err)
 	}
 	job, batch = memoryIndexBatch(t, s)

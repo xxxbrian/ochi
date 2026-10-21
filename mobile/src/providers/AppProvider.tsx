@@ -6,6 +6,7 @@ import { api, clearCredentials, getAPIBaseURL, restoreCredentials, setAPIBaseURL
 import { createSessionListCache, type SessionListCache } from '../lib/sessionList';
 import { fonts, themeColors, type Colors, type ThemePreference } from '../lib/theme';
 import type { Model, User, UserPreferences } from '../lib/types';
+import { preferredChatModel } from '../../../web/src/lib/modelSelection';
 
 type AppContextValue = {
   user: User | null;
@@ -17,6 +18,8 @@ type AppContextValue = {
   colors: Colors;
   fonts: typeof fonts;
   models: Model[];
+  preferredModel: Model | undefined;
+  selectPreferredModel: (id: string) => Promise<void>;
   preferences: UserPreferences | null;
   invalidateVersion: number;
   setTheme: (value: ThemePreference) => void;
@@ -41,6 +44,10 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [theme, updateTheme] = useState<ThemePreference>('system');
   const [models, setModels] = useState<Model[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const preferenceOwner = useRef<object | null>(null);
+  const preferenceRevision = useRef(0);
+  const preferenceWrites = useRef(Promise.resolve());
+  const confirmedModel = useRef('');
   const [invalidateVersion, setVersion] = useState(0);
   const refreshedVersion = useRef(invalidateVersion);
   const dark = theme === 'system' ? systemTheme === 'dark' : theme === 'dark';
@@ -48,8 +55,47 @@ export function AppProvider({ children }: PropsWithChildren) {
   const sessionOwner = user ? `${getAPIBaseURL()}\0${user.id}` : '';
   const sessionList = useMemo(() => createSessionListCache((signal) => api.sessionsPage({ limit: 40 }, signal)), [sessionOwner]);
 
-  const refreshCatalog = useCallback(async () => { setModels(await api.models()); }, []);
-  const refreshPreferences = useCallback(async () => { setPreferences(await api.preferences()); }, []);
+  const refreshCatalog = useCallback(async () => {
+    const owner = preferenceOwner.current;
+    const available = await api.models();
+    if (owner && preferenceOwner.current === owner) setModels(available);
+  }, []);
+  const refreshPreferences = useCallback(async () => {
+    const owner = preferenceOwner.current;
+    await preferenceWrites.current.catch(() => undefined);
+    if (!owner || preferenceOwner.current !== owner) return;
+    const revision = preferenceRevision.current;
+    const value = await api.preferences();
+    if (owner && preferenceOwner.current === owner && preferenceRevision.current === revision) {
+      confirmedModel.current = value.preferred_model_id;
+      setPreferences(value);
+    }
+  }, []);
+  const preferredModel = preferences ? preferredChatModel(models, preferences.preferred_model_id) : undefined;
+  const selectPreferredModel = useCallback(async (id: string) => {
+    const owner = preferenceOwner.current;
+    if (!owner || !models.some((model) => model.id === id)) throw new Error('请选择可用的模型');
+    const revision = ++preferenceRevision.current;
+    setPreferences((current) => current ? { ...current, preferred_model_id: id } : current);
+    // Serialize rapid selections so the server cannot finish an older choice last.
+    const write = preferenceWrites.current.catch(() => undefined).then(async () => {
+      if (preferenceOwner.current !== owner) return;
+      const value = await api.updatePreferences({ preferred_model_id: id });
+      if (preferenceOwner.current !== owner) return;
+      confirmedModel.current = value.preferred_model_id;
+      if (preferenceRevision.current === revision) {
+        setPreferences((current) => current ? { ...current, preferred_model_id: value.preferred_model_id } : current);
+      }
+    });
+    preferenceWrites.current = write;
+    try { await write; }
+    catch (reason) {
+      if (preferenceOwner.current === owner && preferenceRevision.current === revision) {
+        setPreferences((current) => current ? { ...current, preferred_model_id: confirmedModel.current } : current);
+      }
+      throw reason;
+    }
+  }, [models]);
   const invalidateLists = useCallback(() => { setVersion((value) => value + 1); }, []);
   const setTheme = useCallback((value: ThemePreference) => {
     updateTheme(value);
@@ -60,6 +106,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     let disposed = false;
     setUnauthorizedHandler(() => {
       if (disposed) return;
+      preferenceOwner.current = null;
       setUser(null); setModels([]); setPreferences(null);
       void clearCredentials();
     });
@@ -70,6 +117,7 @@ export function AppProvider({ children }: PropsWithChildren) {
         if (await restoreCredentials()) {
           const current = await api.me();
           if (disposed) return;
+          preferenceOwner.current = {};
           setUser(current);
           await Promise.all([refreshCatalog(), refreshPreferences()]);
         }
@@ -121,9 +169,14 @@ export function AppProvider({ children }: PropsWithChildren) {
 
   const signIn = useCallback(async (username: string, password: string, serverURL?: string) => {
     setLoading(true); setAuthError('');
+    preferenceOwner.current = null;
+    setUser(null); setModels([]); setPreferences(null);
     try {
       if (serverURL) await setAPIBaseURL(serverURL);
       const current = await api.login(username, password);
+      preferenceOwner.current = {};
+      preferenceWrites.current = Promise.resolve();
+      confirmedModel.current = '';
       setUser(current);
       await Promise.all([refreshCatalog(), refreshPreferences()]);
       invalidateLists();
@@ -131,6 +184,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   }, [refreshCatalog, refreshPreferences, invalidateLists]);
 
   const signOut = useCallback(async () => {
+    preferenceOwner.current = null;
     try { await api.logout(); }
     finally {
       await clearCredentials();
@@ -138,9 +192,9 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
   }, [invalidateLists]);
 
-  const value = useMemo(() => ({ user, authReady, loading, authError, theme, dark, colors, fonts, models, preferences,
+  const value = useMemo(() => ({ user, authReady, loading, authError, theme, dark, colors, fonts, models, preferredModel, selectPreferredModel, preferences,
     invalidateVersion, setTheme, refreshCatalog, refreshPreferences, invalidateLists, signIn, signOut,
-  }), [user, authReady, loading, authError, theme, dark, colors, models, preferences, invalidateVersion, setTheme, refreshCatalog, refreshPreferences, invalidateLists, signIn, signOut]);
+  }), [user, authReady, loading, authError, theme, dark, colors, models, preferredModel, selectPreferredModel, preferences, invalidateVersion, setTheme, refreshCatalog, refreshPreferences, invalidateLists, signIn, signOut]);
 
   const themeValue = useMemo(() => ({ colors, fonts, dark, theme, setTheme }), [colors, dark, theme, setTheme]);
   return <Context.Provider value={value}><ThemeContext.Provider value={themeValue}><SessionListContext.Provider value={sessionList}>{children}</SessionListContext.Provider></ThemeContext.Provider></Context.Provider>;

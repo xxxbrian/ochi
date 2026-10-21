@@ -77,7 +77,7 @@ export function ChatScreen({
         "c/[sessionId]"
       >
     >();
-  const { colors, dark, models, preferences, refreshPreferences, invalidateLists } =
+  const { colors, dark, models, preferredModel, selectPreferredModel, preferences, refreshPreferences, invalidateLists } =
     useApp();
   const focused = useIsFocused();
   const chat = useSessionChat(sessionId, focused);
@@ -187,7 +187,7 @@ export function ChatScreen({
     setQueueOperation(null);
     setQueueText("");
     mountedSession.current = "";
-    const selected = models.find((item) => item.is_default) ?? models[0];
+    const selected = preferredModel;
     setModelId(selected?.id ?? "");
     setEffort(selected?.default_effort ?? "");
     navigation.setParams({ sessionId: "new" });
@@ -207,16 +207,14 @@ export function ChatScreen({
       mountedSession.current = chat.session.id;
       const selected =
         models.find((item) => item.id === chat.session?.model_id) ??
-        models.find((item) => item.is_default) ??
-        models[0];
+        preferredModel;
       setModelId(selected?.id ?? "");
       setEffort(chat.session.effort ?? selected?.default_effort ?? "");
-    } else if (!sessionId && models.length && !modelId) {
-      const selected = models.find((item) => item.is_default) ?? models[0];
-      setModelId(selected?.id ?? "");
-      setEffort(selected?.default_effort ?? "");
+    } else if (!sessionId && preferredModel && !models.some((item) => item.id === modelId)) {
+      setModelId(preferredModel.id);
+      setEffort(preferredModel.default_effort ?? "");
     }
-  }, [chat.session, models, sessionId, modelId]);
+  }, [chat.session, models, preferredModel, sessionId, modelId]);
   useEffect(() => {
     if (!sessionId)
       setComputerDraft(
@@ -504,6 +502,9 @@ export function ChatScreen({
           setModelId(id);
           setEffort(
             models.find((item) => item.id === id)?.default_effort ?? "",
+          );
+          void selectPreferredModel(id).catch((reason) =>
+            setError(reason instanceof Error ? reason.message : "记住模型失败"),
           );
         }}
         onEffort={setEffort}
