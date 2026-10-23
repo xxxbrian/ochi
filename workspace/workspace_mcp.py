@@ -49,13 +49,65 @@ def _mcp_public(config: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _mcp_error(config: dict[str, Any], error: BaseException) -> str:
-    message = str(error) or type(error).__name__
+def _mcp_error(config: dict[str, Any], error: BaseException, http_status: int | None = None) -> str:
+    secrets: set[str] = set()
     for mapping in (config.get("env", {}), config.get("headers", {})):
         for value in mapping.values():
             if isinstance(value, str) and value:
-                message = message.replace(value, "[redacted]")
-    return message[:4000]
+                secrets.add(value)
+                if match := re.fullmatch(r"Bearer\s+(.+)", value.strip(), re.IGNORECASE):
+                    secrets.add(match[1])
+
+    pending, seen, messages = [(error, 0)], set(), []
+    truncated = False
+    while pending and len(seen) < 32 and len(messages) < 8:
+        current, depth = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, BaseExceptionGroup):
+            if depth >= 8:
+                truncated = True
+                continue
+            children = current.exceptions[:8]
+            truncated |= len(children) < len(current.exceptions)
+            pending.extend((child, depth + 1) for child in reversed(children))
+            continue
+        message = type(current).__name__ + ": " + (str(current) or "no details")
+        for value in sorted(secrets, key=len, reverse=True):
+            message = message.replace(value, "[redacted]")
+        if len(message) > 600:
+            message = message[:600] + "..."
+        if message not in messages:
+            messages.append(message)
+        if current.__cause__ is not None and depth < 8:
+            pending.append((current.__cause__, depth + 1))
+    if pending or truncated:
+        messages.append("additional error details truncated")
+    if not messages:
+        messages.append(type(error).__name__)
+    if http_status is not None:
+        messages.insert(0, f"HTTP {http_status}")
+    return "; ".join(messages)[:4000]
+
+
+class _MCPHTTPStatus:
+    """Keep only the current RPC's HTTP status, never response bodies or headers."""
+
+    def __init__(self) -> None:
+        self.status: int | None = None
+
+    def reset(self) -> None:
+        self.status = None
+
+    async def begin(self, request: Any) -> None:
+        if request.method == "POST":
+            self.reset()
+
+    async def observe(self, response: Any) -> None:
+        # Optional GET streams and DELETE cleanup must not mask the RPC's error.
+        if response.request.method == "POST":
+            self.status = response.status_code if response.status_code >= 400 else None
 
 
 def save_mcp(args: dict[str, Any], server_id: str | None = None) -> dict[str, Any]:
@@ -115,6 +167,7 @@ class MCPConnection:
         self.thread.start()
 
     async def _loop(self) -> None:
+        http_status = _MCPHTTPStatus()
         try:
             from mcp import Client, StdioServerParameters
             from mcp.client.streamable_http import streamable_http_client
@@ -124,7 +177,10 @@ class MCPConnection:
                     target = StdioServerParameters(command=self.config["command"], args=self.config.get("args", []), env=_workspace_env(self.config.get("env")), cwd=str(cwd))
                 else:
                     import httpx2
-                    http = await stack.enter_async_context(httpx2.AsyncClient(headers=self.config.get("headers", {}), timeout=60, follow_redirects=True))
+                    http = await stack.enter_async_context(httpx2.AsyncClient(
+                        headers=self.config.get("headers", {}), timeout=60, follow_redirects=True,
+                        event_hooks={"request": [http_status.begin], "response": [http_status.observe]},
+                    ))
                     target = streamable_http_client(self.config["url"], http_client=http)
                 client = await stack.enter_async_context(Client(target, read_timeout_seconds=60))
                 cursor = None
@@ -141,6 +197,7 @@ class MCPConnection:
                 self.ready.set()
                 while True:
                     name, args, done, result = await asyncio.to_thread(self.jobs.get)
+                    http_status.reset()
                     if name == "__close__":
                         done.set()
                         return
@@ -155,11 +212,11 @@ class MCPConnection:
                             payload["content"] = [{key: value for key, value in block.items() if key != "data"} if block.get("type") == "image" else block for block in blocks]
                         result.append(payload)
                     except Exception as exc:
-                        result.append(RuntimeError(_mcp_error(self.config, exc)))
+                        result.append(RuntimeError(_mcp_error(self.config, exc, http_status.status)))
                     finally:
                         done.set()
         except BaseException as exc:
-            self.error = _mcp_error(self.config, exc)
+            self.error = _mcp_error(self.config, exc, http_status.status)
             self.ready.set()
         finally:
             while not self.jobs.empty():

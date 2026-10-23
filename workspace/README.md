@@ -105,6 +105,9 @@ source edits require an explicit new publication and cannot change old bytes.
 Skills support SKILL.md, Git ref/subdir, archive and inline install, file listing
 and validation. MCP uses official Python SDK stdio/Streamable HTTP, cwd-scoped
 clients, stable tool names, configuration import and secret preserve/replace/delete.
+Connection/tool errors expose bounded, credential-redacted exception details and
+the current RPC's HTTP failure status. HTTP observation never reads response
+bodies or headers and does not change SDK protocol negotiation or retries.
 No OAuth or public bridge access is included.
 `GET /skills/index` is metadata only, bounded to 32 skills/8 KB. Instruction
 bodies are read only with `skills_read`. Computer-off bridges deny Skills/MCP
