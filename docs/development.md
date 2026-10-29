@@ -58,6 +58,18 @@ regressions, not private one-off smoke runs. Their READMEs describe ownership.
 For a native dependency change also verify a real native build. JavaScript
 export, type checking and fixture tests do not certify interaction or visuals.
 
+CI runs the same Web and native checks on pull requests and client changes.
+Container publication calls the shared checks workflow and waits for every
+lane. Server tests run against an ephemeral `ochi_process_qa` database built
+from `db/Dockerfile`, so persistence and HTTP integration tests are not silently
+skipped. The QA database and its volumes are removed after the job. Mobile-only
+pushes run checks without rebuilding server or workspace images.
+
+For local database integration, set `OCHI_PROCESS_TEST_DATABASE_URL` to a
+disposable database named exactly `ochi_process_qa`, with pgcrypto, pgvector and
+pg_trgm available. The test fixtures create and drop their own schemas. Never
+use an application database or credentials for this variable.
+
 Language catalogs use semantic keys with explicit `en`, `zh-CN` and `zh-TW`
 entries. Reuse complete sentences with named parameters instead of joining
 translated fragments. Web's `i18n-shared.test.cjs` checks catalog coverage,

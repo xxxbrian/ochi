@@ -1,0 +1,101 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - mobile/**
+      - .github/workflows/checks.yml
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      built_at:
+        value: ${{ jobs.server.outputs.built_at }}
+      attempt:
+        value: ${{ jobs.server.outputs.attempt }}
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      built_at: ${{ steps.metadata.outputs.built_at }}
+      attempt: ${{ steps.metadata.outputs.attempt }}
+    env:
+      OCHI_PROCESS_TEST_DATABASE_URL: postgres://ochi:fixture-only@127.0.0.1:5432/ochi_process_qa?sslmode=disable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27'
+          cache-dependency-path: server/go.sum
+      - name: Identify application build
+        id: metadata
+        run: |
+          python3 scripts/release.py metadata >> "$GITHUB_OUTPUT"
+          echo "attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+      - name: Start disposable database from the production Dockerfile
+        run: |
+          docker build -t ochi-postgres:check ./db
+          docker run --detach --name ochi-process-qa \
+            --publish 127.0.0.1:5432:5432 \
+            --env POSTGRES_USER=ochi --env POSTGRES_PASSWORD=fixture-only \
+            --env POSTGRES_DB=ochi_process_qa \
+            --health-cmd 'pg_isready -U ochi -d ochi_process_qa' \
+            --health-interval 1s --health-timeout 3s --health-retries 30 \
+            ochi-postgres:check
+          for attempt in {1..40}; do
+            state="$(docker inspect --format '{{.State.Health.Status}}' ochi-process-qa)"
+            if [ "$state" = healthy ]; then break; fi
+            if [ "$state" = unhealthy ]; then docker logs ochi-process-qa; exit 1; fi
+            sleep 1
+          done
+          test "$state" = healthy
+          docker exec ochi-process-qa psql -U ochi -d ochi_process_qa -v ON_ERROR_STOP=1 \
+            -c 'CREATE EXTENSION pgcrypto; CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;'
+      - name: Check build tooling and workspace
+        run: |
+          python3 -B -m unittest discover -s scripts/tests -v
+          python3 -B -m unittest discover -s workspace/tests -v
+      - name: Check server with database integration enabled
+        working-directory: server
+        run: |
+          go test ./...
+          go vet ./...
+      - name: Remove disposable database
+        if: always()
+        run: docker rm --force --volumes ochi-process-qa 2>/dev/null || true
+
+  clients:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        client: [web, mobile]
+    defaults:
+      run:
+        working-directory: ${{ matrix.client }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install the client's locked dependencies
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+      - name: Check client contracts and renderer integration
+        run: pnpm test
+      - name: Build Web
+        if: matrix.client == 'web'
+        run: pnpm build
+      - name: Check native types and Expo dependency alignment
+        if: matrix.client == 'mobile'
+        run: |
+          pnpm typecheck
+          pnpm exec expo install --check

@@ -6,7 +6,7 @@ on:
     paths:
       - server/**
       - web/**
-      - shared/i18n/**
+      - shared/**
       - db/**
       - workspace/**
       - Dockerfile
@@ -34,38 +34,7 @@ permissions:
 jobs:
   check:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    outputs:
-      built_at: ${{ steps.metadata.outputs.built_at }}
-      attempt: ${{ steps.metadata.outputs.attempt }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: '1.27'
-          cache-dependency-path: server/go.sum
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-      - name: Identify application build
-        id: metadata
-        run: |
-          python3 scripts/release.py metadata >> "$GITHUB_OUTPUT"
-          echo "attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
-      - name: Check build tooling and server
-        run: |
-          python3 -B -m unittest discover -s scripts/tests -v
-          python3 -B -m unittest discover -s workspace/tests -v
-          cd server
-          go test ./...
-          go vet ./...
-      - name: Check Web and cross-client contracts
-        working-directory: web
-        run: |
-          corepack enable
-          pnpm install --frozen-lockfile
-          pnpm test
+    uses: ./.github/workflows/checks.yml
 
   build:
     needs: check
@@ -255,7 +224,7 @@ jobs:
           head="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
           git fetch --no-tags --depth=1 origin "$head"
           if git diff --quiet "$GITHUB_SHA" "$head" -- \
-            server web shared/i18n db workspace Dockerfile .dockerignore compose.dokploy.yaml \
+            server web shared db workspace Dockerfile .dockerignore compose.dokploy.yaml \
             scripts/deploy.py scripts/release.py scripts/tests .github/workflows/containers.yml; then
             echo 'latest=true' >> "$GITHUB_OUTPUT"
           else
