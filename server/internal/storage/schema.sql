@@ -86,6 +86,7 @@ CREATE TABLE memories (
     embedding vector,
     embedding_model_id text DEFAULT ''::text NOT NULL,
     trust text DEFAULT 'derived'::text NOT NULL,
+    admission text DEFAULT 'episodic'::text NOT NULL CHECK (admission IN ('curated','durable','episodic')),
     observed_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone,
     superseded_at timestamp with time zone,

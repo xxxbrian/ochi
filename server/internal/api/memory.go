@@ -212,6 +212,7 @@ func (s *Server) memoryTool(ctx context.Context, userID, name string, args json.
 		value = result
 	case "memory_save":
 		m := storage.Memory{ID: req.ID, Content: req.Content, Kind: "fact", Source: "agent", SourceSessionID: scope.SessionID, SourceRunID: scope.RunID, SourceExcerpt: req.Excerpt, ExpectedRevision: &pref.MemoryRevision}
+		var existing []storage.Memory
 		if req.ProjectScope {
 			if scope.ProjectID == "" {
 				return agent.ToolResult{}, errors.New("project memory requires a project conversation")
@@ -224,10 +225,53 @@ func (s *Server) memoryTool(ctx context.Context, userID, name string, args json.
 				return agent.ToolResult{}, errors.New("memory correction is outside the current namespace or fact lifecycle")
 			}
 			m.Kind = old.Kind
+			existing = []storage.Memory{old}
 		}
 		if strings.TrimSpace(req.Excerpt) == "" || len(req.Excerpt) > 3000 {
 			return agent.ToolResult{}, errors.New("memory_save requires a bounded exact excerpt from the current user statement")
 		}
+		prompt, e := s.store.MemoryRunPrompt(ctx, userID, scope.RunID)
+		if e != nil {
+			return agent.ToolResult{}, e
+		}
+		factScope := "user"
+		if req.ProjectScope {
+			factScope = "project"
+		}
+		bounded := boundedMemoryExtraction(memoryExtraction{Facts: []extractedFact{{ID: req.ID, Kind: m.Kind, Content: req.Content, Excerpt: req.Excerpt, Scope: factScope}}}, prompt, session.ProjectID, existing, nil)
+		if len(bounded.Facts) != 1 {
+			return agent.ToolResult{}, storage.ErrMemorySource
+		}
+		settings, e := s.store.Settings(ctx)
+		if e != nil {
+			return agent.ToolResult{}, e
+		}
+		modelID := settings.MemoryModelID
+		if modelID == "" {
+			run, e := s.store.GetRun(ctx, userID, scope.RunID)
+			if e != nil {
+				return agent.ToolResult{}, e
+			}
+			modelID = run.ModelID
+		}
+		config, e := s.auxiliaryModel(ctx, modelID)
+		if e != nil {
+			return agent.ToolResult{}, e
+		}
+		if config == nil {
+			return agent.ToolResult{}, errors.New("memory admission model is not configured")
+		}
+		admissionCtx, cancel := context.WithTimeout(ctx, 35*time.Second)
+		admitted, e := admitMemoryFacts(admissionCtx, *config, prompt, session.ProjectID, bounded.Facts, existing)
+		cancel()
+		if e != nil {
+			return agent.ToolResult{}, e
+		}
+		if len(admitted) == 0 {
+			value = map[string]any{"saved": false, "reason": "not_durable", "guidance": "Keep task-local instructions in the current task, not persistent user memory."}
+			break
+		}
+		m.Content, m.Kind, m.Admission = admitted[0].Content, admitted[0].Kind, admitted[0].Admission
 		value, err = s.store.SaveMemoryRecord(ctx, userID, m)
 	case "memory_delete":
 		old, e := s.store.Memory(ctx, userID, req.ID)

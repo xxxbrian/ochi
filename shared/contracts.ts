@@ -179,6 +179,7 @@ export type Usage = {
 export type Memory = {
   id: string;
   content: string;
+  admission: "curated" | "durable" | "episodic";
   kind?: "fact" | "preference" | "session_summary" | "project_summary";
   project_id?: string;
   source_session_id?: string;

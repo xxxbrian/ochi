@@ -85,6 +85,43 @@ func TestMemoryExtractionDoesNotPromoteToolClaimsOrUnsupportedCorrections(t *tes
 	}
 }
 
+func TestMemoryEvidenceUsesToolOccurrenceRatherThanReusedProviderID(t *testing.T) {
+	manager := runtime.NewManager()
+	t.Cleanup(func() { _ = manager.Shutdown(context.Background()) })
+	run := manager.Restore(runtime.Snapshot{RunID: "memory-evidence", SessionID: "session", Status: runtime.StatusRunning})
+	for index, output := range []string{`{"exit_code":0,"stdout":"ok fixture"}`, `{"exit_code":1,"stdout":"FAIL"}`} {
+		if err := run.UpdateStep(fmt.Sprintf("round-%d", index+1), runtime.Step{
+			ID: "reused-call", Name: "exec", Status: "completed",
+			Arguments: json.RawMessage(`{"command":"go test ./..."}`), Output: output,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snapshot := run.Snapshot()
+	input := memoryExtractionInput("Verify the workflow.", snapshot, "", nil)
+	var payload struct {
+		Trajectory []struct {
+			ID string `json:"id"`
+		} `json:"trajectory"`
+		Verified map[string]bool `json:"verified_step_ids"`
+	}
+	if err := json.Unmarshal(input, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Trajectory) != 2 || payload.Trajectory[0].ID != snapshot.Items[0].ID || payload.Trajectory[1].ID != snapshot.Items[1].ID || !payload.Verified[snapshot.Items[0].ID] || payload.Verified[snapshot.Items[1].ID] || payload.Verified["reused-call"] {
+		t.Fatal("memory evidence conflated distinct tool occurrences", string(input))
+	}
+	extraction := memoryExtraction{Methods: []extractedMethod{
+		{Content: "Observed successful check", EvidenceStepIDs: []string{snapshot.Items[0].ID}},
+		{Content: "Failed later check", EvidenceStepIDs: []string{snapshot.Items[1].ID}},
+		{Content: "Ambiguous provider reference", EvidenceStepIDs: []string{"reused-call"}},
+	}}
+	bounded := boundedMemoryExtraction(extraction, "Verify the workflow.", "", nil, snapshot.Steps())
+	if len(bounded.Methods) != 1 || bounded.Methods[0].Content != "Observed successful check" {
+		t.Fatal("failed or ambiguous call became verified memory", bounded)
+	}
+}
+
 func TestCoreMemoryEmbeddingRecallAndDurableWorkerIntegration(t *testing.T) {
 	store := searchIntegrationStore(t)
 	s, err := NewServer(store, nil, []Account{{Username: "memory-api-qa", Password: "fixture-only-memory-password", Role: "admin"}}, false)
@@ -103,7 +140,7 @@ func TestCoreMemoryEmbeddingRecallAndDurableWorkerIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var embeddingCalls, extractionCalls, maximumBatch atomic.Int32
+	var embeddingCalls, extractionCalls, admissionCalls, maximumBatch atomic.Int32
 	var embeddingFailure atomic.Bool
 	var dimensions atomic.Int32
 	dimensions.Store(2)
@@ -142,6 +179,20 @@ func TestCoreMemoryEmbeddingRecallAndDurableWorkerIntegration(t *testing.T) {
 			return
 		}
 		if r.URL.Path == "/chat/completions" {
+			var request struct {
+				Messages []struct {
+					Content string `json:"content"`
+				} `json:"messages"`
+			}
+			if json.NewDecoder(r.Body).Decode(&request) != nil || len(request.Messages) == 0 {
+				t.Error("invalid auxiliary memory request")
+				return
+			}
+			if request.Messages[0].Content == memoryAdmissionPolicy {
+				admissionCalls.Add(1)
+				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": `{"decisions":[{"index":0,"classification":"standing_preference","scope":"user"}]}`}}}})
+				return
+			}
 			extractionCalls.Add(1)
 			_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"content": `{"facts":[{"kind":"preference","content":"Prefers precise replies","excerpt":"I prefer precise replies.","scope":"user"}],"summary":"Remembered an explicitly stated response preference","project_summary":"","methods":[]}`}}}})
 			return
@@ -260,10 +311,10 @@ func TestCoreMemoryEmbeddingRecallAndDurableWorkerIntegration(t *testing.T) {
 	found := false
 	for _, m := range items {
 		if m.Content == "Prefers precise replies" {
-			found = m.Trust == "user_statement" && m.SourceRunID == runID && m.HasEmbedding
+			found = m.Trust == "user_statement" && m.Admission == "durable" && m.SourceRunID == runID && m.HasEmbedding
 		}
 	}
-	if !found || extractionCalls.Load() != 1 || embeddingCalls.Load() < 3 {
+	if !found || extractionCalls.Load() != 1 || admissionCalls.Load() != 1 || embeddingCalls.Load() < 3 {
 		t.Fatal("durable extraction lost user evidence, indexing, or exactly-once cached model output")
 	}
 	if len(items) != 88 || maximumBatch.Load() != 40 {

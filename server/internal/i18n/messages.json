@@ -604,6 +604,11 @@
     "zh-CN": "记忆内容应为 1 到 6000 个字节。",
     "zh-TW": "記憶內容應為 1 到 6000 個位元組。"
   },
+  "memory_admission_required": {
+    "en": "This statement has not been admitted as a lasting memory.",
+    "zh-CN": "这条陈述尚未通过长期记忆准入检查。",
+    "zh-TW": "這項陳述尚未通過長期記憶准入檢查。"
+  },
   "memory_kind_invalid": {
     "en": "The memory type is invalid.",
     "zh-CN": "无效的记忆类型。",

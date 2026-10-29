@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	ErrMemoryChanged = i18n.New("memory_changed")
-	ErrMemoryDeleted = i18n.New("memory_deleted")
-	ErrMemorySource  = i18n.New("memory_source_unavailable")
+	ErrMemoryChanged   = i18n.New("memory_changed")
+	ErrMemoryDeleted   = i18n.New("memory_deleted")
+	ErrMemorySource    = i18n.New("memory_source_unavailable")
+	ErrMemoryAdmission = i18n.New("memory_admission_required")
 )
 
 func memoryContentHash(content string) string {
@@ -27,13 +28,13 @@ func memoryContentHash(content string) string {
 }
 
 func authoritativeMemory(m Memory) bool {
-	return m.Trust == "user_statement" || m.Trust == "user_curated"
+	return (m.Trust == "user_statement" && m.Admission == "durable") || (m.Trust == "user_curated" && m.Admission == "curated")
 }
 
 func validateMemoryProvenance(m *Memory) error {
 	switch m.Source {
 	case "user":
-		m.Trust, m.ObservedAt = "user_curated", time.Now().UTC()
+		m.Trust, m.Admission, m.ObservedAt = "user_curated", "curated", time.Now().UTC()
 		// The old excerpt does not prove a user's manually edited replacement.
 		m.SourceExcerpt = ""
 	case "automatic", "agent":
@@ -44,9 +45,15 @@ func validateMemoryProvenance(m *Memory) error {
 			if strings.TrimSpace(m.SourceExcerpt) == "" {
 				return ErrMemorySource
 			}
+			if m.Admission != "durable" {
+				return ErrMemoryAdmission
+			}
 			m.Trust = "user_statement"
 		} else if m.Kind != "method" || m.Trust != "verified_tool" {
 			m.Trust = "derived"
+		}
+		if m.Kind != "fact" && m.Kind != "preference" {
+			m.Admission = "episodic"
 		}
 		if m.ObservedAt.IsZero() {
 			m.ObservedAt = time.Now().UTC()
@@ -90,13 +97,13 @@ const memoryUserStatementsSQL = `SELECT m.content,m.created_at FROM messages m J
  JOIN sessions s ON s.id=r.session_id WHERE i.run_id=$1 AND s.user_id=$2 AND i.user_id=$2 AND i.canonical_seq IS NOT NULL AND NOT r.archived`
 
 func insertMemoryTx(ctx context.Context, tx pgx.Tx, userID string, m Memory) (Memory, error) {
-	return scanMemory(tx.QueryRow(ctx, `INSERT INTO memories(user_id,content,kind,project_id,source,source_session_id,source_run_id,source_excerpt,trust,observed_at,expires_at)
- VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5,NULLIF($6,'')::uuid,NULLIF($7,'')::uuid,$8,$9,$10,$11)
+	return scanMemory(tx.QueryRow(ctx, `INSERT INTO memories(user_id,content,kind,project_id,source,source_session_id,source_run_id,source_excerpt,trust,observed_at,expires_at,admission)
+ VALUES($1,$2,$3,NULLIF($4,'')::uuid,$5,NULLIF($6,'')::uuid,NULLIF($7,'')::uuid,$8,$9,$10,$11,$12)
  ON CONFLICT(source_run_id,kind) WHERE kind IN ('session_summary','project_summary')
  DO UPDATE SET content=EXCLUDED.content,embedding=NULL,embedding_model_id='',source_excerpt=EXCLUDED.source_excerpt,
- trust=EXCLUDED.trust,observed_at=EXCLUDED.observed_at,expires_at=EXCLUDED.expires_at,updated_at=now()
+ trust=EXCLUDED.trust,admission=EXCLUDED.admission,observed_at=EXCLUDED.observed_at,expires_at=EXCLUDED.expires_at,updated_at=now()
  WHERE memories.source<>'user' AND memories.superseded_at IS NULL RETURNING `+memoryColumns,
-		userID, m.Content, m.Kind, m.ProjectID, m.Source, m.SourceSessionID, m.SourceRunID, m.SourceExcerpt, m.Trust, m.ObservedAt, m.ExpiresAt))
+		userID, m.Content, m.Kind, m.ProjectID, m.Source, m.SourceSessionID, m.SourceRunID, m.SourceExcerpt, m.Trust, m.ObservedAt, m.ExpiresAt, m.Admission))
 }
 
 func supersedeMemoryTx(ctx context.Context, tx pgx.Tx, userID string, replacement Memory) (Memory, error) {
@@ -176,7 +183,7 @@ func InvalidateRunMemoriesTx(ctx context.Context, tx pgx.Tx, userID, runID strin
 
 func (s *Store) StableMemoryProfile(ctx context.Context, userID string) ([]Memory, error) {
 	rows, err := s.db.Query(ctx, `SELECT `+memoryColumns+` FROM memories WHERE user_id=$1 AND project_id IS NULL
- AND kind IN ('fact','preference') AND trust IN ('user_statement','user_curated') AND `+activeMemorySQL+`
+ AND kind IN ('fact','preference') AND admission IN ('durable','curated') AND trust IN ('user_statement','user_curated') AND `+activeMemorySQL+`
  ORDER BY CASE kind WHEN 'preference' THEN 0 ELSE 1 END,updated_at DESC LIMIT 16`, userID)
 	if err != nil {
 		return nil, err

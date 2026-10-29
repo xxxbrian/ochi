@@ -42,6 +42,7 @@ type Memory struct {
 	HasEmbedding     bool       `json:"has_embedding"`
 	EmbeddingModelID string     `json:"-"`
 	Trust            string     `json:"trust"`
+	Admission        string     `json:"admission"`
 	ObservedAt       time.Time  `json:"observed_at"`
 	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
 	SupersededAt     *time.Time `json:"superseded_at,omitempty"`
@@ -51,12 +52,13 @@ type Memory struct {
 	ExpectedRevision *int64     `json:"-"`
 }
 
-const memoryColumns = `id::text,content,kind,COALESCE(project_id::text,''),source,COALESCE(source_session_id::text,''),COALESCE(source_run_id::text,''),source_excerpt,embedding IS NOT NULL,embedding_model_id,created_at,updated_at,trust,observed_at,expires_at,superseded_at,COALESCE(superseded_by::text,'')`
+const memoryColumns = `id::text,content,kind,COALESCE(project_id::text,''),source,COALESCE(source_session_id::text,''),COALESCE(source_run_id::text,''),source_excerpt,embedding IS NOT NULL,embedding_model_id,created_at,updated_at,trust,observed_at,expires_at,superseded_at,COALESCE(superseded_by::text,''),admission`
 const activeMemorySQL = `superseded_at IS NULL AND (expires_at IS NULL OR expires_at>now())`
+const recallMemorySQL = activeMemorySQL + ` AND (kind NOT IN ('fact','preference') OR admission IN ('curated','durable'))`
 
 func scanMemory(row pgx.Row, extra ...any) (Memory, error) {
 	var m Memory
-	targets := []any{&m.ID, &m.Content, &m.Kind, &m.ProjectID, &m.Source, &m.SourceSessionID, &m.SourceRunID, &m.SourceExcerpt, &m.HasEmbedding, &m.EmbeddingModelID, &m.CreatedAt, &m.UpdatedAt, &m.Trust, &m.ObservedAt, &m.ExpiresAt, &m.SupersededAt, &m.SupersededBy}
+	targets := []any{&m.ID, &m.Content, &m.Kind, &m.ProjectID, &m.Source, &m.SourceSessionID, &m.SourceRunID, &m.SourceExcerpt, &m.HasEmbedding, &m.EmbeddingModelID, &m.CreatedAt, &m.UpdatedAt, &m.Trust, &m.ObservedAt, &m.ExpiresAt, &m.SupersededAt, &m.SupersededBy, &m.Admission}
 	err := row.Scan(append(targets, extra...)...)
 	return m, err
 }
@@ -207,7 +209,7 @@ func (s *Store) SaveMemoryRecord(ctx context.Context, userID string, m Memory) (
 		}
 	}
 	if m.ID == "" || m.Source != "user" {
-		existing, e := scanMemory(tx.QueryRow(ctx, `SELECT `+memoryColumns+` FROM memories WHERE user_id=$1 AND project_id IS NOT DISTINCT FROM NULLIF($2,'')::uuid AND content=$3 AND kind=$4 AND `+activeMemorySQL+` LIMIT 1`, userID, m.ProjectID, m.Content, m.Kind))
+		existing, e := scanMemory(tx.QueryRow(ctx, `SELECT `+memoryColumns+` FROM memories WHERE user_id=$1 AND project_id IS NOT DISTINCT FROM NULLIF($2,'')::uuid AND content=$3 AND kind=$4 AND `+recallMemorySQL+` LIMIT 1`, userID, m.ProjectID, m.Content, m.Kind))
 		if e == nil {
 			if m.Source != "user" && m.ID != "" && m.ID != existing.ID {
 				return supersedeExistingMemoryTx(ctx, tx, userID, m, existing)
@@ -229,7 +231,7 @@ func (s *Store) SaveMemoryRecord(ctx context.Context, userID string, m Memory) (
 	if m.ID == "" {
 		m, err = insertMemoryTx(ctx, tx, userID, m)
 	} else {
-		m, err = scanMemory(tx.QueryRow(ctx, `UPDATE memories SET content=$3,kind=$4,project_id=NULLIF($5,'')::uuid,source=$6,source_session_id=NULLIF($7,'')::uuid,source_run_id=NULLIF($8,'')::uuid,source_excerpt=$9,embedding=NULL,embedding_model_id='',trust=$10,observed_at=$11,expires_at=$12,updated_at=now() WHERE id=$1 AND user_id=$2 AND superseded_at IS NULL RETURNING `+memoryColumns, m.ID, userID, m.Content, m.Kind, m.ProjectID, m.Source, m.SourceSessionID, m.SourceRunID, m.SourceExcerpt, m.Trust, m.ObservedAt, m.ExpiresAt))
+		m, err = scanMemory(tx.QueryRow(ctx, `UPDATE memories SET content=$3,kind=$4,project_id=NULLIF($5,'')::uuid,source=$6,source_session_id=NULLIF($7,'')::uuid,source_run_id=NULLIF($8,'')::uuid,source_excerpt=$9,embedding=NULL,embedding_model_id='',trust=$10,observed_at=$11,expires_at=$12,admission=$13,updated_at=now() WHERE id=$1 AND user_id=$2 AND superseded_at IS NULL RETURNING `+memoryColumns, m.ID, userID, m.Content, m.Kind, m.ProjectID, m.Source, m.SourceSessionID, m.SourceRunID, m.SourceExcerpt, m.Trust, m.ObservedAt, m.ExpiresAt, m.Admission))
 	}
 	if err != nil {
 		return m, err
@@ -350,12 +352,19 @@ func (s *Store) RecallMemoriesWithStatus(ctx context.Context, userID, projectID,
 	if err != nil {
 		return result, err
 	}
+	eligible := items[:0]
+	for _, item := range items {
+		if item.Kind != "fact" && item.Kind != "preference" || authoritativeMemory(item) {
+			eligible = append(eligible, item)
+		}
+	}
+	items = eligible
 	scores := map[string]float64{}
 	tokens := memoryTokens(query)
 	// Keyword recall must search stored history, not only the most recent 200
 	// entries. Chinese bigrams complement PostgreSQL's simple text tokenizer.
 	if len(tokens) > 0 {
-		rows, e := s.db.Query(ctx, `SELECT `+memoryColumns+` FROM memories WHERE user_id=$1 AND `+activeMemorySQL+` AND (project_id IS NULL OR project_id=NULLIF($2,'')::uuid) AND EXISTS(SELECT 1 FROM unnest($3::text[]) t WHERE content ILIKE '%'||t||'%') ORDER BY updated_at DESC LIMIT 100`, userID, projectID, tokens)
+		rows, e := s.db.Query(ctx, `SELECT `+memoryColumns+` FROM memories WHERE user_id=$1 AND `+recallMemorySQL+` AND (project_id IS NULL OR project_id=NULLIF($2,'')::uuid) AND EXISTS(SELECT 1 FROM unnest($3::text[]) t WHERE content ILIKE '%'||t||'%') ORDER BY updated_at DESC LIMIT 100`, userID, projectID, tokens)
 		if e != nil {
 			return result, e
 		}
@@ -404,7 +413,7 @@ func (s *Store) RecallMemoriesWithStatus(ctx context.Context, userID, projectID,
 		}
 	}
 	if vectorReady {
-		rows, e := s.db.Query(ctx, `SELECT `+memoryColumns+`,embedding <=> $4::vector FROM memories WHERE user_id=$1 AND `+activeMemorySQL+` AND (project_id IS NULL OR project_id=NULLIF($2,'')::uuid) AND embedding_model_id=$3
+		rows, e := s.db.Query(ctx, `SELECT `+memoryColumns+`,embedding <=> $4::vector FROM memories WHERE user_id=$1 AND `+recallMemorySQL+` AND (project_id IS NULL OR project_id=NULLIF($2,'')::uuid) AND embedding_model_id=$3
  AND embedding_model_id=(SELECT target_identity FROM (`+memoryEmbeddingTargetSQL+`) current_target) AND embedding IS NOT NULL AND vector_dims(embedding)=$5 ORDER BY embedding <=> $4::vector LIMIT 12`, userID, projectID, modelID, vectorLiteral(v), len(v))
 		if e == nil {
 			type vectorHit struct {

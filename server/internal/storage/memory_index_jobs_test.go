@@ -301,8 +301,9 @@ func TestMemoryDatabaseProfileExpiryAndVectorDegradation(t *testing.T) {
 	s := processTestStore(t)
 	seedMemorySource(t, s)
 	ctx := context.Background()
-	expires := time.Now().Add(180 * time.Millisecond)
-	if _, err := s.SaveMemoryRecord(ctx, memoryQAUser, Memory{Content: "Temporary authoritative profile", Source: "user", ExpiresAt: &expires}); err != nil {
+	expires := time.Now().Add(time.Hour)
+	record, err := s.SaveMemoryRecord(ctx, memoryQAUser, Memory{Content: "Temporary authoritative profile", Source: "user", ExpiresAt: &expires})
+	if err != nil {
 		t.Fatal(err)
 	}
 	pref, _ := s.Preferences(ctx, memoryQAUser)
@@ -310,7 +311,11 @@ func TestMemoryDatabaseProfileExpiryAndVectorDegradation(t *testing.T) {
 	if frozen, err := s.FreezeMemoryProfile(ctx, memoryQAUser, memoryQASession, MemoryProfileText(items), pref.MemoryRevision); err != nil || !strings.Contains(frozen, "Temporary authoritative profile") {
 		t.Fatal("profile did not initially freeze with active fact")
 	}
-	time.Sleep(time.Until(expires) + 20*time.Millisecond)
+	expired := time.Now().Add(-time.Minute)
+	if _, err := s.db.Exec(ctx, `WITH expired AS (UPDATE memories SET expires_at=$2 WHERE id=$1)
+ UPDATE sessions SET memory_profile_expires_at=$2 WHERE id=$3`, record.ID, expired, memoryQASession); err != nil {
+		t.Fatal(err)
+	}
 	if _, exists, err := s.FrozenMemoryContext(ctx, memoryQAUser, memoryQASession); err != nil || exists {
 		t.Fatal("same-session frozen profile permanently retained expired fact")
 	}

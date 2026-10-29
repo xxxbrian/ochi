@@ -51,6 +51,10 @@ func TestMemoryVectorAndSourceBoundaries(t *testing.T) {
 		t.Fatal("agent inference without a user excerpt became authoritative")
 	}
 	m.SourceExcerpt = "exact user statement"
+	if !errors.Is(validateMemoryProvenance(&m), ErrMemoryAdmission) {
+		t.Fatal("a user excerpt was mistaken for evidence of lasting applicability")
+	}
+	m.Admission = "durable"
 	if err := validateMemoryProvenance(&m); err != nil || m.Trust != "user_statement" {
 		t.Fatal("user evidence was not classified")
 	}
@@ -85,6 +89,47 @@ const memoryQAUser = "memory-owned-fixture"
 const memoryQASession = "11111111-aaaa-4111-8111-111111111111"
 const memoryQARun = "22222222-aaaa-4222-8222-222222222222"
 
+func TestOnlyAdmittedFactsEnterProfileAndRecall(t *testing.T) {
+	s := processTestStore(t)
+	seedMemorySource(t, s)
+	ctx := context.Background()
+	pref, err := s.Preferences(ctx, memoryQAUser)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := Memory{Content: "Prefers Go", Kind: "preference", Source: "automatic", SourceRunID: memoryQARun, SourceSessionID: memoryQASession, SourceExcerpt: "I prefer Go.", ExpectedRevision: &pref.MemoryRevision}
+	if _, err = s.SaveMemoryRecord(ctx, memoryQAUser, m); !errors.Is(err, ErrMemoryAdmission) {
+		t.Fatal("exact user evidence bypassed durability admission")
+	}
+	m.Admission = "durable"
+	saved, err := s.SaveMemoryRecord(ctx, memoryQAUser, m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, err := s.StableMemoryProfile(ctx, memoryQAUser)
+	if err != nil || len(profile) != 1 || profile[0].Admission != "durable" {
+		t.Fatal("admitted fact was not available")
+	}
+	// An imported/unreviewed source can retain its audit record without becoming
+	// either a global instruction or a lexical/vector recall result.
+	if _, err = s.db.Exec(ctx, `UPDATE memories SET admission='episodic' WHERE id=$1`, saved.ID); err != nil {
+		t.Fatal(err)
+	}
+	profile, err = s.StableMemoryProfile(ctx, memoryQAUser)
+	recalled, recallErr := s.RecallMemories(ctx, memoryQAUser, "", "Go", "", nil)
+	if err != nil || recallErr != nil || len(profile) != 0 || len(recalled) != 0 {
+		t.Fatal("unreviewed fact influenced future input")
+	}
+	curated, err := s.SaveMemory(ctx, memoryQAUser, saved.ID, saved.Content)
+	if err != nil || curated.Admission != "curated" {
+		t.Fatalf("explicit user curation did not admit the fact: %v", err)
+	}
+	profile, err = s.StableMemoryProfile(ctx, memoryQAUser)
+	if err != nil || len(profile) != 1 {
+		t.Fatal("explicit curation stayed hidden")
+	}
+}
+
 func seedMemorySource(t *testing.T, s *Store) {
 	t.Helper()
 	for _, seed := range []struct {
@@ -111,7 +156,7 @@ func TestMemoryGovernanceDatabaseTransitions(t *testing.T) {
 		t.Fatal(err)
 	}
 	pref, _ := s.Preferences(ctx, memoryQAUser)
-	base := Memory{Content: "Prefers Go", Kind: "preference", Source: "automatic", SourceRunID: memoryQARun, SourceSessionID: memoryQASession, SourceExcerpt: "I prefer Go.", ExpectedRevision: &pref.MemoryRevision}
+	base := Memory{Content: "Prefers Go", Kind: "preference", Source: "automatic", Admission: "durable", SourceRunID: memoryQARun, SourceSessionID: memoryQASession, SourceExcerpt: "I prefer Go.", ExpectedRevision: &pref.MemoryRevision}
 	old, err := s.SaveMemoryRecord(ctx, memoryQAUser, base)
 	if err != nil {
 		t.Fatal(err)
