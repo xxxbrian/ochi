@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -107,7 +108,7 @@ from mcp.server.stdio import stdio_server
 async def tools(context, params):
     return types.ListToolsResult(tools=[types.Tool(name="identity", inputSchema={"type":"object","properties":{}})])
 async def call(context, params):
-    value = {"uid": os.getuid(), "component_env": os.environ.get("FIXTURE_KEY") == "synthetic",
+    value = {"uid": os.getuid(), "pid": os.getpid(), "component_env": os.environ.get("FIXTURE_KEY") == "synthetic",
              "control_env": "OCHI_BRIDGE_TOKEN" in os.environ}
     return types.CallToolResult(content=[types.TextContent(type="text", text=json.dumps(value))])
 async def main():
@@ -118,19 +119,27 @@ asyncio.run(main())
 ''')
             with patch.object(control, "CONTROL_ONLY", True), patch.object(control, "MCP_ROOT", root / "runtimes"), patch.object(workspace_mcp, "CONTROL_ONLY", True):
                 (root / "runtimes").mkdir(mode=0o755)
-                connection = workspace_mcp.MCPConnection({
+                runtime = workspace_mcp.MCPRuntime()
+                config = {
                     "id": "fixture", "runtime_uid": 20001, "transport": "stdio",
                     "command": sys.executable, "args": [str(fixture)], "env": {"FIXTURE_KEY": "synthetic"},
-                })
+                }
                 try:
-                    connection.wait_ready()
-                    self.assertEqual([tool["name"] for tool in connection.tools], ["identity"])
-                    result = json.loads(connection.call("identity", {})["text"])
+                    with runtime.borrowed(config) as connection:
+                        connection.wait_ready()
+                        self.assertEqual([tool["name"] for tool in connection.tools], ["identity"])
+                        result = json.loads(connection.call("identity", {})["text"])
+                    pid = result.pop("pid")
                     self.assertEqual(result, {"uid": 20001, "component_env": True, "control_env": False})
-                finally:
-                    connection.close()
+                    with runtime.lock:
+                        runtime._prune(time.monotonic() + workspace_mcp.MCP_IDLE_SECONDS + 1)
+                    self.assertFalse(runtime.connections)
                     connection.thread.join(timeout=10)
                     self.assertFalse(connection.thread.is_alive())
+                    state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+                    self.assertTrue(not state or state.startswith("Z"), f"idle MCP process still running: {state}")
+                finally:
+                    runtime.close_all()
 
 
 if __name__ == "__main__":

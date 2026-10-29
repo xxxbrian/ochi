@@ -17,11 +17,11 @@ func TestComputeHasOnlyOrdinaryTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	items := computeDefinitions(all)
-	if len(items) != 5 {
+	if len(items) != 6 {
 		t.Fatalf("ordinary catalogue contains %d tools", len(items))
 	}
 	for _, d := range items {
-		if d.Name != "exec" && d.Name != "files_list" && d.Name != "files_read" && d.Name != "files_write" && d.Name != "web_fetch" {
+		if d.Name != "exec" && d.Name != "job" && d.Name != "files_list" && d.Name != "files_read" && d.Name != "files_write" && d.Name != "web_fetch" {
 			t.Fatalf("privileged tool exposed: %s", d.Name)
 		}
 	}

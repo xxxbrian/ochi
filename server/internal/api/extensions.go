@@ -8,7 +8,9 @@ import (
 	"net/url"
 	"strings"
 
+	"ochi/server/internal/agent"
 	"ochi/server/internal/i18n"
+	"ochi/server/internal/runtime"
 	"ochi/server/internal/workspace"
 )
 
@@ -135,6 +137,26 @@ func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
 			delete(input, "user_id")
 			data, _ = json.Marshal(input)
 		}
+		runID, err := newID()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		scope := agent.RunScope{
+			UserID: userID, SessionID: "skill-install-" + segments[1], RunID: runID,
+		}
+		owner := resourceOwner{UserID: userID, SessionID: scope.SessionID, RunID: runID}
+		if err := s.resources.acquire(r.Context(), "desktop:"+userID, owner, nil); err != nil {
+			writeError(w, http.StatusConflict, err)
+			return
+		}
+		defer s.resources.releaseRun(runID)
+		if err := s.waitForJobClaims(r.Context(), scope, []string{"desktop"}, false, nil); err != nil {
+			writeError(w, http.StatusConflict, err)
+			return
+		}
+		defer s.finishWorkspaceRun(scope, runtime.StatusCompleted)
+		r = r.WithContext(agent.WithRunScope(r.Context(), scope))
 	}
 	status, _, body, err := bridge.Bridge(r.Context(), userID, r.Method, "/extensions/"+path, data)
 	if err != nil {

@@ -40,8 +40,7 @@ from typing import Any, Callable
 
 from workspace_runtime import (COMPUTE_ONLY, DATA_ROOT, FILES_ROOT, SCREENSHOT_ROOT,
     DISPLAY_SIZE, MAX_BODY_BYTES, MAX_FILE_BYTES, MAX_OUTPUT_CHARS, MAX_TEXT_CHARS,
-    RUN_SCOPE, PROCESS_LOCK, RUN_PROCESSES, CANCELLED_RUNS, OPERATION_PROCESSES,
-    INTERRUPTED_OPERATIONS, _clamp_int, _truncate, _json_error, _scope_cwd,
+    RUN_SCOPE, _clamp_int, _truncate, _json_error, _scope_cwd,
     _safe_relative, _safe_cwd, _file_metadata,
     _publish_file, _export_scratch,
     _import_scratch, _cancel_run, _interrupt_operation, _workspace_env,
@@ -49,6 +48,7 @@ from workspace_runtime import (COMPUTE_ONLY, DATA_ROOT, FILES_ROOT, SCREENSHOT_R
 from workspace_extensions import EXTENSIONS_ROOT, EXTENSIONS_LOCK, _extension_id, _load_extensions, _save_extensions
 from workspace_control import CONTROL_ONLY, authorize_control
 from workspace_contract import CONTRACT
+from workspace_jobs import JOBS, tracked_request
 from workspace_plugins import set_extension_access
 from workspace_skills import _skill_content, _skill_public, install_skill, prepare_skill, tool_skills_list, tool_skills_read, skills_index
 from workspace_mcp import MCP, _mcp_public, save_mcp
@@ -71,63 +71,14 @@ PORT = int(os.environ.get("BRIDGE_PORT", "8080"))
 # GET /tools returns the same definitions; tests enforce that both copies agree.
 TOOLS: list[dict[str, Any]] = json.loads(Path(__file__).with_name("tools.json").read_text(encoding="utf-8"))
 if COMPUTE_ONLY:
-    TOOLS = [item for item in TOOLS if item["name"] in {"exec", "files_list", "files_read", "files_write", "web_fetch"}]
+    TOOLS = [item for item in TOOLS if item["name"] in {"exec", "job", "files_list", "files_read", "files_write", "web_fetch"}]
 TOOL_NAMES = {item["name"] for item in TOOLS}
 for _tool in TOOLS:
     validate_schema(_tool["parameters"])
 
 
 def tool_exec(args: dict[str, Any]) -> dict[str, Any]:
-    command = args.get("command")
-    if not isinstance(command, str) or not command.strip():
-        raise ValueError("command is required")
-    timeout_ms = _clamp_int(args.get("timeout_ms"), 30_000, 1_000, 600_000)
-    cwd = _safe_cwd(args.get("cwd"))
-    env = _workspace_env(args.get("env"))
-    started = time.monotonic()
-    EXEC_LOG_ROOT = DATA_ROOT / "logs"
-    EXEC_LOG_ROOT.mkdir(parents=True, exist_ok=True)
-    log_id = f"exec-{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}"
-    stdout_path, stderr_path = EXEC_LOG_ROOT / f"{log_id}.stdout", EXEC_LOG_ROOT / f"{log_id}.stderr"
-    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
-        run_id = RUN_SCOPE.get().get("run_id", "")
-        operation = RUN_SCOPE.get().get("operation_id", "")
-        with PROCESS_LOCK:
-            if run_id in CANCELLED_RUNS:
-                raise RuntimeError("run was cancelled before execution")
-            if operation and INTERRUPTED_OPERATIONS.pop(operation, None) is not None:
-                raise RuntimeError("operation was interrupted before execution")
-            process = subprocess.Popen(["bash", "-c", command], cwd=str(cwd), env=env, stdout=out, stderr=err, start_new_session=True)
-            if run_id:
-                RUN_PROCESSES.setdefault(run_id, set()).add(process)
-            if operation:
-                OPERATION_PROCESSES[operation] = process
-        timed_out = False
-        try:
-            process.wait(timeout=timeout_ms / 1000)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
-        finally:
-            with PROCESS_LOCK:
-                RUN_PROCESSES.get(run_id, set()).discard(process)
-                if run_id and not RUN_PROCESSES.get(run_id):
-                    RUN_PROCESSES.pop(run_id, None)
-                OPERATION_PROCESSES.pop(operation, None)
-                INTERRUPTED_OPERATIONS.pop(operation, None)
-        out.seek(0)
-        err.seek(0)
-        with stdout_path.open("wb") as log:
-            shutil.copyfileobj(out, log)
-        with stderr_path.open("wb") as log:
-            shutil.copyfileobj(err, log)
-        out.seek(0)
-        err.seek(0)
-        stdout, stdout_truncated = _truncate(out.read(MAX_OUTPUT_CHARS * 4 + 1).decode("utf-8", errors="replace"))
-        stderr, stderr_truncated = _truncate(err.read(MAX_OUTPUT_CHARS * 4 + 1).decode("utf-8", errors="replace"))
-    return {"exit_code": 124 if timed_out else process.returncode, "stdout": stdout, "stderr": stderr, "truncated": stdout_truncated or stderr_truncated, "timed_out": timed_out, "cwd": str(cwd), "duration_ms": round((time.monotonic() - started) * 1000), "stdout_path": str(stdout_path), "stderr_path": str(stderr_path)}
+    return JOBS.execute(args)
 
 
 def tool_files_list(args: dict[str, Any]) -> dict[str, Any]:
@@ -284,6 +235,7 @@ def tool_web_fetch(args: dict[str, Any]) -> dict[str, Any]:
 
 DISPATCH: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "exec": tool_exec,
+    "job": JOBS.call,
     "files_list": tool_files_list,
     "files_read": tool_files_read,
     "files_write": tool_files_write,
@@ -412,7 +364,7 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and kind == "skills" and suffix == "install":
             if CONTROL_ONLY:
                 raise ValueError("select a user workspace for skill dependency installation")
-            self._write(prepare_skill(item, args, tool_exec))
+            self._write(prepare_skill(item, args, lambda values: JOBS.execute(values, wait_until_done=True)))
             return True
         if method == "PATCH" and suffix is None:
             if kind == "mcp":
@@ -441,6 +393,7 @@ class Handler(BaseHTTPRequestHandler):
         self._write(_json_error("unsupported extension operation"), HTTPStatus.NOT_FOUND)
         return True
 
+    @tracked_request
     def do_GET(self) -> None:  # noqa: N802
         try:
             route, query = self._route()
@@ -514,6 +467,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._write(_json_error("not found"), HTTPStatus.NOT_FOUND)
 
+    @tracked_request
     def do_POST(self) -> None:  # noqa: N802
         try:
             route, _ = self._route()
@@ -521,10 +475,19 @@ class Handler(BaseHTTPRequestHandler):
             self._write(_json_error(str(exc)), HTTPStatus.FORBIDDEN if isinstance(exc, PermissionError) else HTTPStatus.BAD_REQUEST)
             return
         try:
+            if route == "/jobs/active":
+                self._write({"ok": True, "result": JOBS.active()})
+                return
             if route == "/workspace/import":
                 self._write(_import_scratch(self._read_body(MAX_FILE_BYTES)))
                 return
             args = self._read_json()
+            if route == "/runs/finish":
+                self._write({"ok": True, "result": JOBS.finish(RUN_SCOPE.get(), services=bool(args.get("cancel_services", False)))})
+                return
+            if route == "/jobs/cancel-session":
+                self._write({"ok": True, "result": JOBS.finish(RUN_SCOPE.get(), services=True, session=True)})
+                return
             if route == "/workspace/init":
                 self._write({"path": str(_scope_cwd())})
                 return
@@ -576,7 +539,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if tool_name in DISPATCH:
                 validate_arguments(definition, strict_json(self._last_json_bytes))
-            result = DISPATCH[tool_name](args) if tool_name in DISPATCH else MCP.call(tool_name, args)
+            resources = (definition.get("execution") or {}).get("resources", [])
+            desktop = JOBS.desktop(RUN_SCOPE.get()) if not COMPUTE_ONLY and "desktop" in resources else contextlib.nullcontext()
+            with desktop:
+                result = DISPATCH[tool_name](args) if tool_name in DISPATCH else MCP.call(tool_name, args)
             self._write({"ok": True, "result": result})
         except ToolArgumentError as exc:
             self._write({**_json_error(str(exc)), "error_detail": exc.detail}, HTTPStatus.OK)
@@ -584,6 +550,7 @@ class Handler(BaseHTTPRequestHandler):
             print(f"tool {tool_name} failed: {exc}\n{traceback.format_exc(limit=2)}", flush=True)
             self._write(_json_error(str(exc)), HTTPStatus.OK)
 
+    @tracked_request
     def do_PUT(self) -> None:  # noqa: N802
         try:
             route, query = self._route()
@@ -615,6 +582,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._write(_json_error(str(exc)), HTTPStatus.BAD_REQUEST)
 
+    @tracked_request
     def do_PATCH(self) -> None:  # noqa: N802
         try:
             route, _ = self._route()
@@ -623,6 +591,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._write(_json_error(str(exc)), HTTPStatus.FORBIDDEN if isinstance(exc, PermissionError) else HTTPStatus.BAD_REQUEST)
 
+    @tracked_request
     def do_DELETE(self) -> None:  # noqa: N802
         try:
             route, _ = self._route()
@@ -654,6 +623,8 @@ def main() -> None:
         pass
     finally:
         httpd.server_close()
+        JOBS.close()
+        MCP.close_all()
         if not COMPUTE_ONLY and not CONTROL_ONLY:
             try:
                 close_computer()

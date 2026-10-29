@@ -20,6 +20,8 @@ import (
 )
 
 func main() {
+	lifetime, cancelLifetime := context.WithCancel(context.Background())
+	defer cancelLifetime()
 	addr := os.Getenv("ADDR")
 	if addr == "" {
 		addr = ":8080"
@@ -83,6 +85,9 @@ func main() {
 	application.StartQueue(context.Background())
 	application.StartScheduler(context.Background())
 	application.StartMemoryWorker(context.Background())
+	if lifecycle, ok := tools.(interface{ Maintain(context.Context) }); ok {
+		go lifecycle.Maintain(lifetime)
+	}
 
 	srv := &http.Server{
 		Addr:              addr,

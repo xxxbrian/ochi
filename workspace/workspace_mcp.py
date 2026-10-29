@@ -25,6 +25,8 @@ MAX_DISCOVERED_TOOLS = 6
 MAX_DISCOVERY_CANDIDATES = 32
 MAX_TOOL_SCHEMA_BYTES = 16 * 1024
 MAX_DISCOVERY_BYTES = 64 * 1024
+MCP_IDLE_SECONDS = 300
+MAX_MCP_CONNECTIONS = 64
 
 
 def _checked_tool(tool: dict[str, Any]) -> dict[str, Any]:
@@ -171,6 +173,10 @@ class MCPConnection:
         self.ready = threading.Event()
         self.tools: list[dict[str, Any]] = []
         self.error = ""
+        self.state_lock = threading.Lock()
+        self.last_used = time.monotonic()
+        self.busy = 0
+        self.closing = False
         call_context = contextvars.copy_context()
         self.thread = threading.Thread(target=lambda: call_context.run(asyncio.run, self._loop()), name=f"mcp-{config['id']}", daemon=True)
         self.thread.start()
@@ -246,36 +252,98 @@ class MCPConnection:
     def call(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         if not CONTROL_ONLY:
             raise PermissionError("MCP invocation belongs to plugin control")
-        self.wait_ready()
-        done, result = threading.Event(), []
-        self.jobs.put((name, args, done, result))
-        if not done.wait(125):
-            raise TimeoutError("MCP tool call timed out")
-        if not result:
-            raise RuntimeError("MCP connection closed before a result")
-        if isinstance(result[0], BaseException):
-            raise result[0]
-        return result[0]
+        with self.state_lock:
+            if self.closing:
+                raise RuntimeError("MCP connection is closing")
+            self.busy += 1
+        try:
+            self.wait_ready()
+            done, result = threading.Event(), []
+            self.jobs.put((name, args, done, result))
+            if not done.wait(125):
+                raise TimeoutError("MCP tool call timed out")
+            if not result:
+                raise RuntimeError("MCP connection closed before a result")
+            if isinstance(result[0], BaseException):
+                raise result[0]
+            return result[0]
+        finally:
+            with self.state_lock:
+                self.busy -= 1
+                self.last_used = time.monotonic()
 
     def close(self) -> None:
+        with self.state_lock:
+            if self.closing:
+                return
+            self.closing = True
         self.jobs.put(("__close__", {}, threading.Event(), []))
+
+    def available_for_eviction(self, now: float, idle: float) -> bool:
+        with self.state_lock:
+            return self.busy == 0 and self.ready.is_set() and now - self.last_used >= idle
+
+    def touch(self) -> None:
+        with self.state_lock:
+            self.last_used = time.monotonic()
 
 
 class MCPRuntime:
     def __init__(self) -> None:
         self.connections: dict[str, tuple[str, MCPConnection]] = {}
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
+        self.stopping = threading.Event()
+        self.reaper: threading.Thread | None = None
+
+    def _prune(self, now: float) -> None:
+        for key, (_, connection) in list(self.connections.items()):
+            if not connection.thread.is_alive() or connection.available_for_eviction(now, MCP_IDLE_SECONDS):
+                self.connections.pop(key)
+                connection.close()
+
+    def _reap(self) -> None:
+        while not self.stopping.wait(30):
+            with self.lock:
+                self._prune(time.monotonic())
+
+    @contextlib.contextmanager
+    def borrowed(self, config: dict[str, Any]):
+        # Admission and reservation are atomic with eviction. A just-discovered
+        # client cannot be closed between lookup and its first call.
+        with self.lock:
+            connection = self.connection(config)
+            with connection.state_lock:
+                connection.busy += 1
+        try:
+            yield connection
+        finally:
+            with connection.state_lock:
+                connection.busy -= 1
+                connection.last_used = time.monotonic()
 
     def connection(self, config: dict[str, Any]) -> MCPConnection:
         if not CONTROL_ONLY:
             raise PermissionError("MCP transport belongs to plugin control")
         fingerprint = json.dumps({key: config.get(key) for key in ("transport", "command", "args", "env", "url", "headers", "enabled")}, sort_keys=True)
         with self.lock:
+            if self.reaper is None:
+                self.reaper = threading.Thread(target=self._reap, name="mcp-idle", daemon=True)
+                self.reaper.start()
+            self._prune(time.monotonic())
             existing = self.connections.get(config.get("connection_id",config["id"]))
-            if existing and existing[0] == fingerprint and existing[1].thread.is_alive() and not existing[1].error:
+            if existing and existing[0] == fingerprint and existing[1].thread.is_alive() and not existing[1].error and not existing[1].closing:
+                existing[1].touch()
                 return existing[1]
             if existing:
+                self.connections.pop(config.get("connection_id", config["id"]))
                 existing[1].close()
+            if len(self.connections) >= MAX_MCP_CONNECTIONS:
+                candidates = [(connection.last_used, key) for key, (_, connection) in self.connections.items()
+                              if connection.available_for_eviction(time.monotonic(), 0)]
+                if not candidates:
+                    raise RuntimeError("all MCP connection slots are busy")
+                _, oldest = min(candidates)
+                self.connections.pop(oldest)[1].close()
             connection = MCPConnection(config)
             self.connections[config.get("connection_id",config["id"])] = (fingerprint, connection)
             return connection
@@ -285,6 +353,17 @@ class MCPRuntime:
             for key in [key for key in self.connections if key == server_id or key.startswith(server_id + ":")]:
                 existing = self.connections.pop(key)
                 existing[1].close()
+
+    def close_all(self) -> None:
+        self.stopping.set()
+        with self.lock:
+            connections = [entry[1] for entry in self.connections.values()]
+            self.connections.clear()
+        for connection in connections:
+            connection.close()
+        deadline = time.monotonic() + 3
+        for connection in connections:
+            connection.thread.join(max(0, deadline - time.monotonic()))
 
     def definitions(self, names: set[str] | None = None) -> list[dict[str, Any]]:
         definitions = []
@@ -362,7 +441,8 @@ class MCPRuntime:
                         scope = RUN_SCOPE.get()
                         if scope.get("session_id"):
                             config = {**config, "connection_id": server_id + ":" + scope.get("user_id", "") + ":" + scope["session_id"]}
-                        return self.connection(config).call(tool["name"], args)
+                        with self.borrowed(config) as connection:
+                            return connection.call(tool["name"], args)
         raise ValueError("MCP tool is unavailable or disabled")
 
     def test(self, server_id: str) -> dict[str, Any]:
@@ -370,9 +450,9 @@ class MCPRuntime:
         if not config:
             raise ValueError("MCP server does not exist")
         try:
-            connection = self.connection(config)
-            connection.wait_ready()
-            result = {"ok": True, "tools": connection.tools, "error": ""}
+            with self.borrowed(config) as connection:
+                connection.wait_ready()
+                result = {"ok": True, "tools": connection.tools, "error": ""}
         except Exception as exc:
             result = {"ok": False, "tools": [], "error": _mcp_error(config, exc)}
         with EXTENSIONS_LOCK:

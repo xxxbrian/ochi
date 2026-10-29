@@ -6,7 +6,10 @@ a private Linux container, never on the user's desktop.
 ## Boundaries
 
 - `bridge.py` is private HTTP dispatch; `workspace_runtime.py` owns shared scope,
-  filesystem, process groups, and artifact primitives.
+  filesystem, short desktop helper processes and artifact primitives.
+- `workspace_jobs.py` owns exec process groups, user/session ownership, log
+  cursors, task/service lifetimes and bridge activity. Do not add a second process
+  registry or infer persistent services from shell command text.
 - `workspace_browser.py` owns headed Chromium, CDP, and session-owned browser tabs.
 - `workspace_computer.py` owns desktop actions; `workspace_a11y.py` runs through the
   system Python because AT-SPI is not part of the bridge virtual environment.
@@ -28,4 +31,5 @@ a private Linux container, never on the user's desktop.
 
 From the repository root, run `python3 -B -m unittest discover -s workspace/tests -v`.
 Fixtures do not operate the host UI or require Chromium, MCP, Docker, or a provider.
+Job tests execute short real subprocesses confined to temporary directories.
 Native desktop/browser end-to-end checks are separate from these fixture tests.

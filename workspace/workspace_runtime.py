@@ -191,7 +191,9 @@ def _cancel_run() -> dict[str, Any]:
             with contextlib.suppress(ProcessLookupError):
                 os.killpg(process.pid, signal.SIGKILL)
             process.wait(timeout=2)
-    return {"cancelled": True, "processes": len(processes)}
+    from workspace_jobs import JOBS
+    result = JOBS.finish(RUN_SCOPE.get(), services=True)
+    return {**result, "processes": len(processes)}
 
 
 def _interrupt_operation() -> dict[str, Any]:
@@ -219,7 +221,9 @@ def _interrupt_operation() -> dict[str, Any]:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
         process.wait(timeout=2)
-    return {"interrupted": True, "processes": int(process is not None)}
+    from workspace_jobs import JOBS
+    jobs = JOBS.interrupt(operation)
+    return {"interrupted": True, "processes": int(process is not None), "jobs": jobs}
 
 
 def _workspace_env(extra: Any = None) -> dict[str, str]:

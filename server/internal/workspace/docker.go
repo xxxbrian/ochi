@@ -37,6 +37,9 @@ type Docker struct {
 	bridge      *http.Client
 	mu          sync.Mutex
 	urls        map[string]string
+	gates       map[string]*workspaceGate
+	active      map[string]int
+	lastUse     map[string]time.Time
 	catalogMu   sync.Mutex
 	discoveries map[string]*runCatalog
 	tokenMu     sync.RWMutex
@@ -75,20 +78,22 @@ func userContainer(userID string) string {
 }
 
 func (d *Docker) ensure(ctx context.Context, userID string) (string, error) {
-	if scope, ok := agent.ScopeFromContext(ctx); ok && scope.ComputeOnly {
-		return d.ensureCompute(ctx, userID, scope.SessionID)
+	unlock, err := d.lockWorkspace(ctx, workspaceKey(ctx, userID))
+	if err != nil {
+		return "", err
 	}
-	// A small deployment needs one persistent workspace per user, not an
-	// orchestration layer. Serialize first creation so two tabs reuse one container.
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if address := d.urls[userID]; address != "" {
+	defer unlock()
+	return d.ensureLocked(ctx, userID)
+}
+
+func (d *Docker) ensureWorkspaceLocked(ctx context.Context, userID string) (string, error) {
+	if address := d.address(userID); address != "" {
 		if err := d.healthy(ctx, address); err == nil {
 			return address, nil
 		} else if errors.Is(err, ErrContractMismatch) {
 			return "", err
 		}
-		delete(d.urls, userID)
+		d.rememberAddress(userID, "")
 	}
 	name := userContainer(userID)
 	var inspect struct {
@@ -153,7 +158,7 @@ func (d *Docker) ensure(ctx context.Context, userID string) (string, error) {
 	defer ticker.Stop()
 	for {
 		if err := d.healthy(readyCtx, address); err == nil {
-			d.urls[userID] = address
+			d.rememberAddress(userID, address)
 			return address, nil
 		} else if errors.Is(err, ErrContractMismatch) {
 			return "", err
@@ -237,10 +242,11 @@ func (d *Docker) Definitions(ctx context.Context, userID string) ([]agent.ToolDe
 
 // Bridge is private server-to-container I/O, shared by uploads and admin tools.
 func (d *Docker) Bridge(ctx context.Context, userID, method, path string, data []byte) (int, http.Header, []byte, error) {
-	address, err := d.ensure(ctx, userID)
+	address, release, err := d.borrow(ctx, userID)
 	if err != nil {
 		return 0, nil, nil, err
 	}
+	defer release()
 	req, err := http.NewRequestWithContext(ctx, method, address+path, bytes.NewReader(data))
 	if err != nil {
 		return 0, nil, nil, err
@@ -322,13 +328,24 @@ func (d *Docker) configuredImageID(ctx context.Context) (string, error) {
 }
 
 func (d *Docker) Manage(ctx context.Context, userID, action string) (State, error) {
+	unlock, err := d.lockWorkspace(ctx, userID)
+	if err != nil {
+		return State{}, err
+	}
+	defer unlock()
 	name := userContainer(userID)
 	switch action {
 	case "start":
-		if _, err := d.ensure(ctx, userID); err != nil {
+		if _, err := d.ensureWorkspaceLocked(ctx, userID); err != nil {
 			return State{}, err
 		}
 	case "stop", "rebuild":
+		d.mu.Lock()
+		busy := d.active[userID] > 0
+		d.mu.Unlock()
+		if busy {
+			return State{}, errors.New("workspace has an active request")
+		}
 		if action == "rebuild" {
 			imageID, err := d.configuredImageID(ctx)
 			if err != nil {
@@ -338,9 +355,7 @@ func (d *Docker) Manage(ctx context.Context, userID, action string) (State, erro
 				return State{}, errors.New("configured workspace image has no image ID")
 			}
 		}
-		d.mu.Lock()
-		delete(d.urls, userID)
-		d.mu.Unlock()
+		d.rememberAddress(userID, "")
 		state, err := d.Inspect(ctx, userID)
 		if err != nil {
 			return state, err
@@ -357,7 +372,7 @@ func (d *Docker) Manage(ctx context.Context, userID, action string) (State, erro
 					return state, err
 				}
 			}
-			if _, err := d.ensure(ctx, userID); err != nil {
+			if _, err := d.ensureWorkspaceLocked(ctx, userID); err != nil {
 				return state, err
 			}
 		}
@@ -410,10 +425,11 @@ func (d *Docker) Call(ctx context.Context, userID, name string, args json.RawMes
 	if name == "tool_search" || strings.HasPrefix(name, "mcp_") {
 		targetID = "__admin__"
 	}
-	address, err := d.ensure(ctx, targetID)
+	address, release, err := d.borrow(ctx, targetID)
 	if err != nil {
 		return agent.ToolResult{}, err
 	}
+	defer release()
 	if err := ctx.Err(); err != nil {
 		return agent.ToolResult{}, err
 	}

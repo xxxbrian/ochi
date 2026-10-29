@@ -394,6 +394,12 @@ func (s *Server) updateSession(w http.ResponseWriter, r *http.Request) {
 			writeStoreError(w, err)
 			return
 		}
+		if !*req.ComputerEnabled {
+			if err := s.cancelSessionJobs(r.Context(), currentUser(r).ID, current.ID); err != nil {
+				writeStoreError(w, err)
+				return
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, item)
 }
@@ -401,6 +407,9 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.DeleteSession(r.Context(), currentUser(r).ID, r.PathValue("id")); err != nil {
 		writeStoreError(w, err)
 		return
+	}
+	if err := s.cancelSessionJobs(r.Context(), currentUser(r).ID, r.PathValue("id")); err != nil {
+		log.Printf("cancel deleted conversation jobs: %v", err)
 	}
 	if source, err := s.bridgeSource(); err == nil {
 		if cleaner, ok := source.(interface {
@@ -601,6 +610,7 @@ func (s *Server) messages(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) execute(run *runtime.Run, request agent.Request) {
 	defer func() {
+		s.finishWorkspaceRun(request.Scope, run.Head().Status)
 		if source, ok := s.tools.(interface{ ForgetSkillsIndex(string, string) }); ok {
 			source.ForgetSkillsIndex(request.UserID, request.RunID)
 		}

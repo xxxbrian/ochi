@@ -92,14 +92,42 @@ strict fixtures: required/type/unknown properties, exact decimal bounds,
 local definitions and combinators. MCP schemas are a separate external contract:
 Go checks JSON shape, preserves the original schema on provider transport, and
 the bridge uses jsonschema with the declared standard dialect to validate calls.
+The server currently uses OpenAI-compatible chat and Responses transports;
+Responses sends external schemas with `strict:false`. This is not an assertion
+that every provider's native schema subset accepts every MCP schema.
 Patterns, local references, conditionals and tuple schemas are supported without
 silently deleting predicates. References never fetch network or local resources.
 `default` and `format` remain annotations, not automatic values/assertions.
 Execution attributes are scheduler-only: trusted file/skill metadata reads can
 parallelize; shell, desktop/browser and untrusted MCP remain conservative. The
 attributes never enter model-facing tool JSON and do not authorize retries.
-Exec tracks process groups by run and `/runs/cancel` terminates only that run.
-Output is bounded, full logs are under `/data/logs`, command timeout is bounded.
+`exec` starts an owned process group and returns after a short wait (one second
+by default, at most ten seconds). Its result always includes a `job_id` and
+`running` or terminal status. `job` observes, waits for or cancels that job;
+stdout/stderr byte cursors return bounded, UTF-8-safe chunks without repeating
+output. State and complete logs are under `/data/jobs/<id>`. Ownership is the
+user and session, so a later turn can manage an earlier service, while another
+session cannot inspect or cancel it.
+
+Tasks have a finite deadline (20 seconds by default, at most ten minutes) and
+end when their run ends. Persistent foreground servers explicitly use
+`kind:"service"` and a finite deadline (one hour by default, at most 24 hours).
+They survive successful run completion, not explicit cancellation or Computer
+revocation. The shell exiting also terminates its remaining process group;
+backgrounding with `&` is not a substitute for a service. Completed state/logs
+remain readable after a container restart; live processes are not restored.
+
+The job registry owns process lifetime, live resource claims and bridge activity.
+Full workspace commands retain desktop/project claims for their entire lifetime;
+observation/cancellation remains available without acquiring those claims.
+Computer-off jobs have no desktop/project claims. `/runs/finish` ends a run's
+tasks (and services on failure), `/runs/cancel` cancels that run, and
+`/jobs/cancel-session` closes all existing jobs for the specified user/session.
+Authenticated `/jobs/active` reports jobs, active requests and monotonic idle
+duration. Health/activity probes do not reset that duration. Go uses this
+authority for resource leases and idle scratch reclamation; live jobs or
+requests prevent reclamation.
+
 Go also carries a unique operation ID into browser/desktop calls. Stop or Computer
 revocation interrupts that operation and drains it before releasing the desktop
 lease. An in-flight browser mutation is aborted by closing only its armed,
@@ -134,6 +162,10 @@ Connection/tool errors expose bounded, credential-redacted exception details and
 the current RPC's HTTP failure status. HTTP observation never reads response
 bodies or headers and does not change SDK protocol negotiation or retries.
 No OAuth or public bridge access is included.
+MCP connections are leased while initializing or executing, reclaimed after five
+idle minutes, and capped at 64 per control runtime. A full busy pool reports
+capacity rather than interrupting a live call. Reclamation closes the SDK
+connection and its stdio process; it never retries a tool effect.
 `GET /skills/index` is metadata only, bounded to 32 skills/8 KB. Instruction
 bodies are read only with `skills_read`; `skills_list` searches and pages through
 the complete permitted catalog. Dependency preparation targets an explicit user
@@ -145,7 +177,8 @@ while retaining isolated shell/files/public HTTP computation. Verified private
 methods live in the user's PostgreSQL namespace, separate from shared extensions;
 promotion requires a completed task and genuine current-run check evidence.
 
-Fixture contracts can be checked without a running browser, MCP or shell:
+Fixture contracts can be checked without a browser, Docker, MCP server or model
+provider. Job tests run short real subprocesses in temporary directories:
 
 ```sh
 python3 -m pip install -r workspace/requirements-test.txt

@@ -2,14 +2,69 @@
 from __future__ import annotations
 
 import contextlib
+import queue
 import sys
+import threading
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import workspace_mcp
+
+
+class MCPIdleLifecycle(unittest.TestCase):
+    def connection(self, used=0, busy=0):
+        value = object.__new__(workspace_mcp.MCPConnection)
+        value.state_lock = threading.Lock()
+        value.last_used, value.busy, value.closing = used, busy, False
+        value.ready = threading.Event()
+        value.ready.set()
+        value.thread = Mock()
+        value.thread.is_alive.return_value = True
+        value.jobs = queue.Queue()
+        value.error = ""
+        return value
+
+    def test_idle_clients_are_closed_but_inflight_calls_are_retained(self):
+        runtime = workspace_mcp.MCPRuntime()
+        idle, active, recent = self.connection(), self.connection(busy=1), self.connection(used=999)
+        runtime.connections = {"idle": ("x", idle), "active": ("x", active), "recent": ("x", recent)}
+        with runtime.lock:
+            runtime._prune(1000)
+        self.assertEqual(set(runtime.connections), {"active", "recent"})
+        self.assertTrue(idle.closing)
+        self.assertFalse(active.closing)
+        self.assertEqual(idle.jobs.get_nowait()[0], "__close__")
+        runtime.close_all()
+        self.assertTrue(active.closing)
+
+    def test_pool_never_evicts_busy_clients_to_admit_new_work(self):
+        runtime = workspace_mcp.MCPRuntime()
+        active = self.connection(used=999, busy=1)
+        runtime.connections = {"one": ("x", active)}
+        try:
+            with patch.object(workspace_mcp, "CONTROL_ONLY", True), patch.object(workspace_mcp, "MAX_MCP_CONNECTIONS", 1), patch.object(workspace_mcp.time, "monotonic", return_value=1000), patch.object(workspace_mcp, "MCPConnection", side_effect=AssertionError("unbounded client created")):
+                with self.assertRaisesRegex(RuntimeError, "slots are busy"):
+                    runtime.connection({"id": "new", "transport": "http"})
+        finally:
+            runtime.close_all()
+            if runtime.reaper:
+                runtime.reaper.join(1)
+
+    def test_borrow_reserves_client_across_lookup_and_dispatch(self):
+        runtime = workspace_mcp.MCPRuntime()
+        client = self.connection()
+        runtime.connections = {"one": ("x", client)}
+        with patch.object(runtime, "connection", return_value=client):
+            with runtime.borrowed({"id": "one"}):
+                self.assertEqual(client.busy, 1)
+                with runtime.lock:
+                    runtime._prune(1000)
+                self.assertIn("one", runtime.connections)
+            self.assertEqual(client.busy, 0)
+        runtime.close_all()
 
 
 class MCPDiagnostics(unittest.TestCase):

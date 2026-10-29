@@ -23,7 +23,7 @@ def authorize_control(method: str, route: str, authorization: str) -> None:
         return
     if route.startswith("/extensions/"):
         return
-    if method == "POST" and route == "/embeddings":
+    if method == "POST" and route in {"/embeddings", "/jobs/active"}:
         return
     if method == "POST" and (route == "/tools/tool_search" or route.startswith("/tools/mcp_")):
         return

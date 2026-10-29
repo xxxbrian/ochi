@@ -4,10 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
+	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/runtime"
+	"ochi/server/internal/workspace"
 )
 
 type resourceOwner struct {
@@ -133,27 +138,158 @@ func desktopControlID(sessionID string) string {
 	return "session:" + sessionID
 }
 
-func (s *Server) DesktopState(userID string) map[string]any { return s.resources.DesktopState(userID) }
+func (s *Server) DesktopState(userID string) map[string]any {
+	state := s.resources.DesktopState(userID)
+	if state["busy"] == true {
+		return state
+	}
+	if source := s.workspaceJobs(); source != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		jobs, err := source.ActiveJobs(ctx, userID)
+		if err != nil {
+			state["busy"], state["unavailable"] = true, true
+		} else {
+			for _, job := range jobs {
+				if hasClaim(job.ResourceClaims, "desktop") {
+					state["busy"], state["job_id"] = true, job.ID
+					state["run_id"], state["session_id"] = job.RunID, job.SessionID
+					state["owner_run_id"], state["owner_session_id"] = job.RunID, job.SessionID
+					break
+				}
+			}
+		}
+	}
+	return state
+}
 func (s *Server) AcquireDesktopControl(ctx context.Context, userID, sessionID string) error {
-	return s.resources.AcquireDesktopControl(ctx, userID, sessionID)
+	if err := s.resources.AcquireDesktopControl(ctx, userID, sessionID); err != nil {
+		return err
+	}
+	scope := agent.RunScope{UserID: userID, SessionID: sessionID}
+	if err := s.waitForJobClaims(ctx, scope, []string{"desktop"}, true, nil); err != nil {
+		s.resources.ReleaseDesktopControl(userID, sessionID)
+		return err
+	}
+	return nil
 }
 func (s *Server) ReleaseDesktopControl(userID, sessionID string) {
 	s.resources.ReleaseDesktopControl(userID, sessionID)
 }
 
-func projectSideEffect(name string, args json.RawMessage) bool {
-	switch name {
-	case "files_read", "files_list", "skills_list", "skills_read", "browser_observe", "browser_screenshot", "browser_tabs", "computer_screenshot", "memory_search", "schedule_list", "publish_file":
-		return false
-	case "web_fetch":
-		var v struct {
-			Path string `json:"path"`
+func hasClaim(claims []string, claim string) bool {
+	for _, value := range claims {
+		if value == claim {
+			return true
 		}
-		_ = json.Unmarshal(args, &v)
-		return v.Path != ""
 	}
-	// Arbitrary shell and MCP operations cannot be reliably classified as read-only.
-	return name == "exec" || name == "files_write" || len(name) >= 8 && name[:8] == "browser_" || len(name) >= 4 && name[:4] == "mcp_"
+	return false
+}
+
+type workspaceJobSource interface {
+	ActiveJobs(context.Context, string) ([]workspace.Job, error)
+	FinishRun(context.Context, agent.RunScope, bool) error
+	CancelSessionJobs(context.Context, string, string) error
+}
+
+func (s *Server) workspaceJobs() workspaceJobSource {
+	source := s.tools
+	if wrapped, ok := source.(*personalTools); ok {
+		source = wrapped.source
+	}
+	jobs, _ := source.(workspaceJobSource)
+	return jobs
+}
+
+func (s *Server) toolClaims(name string) []string {
+	source := s.tools
+	if wrapped, ok := source.(*personalTools); ok {
+		source = wrapped.source
+	}
+	if source, ok := source.(interface{ ToolResources(string) []string }); ok {
+		return source.ToolResources(name)
+	}
+	return nil
+}
+
+func jobConflicts(job workspace.Job, scope agent.RunScope, claims []string, manual bool) bool {
+	// Services remain owned by their conversation; a later turn can inspect,
+	// cancel or work alongside its own service. Other conversations and manual
+	// desktop takeover must wait for the actual process, not just its old run.
+	if !manual && job.SessionID == scope.SessionID && job.UserID == scope.UserID {
+		return false
+	}
+	project := projectResource(scope.CWD)
+	return hasClaim(claims, "desktop") && hasClaim(job.ResourceClaims, "desktop") ||
+		hasClaim(claims, "project") && project != "" &&
+			projectResource(job.CWD) == project && hasClaim(job.ResourceClaims, "project")
+}
+
+func projectResource(cwd string) string {
+	const prefix = "/data/projects/"
+	clean := path.Clean(cwd)
+	if !strings.HasPrefix(clean, prefix) {
+		return ""
+	}
+	return prefix + strings.SplitN(strings.TrimPrefix(clean, prefix), "/", 2)[0]
+}
+
+func (s *Server) finishWorkspaceRun(scope agent.RunScope, status string) {
+	if source := s.workspaceJobs(); source != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := source.FinishRun(ctx, scope, status != runtime.StatusCompleted); err != nil {
+			log.Printf("finish workspace run %s: %v", scope.RunID, err)
+		}
+	}
+}
+
+func (s *Server) cancelSessionJobs(ctx context.Context, userID, sessionID string) error {
+	if source := s.workspaceJobs(); source != nil {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		return source.CancelSessionJobs(cleanup, userID, sessionID)
+	}
+	return nil
+}
+
+func (s *Server) waitForJobClaims(ctx context.Context, scope agent.RunScope, claims []string, manual bool, onWait func(bool)) error {
+	source := s.workspaceJobs()
+	if source == nil || len(claims) == 0 || scope.ComputeOnly {
+		return nil
+	}
+	waiting := false
+	defer func() {
+		if waiting && onWait != nil {
+			onWait(false)
+		}
+	}()
+	for {
+		query, cancel := context.WithTimeout(ctx, 2*time.Second)
+		jobs, err := source.ActiveJobs(query, scope.UserID)
+		cancel()
+		if err != nil {
+			return err
+		}
+		busy := false
+		for _, job := range jobs {
+			busy = busy || jobConflicts(job, scope, claims, manual)
+		}
+		if !busy {
+			return nil
+		}
+		if !waiting && onWait != nil {
+			onWait(true)
+		}
+		waiting = true
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func (s *Server) acquireToolResources(ctx context.Context, scope agent.RunScope, name string, args json.RawMessage) error {
@@ -172,7 +308,11 @@ func (s *Server) acquireToolResources(ctx context.Context, scope agent.RunScope,
 			}
 		}
 	}
-	headed := strings.HasPrefix(name, "browser_") || strings.HasPrefix(name, "computer_")
+	claims := s.toolClaims(name)
+	if scope.ComputeOnly {
+		return nil
+	}
+	headed := hasClaim(claims, "desktop")
 	guard := func() error {
 		allowed, err := s.computerAllowed(ctx, scope)
 		if err != nil {
@@ -183,12 +323,13 @@ func (s *Server) acquireToolResources(ctx context.Context, scope agent.RunScope,
 		}
 		return nil
 	}
-	if !scope.ComputeOnly && (scope.ProjectID != "" || strings.HasPrefix(scope.CWD, "/data/projects/")) && (projectSideEffect(name, args) || headed) {
-		key := "project:" + scope.CWD
+	if project := projectResource(scope.CWD); project != "" && hasClaim(claims, "project") {
+		key := "project:" + project
 		if err := s.resources.acquire(ctx, key, owner, wait(key), guard); err != nil {
 			return err
 		}
 	}
+	activate := false
 	if headed {
 		key := "desktop:" + scope.UserID
 		state := s.resources.DesktopState(scope.UserID)
@@ -196,11 +337,13 @@ func (s *Server) acquireToolResources(ctx context.Context, scope agent.RunScope,
 		if err := s.resources.acquire(ctx, key, owner, wait(key), guard); err != nil {
 			return err
 		}
-		if !wasOwned && strings.HasPrefix(name, "computer_") {
-			if err := s.activateDesktop(ctx, scope); err != nil {
-				return err
-			}
-		}
+		activate = !wasOwned && strings.HasPrefix(name, "computer_")
+	}
+	if err := s.waitForJobClaims(ctx, scope, claims, false, wait("workspace_job")); err != nil {
+		return err
+	}
+	if activate {
+		return s.activateDesktop(ctx, scope)
 	}
 	return nil
 }

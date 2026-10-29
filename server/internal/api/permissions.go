@@ -114,7 +114,7 @@ func (s *Server) computerAllowed(ctx context.Context, scope agent.RunScope) (boo
 
 func computationTool(name string) bool {
 	switch name {
-	case "exec", "files_list", "files_read", "files_write", "web_fetch", "publish_file", "read_artifact":
+	case "exec", "job", "files_list", "files_read", "files_write", "web_fetch", "publish_file", "read_artifact":
 		return true
 	}
 	return false

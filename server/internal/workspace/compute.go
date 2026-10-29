@@ -21,7 +21,7 @@ func computeDefinitions(definitions []agent.ToolDefinition) []agent.ToolDefiniti
 	items := []agent.ToolDefinition{}
 	for _, d := range definitions {
 		switch d.Name {
-		case "exec", "files_list", "files_read", "files_write", "web_fetch":
+		case "exec", "job", "files_list", "files_read", "files_write", "web_fetch":
 			if d.Name == "exec" {
 				d.Description = "Run shell, Python or Node in this conversation's isolated computation container. Install dependencies with pip/npm, fetch public URLs, analyze uploaded data and generate working files. Files are not automatically published; use publish_file separately only for requested final files. It has no persistent computer, Project files, login profiles, desktop or MCP access. The conversation's scratch files and dependencies survive subsequent turns."
 			}
@@ -32,20 +32,27 @@ func computeDefinitions(definitions []agent.ToolDefinition) []agent.ToolDefiniti
 }
 
 func (d *Docker) ensureCompute(ctx context.Context, userID, sessionID string) (string, error) {
+	unlock, err := d.lockWorkspace(ctx, computeContainer(userID, sessionID))
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	return d.ensureComputeLocked(ctx, userID, sessionID)
+}
+
+func (d *Docker) ensureComputeLocked(ctx context.Context, userID, sessionID string) (string, error) {
 	if sessionID == "" {
 		return "", errors.New("computation requires a conversation scope")
 	}
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	name := computeContainer(userID, sessionID)
-	if address := d.urls[name]; address != "" {
+	if address := d.address(name); address != "" {
 		if err := d.healthy(ctx, address); err == nil {
 			return address, nil
 		} else if errors.Is(err, ErrContractMismatch) {
 			return "", err
 		}
 	}
-	delete(d.urls, name)
+	d.rememberAddress(name, "")
 	var inspect struct {
 		Image  string
 		Config struct{ Env []string }
@@ -100,7 +107,7 @@ func (d *Docker) ensureCompute(ctx context.Context, userID, sessionID string) (s
 	defer ticker.Stop()
 	for {
 		if err := d.healthy(ready, address); err == nil {
-			d.urls[name] = address
+			d.rememberAddress(name, address)
 			return address, nil
 		} else if errors.Is(err, ErrContractMismatch) {
 			return "", err
@@ -117,9 +124,12 @@ func (d *Docker) ensureCompute(ctx context.Context, userID, sessionID string) (s
 // published downloads live in the server artifact store and survive deletion.
 func (d *Docker) RemoveCompute(ctx context.Context, userID, sessionID string) error {
 	name := computeContainer(userID, sessionID)
-	d.mu.Lock()
-	delete(d.urls, name)
-	d.mu.Unlock()
+	unlock, err := d.lockWorkspace(ctx, name)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	d.rememberAddress(name, "")
 	status, err := d.request(ctx, http.MethodDelete, "/containers/"+name+"?force=true", nil, nil)
 	if err != nil && status != http.StatusNotFound {
 		return err

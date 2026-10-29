@@ -1,12 +1,14 @@
 {
   "protocol": 1,
-  "revision": 2,
+  "revision": 3,
   "capabilities": [
     "plugin-control",
     "public-catalog",
     "paginated-catalog",
     "external-json-schema",
-    "skill-readiness"
+    "skill-readiness",
+    "owned-jobs",
+    "activity-lifecycle"
   ],
   "modes": [
     "control",

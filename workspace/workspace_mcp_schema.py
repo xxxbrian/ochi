@@ -18,6 +18,8 @@ def _validator(encoded: str):
     schema = json.loads(encoded)
     if not isinstance(schema, dict):
         raise ToolArgumentError("invalid_schema", "$", "MCP input schema must be an object")
+    if "$schema" in schema and not isinstance(schema["$schema"], str):
+        raise ToolArgumentError("invalid_schema", "$", "schema dialect must be a URI string")
     validator = validators.validator_for(schema, default=None) if "$schema" in schema else Draft202012Validator
     if validator is None:
         raise ToolArgumentError("unsupported_schema", "$", "unknown JSON Schema dialect")
