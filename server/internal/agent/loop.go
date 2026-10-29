@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"ochi/server/internal/i18n"
 )
 
 func (g *OpenAI) Generate(ctx context.Context, req Request, emit func(Update) error) error {
@@ -45,7 +47,7 @@ func (g *OpenAI) Generate(ctx context.Context, req Request, emit func(Update) er
 
 func (g *OpenAI) generate(ctx context.Context, req Request, emit func(Update) error) error {
 	if g.config.BaseURL == "" || (g.config.APIKey == "" && !g.config.AllowNoKey) || g.config.Model == "" {
-		return errors.New("请先在管理后台配置可用模型")
+		return i18n.New("model_configuration_required")
 	}
 	if err := g.validateContextConfig(); err != nil {
 		return err

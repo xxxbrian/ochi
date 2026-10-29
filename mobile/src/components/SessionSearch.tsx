@@ -1,3 +1,5 @@
+import { errorForDisplay, type DisplayError } from "../lib/errors";
+import { t, useI18n, getLocale } from "../lib/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -32,11 +34,11 @@ import { ActionIcon, AppText, EmptyState, ErrorNotice } from "./ScreenChrome";
 export function sessionDate(value: string) {
   const date = new Date(value);
   const today = new Date();
-  if (date.toDateString() === today.toDateString()) return "今天";
+  if (date.toDateString() === today.toDateString()) return t("date.today");
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return "昨天";
-  return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+  if (date.toDateString() === yesterday.toDateString()) return t("date.yesterday");
+  return date.toLocaleDateString(getLocale(), { month: "short", day: "numeric" });
 }
 
 export function SessionSearch({
@@ -50,6 +52,7 @@ export function SessionSearch({
   onSelect: (session: Session) => void;
   projectId?: string;
 }) {
+  useI18n();
   const { colors, fonts, dark } = useTheme();
   const insets = useSafeAreaInsets();
   const viewport = useWindowDimensions();
@@ -63,7 +66,7 @@ export function SessionSearch({
   const [cursor, setCursor] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const [paging, setPaging] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const sequence = useRef(0);
   const loadingMore = useRef(false);
   const pageRequest = useRef<AbortController | null>(null);
@@ -171,7 +174,7 @@ export function SessionSearch({
           })
           .catch((reason) => {
             if (!controller.signal.aborted && current === sequence.current)
-              setError(reason instanceof Error ? reason.message : "搜索失败");
+              setError(errorForDisplay(reason, "error.search"));
           })
           .finally(() => {
             if (!controller.signal.aborted && current === sequence.current)
@@ -211,7 +214,7 @@ export function SessionSearch({
       }
     } catch (reason) {
       if (!controller.signal.aborted && current === sequence.current)
-        setError(reason instanceof Error ? reason.message : "加载失败");
+        setError(errorForDisplay(reason, "error.load"));
     } finally {
       if (current === sequence.current) {
         loadingMore.current = false;
@@ -267,9 +270,8 @@ export function SessionSearch({
             accessibilityRole="header"
             style={styles.title}
           >
-            搜索对话
-          </AppText>
-          <IconButton icon={X} label="关闭搜索" variant="glass" onPress={close} />
+            {t("search.chats")}</AppText>
+          <IconButton icon={X} label={t("search.close")} variant="glass" onPress={close} />
         </View>
         <Animated.View style={[styles.body, { paddingLeft: insets.left, paddingRight: insets.right }, avoidance]}>
           <FlatList
@@ -286,7 +288,7 @@ export function SessionSearch({
             renderItem={({ item }) => (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={item.title}
+                accessibilityLabel={item.title || t("chat.new")}
                 onPress={() => select(item)}
                 style={({ pressed }) => [
                   styles.result,
@@ -294,7 +296,7 @@ export function SessionSearch({
                 ]}
               >
                 <AppText numberOfLines={2} size={16}>
-                  {item.title}
+                  {item.title || t("chat.new")}
                 </AppText>
                 {normalizedQuery && item.excerpt ? (
                   <AppText muted size={13} numberOfLines={2}>
@@ -313,7 +315,7 @@ export function SessionSearch({
               ) : (
                 <EmptyState
                   icon={Search}
-                  text={normalizedQuery ? "没有找到对话" : "暂无对话"}
+                  text={normalizedQuery ? t("search.noChats") : t("chat.none")}
                 />
               )
             }
@@ -332,10 +334,10 @@ export function SessionSearch({
               )}
               <TextInput
                 ref={input}
-                accessibilityLabel="搜索对话"
+                accessibilityLabel={t("search.chats")}
                 value={query}
                 onChangeText={setQuery}
-                placeholder="搜索"
+                placeholder={t("common.search")}
                 placeholderTextColor={colors.subtle}
                 returnKeyType="search"
                 disableFullscreenUI
@@ -349,7 +351,7 @@ export function SessionSearch({
               {query ? (
                 <ActionIcon
                   icon={X}
-                  label="清空搜索"
+                  label={t("search.clear")}
                   size={16}
                   onPress={() => {
                     setQuery("");

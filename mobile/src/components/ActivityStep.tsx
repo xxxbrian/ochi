@@ -1,3 +1,4 @@
+import { t, useI18n, type MessageKey } from "../lib/i18n";
 import { memo, useMemo, useState } from "react";
 import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, View } from "react-native";
 import { Brain, ChevronDown, ChevronRight, FileText, Globe, Monitor, Terminal, Wrench, type LucideIcon } from "lucide-react-native";
@@ -9,35 +10,36 @@ import { AppText } from "./ScreenChrome";
 import { Markdown } from "./Markdown";
 import { ArtifactCards } from "./Artifacts";
 
-const names: Record<string, [string, LucideIcon]> = {
-  exec: ["运行代码", Terminal],
-  files_read: ["读取文件", FileText],
-  files_write: ["写入文件", FileText],
-  files_list: ["浏览文件", FileText],
-  publish_file: ["交付文件", FileText],
-  web_search: ["搜索资料", Globe],
-  web_fetch: ["读取网页", Globe],
-  request_user_input: ["等待回复", Wrench],
-  request_computer_permission: ["请求使用电脑", Monitor],
-  memory_search: ["查找记忆", Brain],
-  memory_save: ["保存记忆", Brain],
-  memory_delete: ["删除记忆", Brain],
-  schedule_create: ["创建定时任务", Wrench],
-  schedule_update: ["更新定时任务", Wrench],
-  schedule_list: ["查看定时任务", Wrench],
-  generate_image: ["生成图片", FileText],
+const names: Record<string, [MessageKey, LucideIcon]> = {
+  exec: ["process.runCode", Terminal],
+  files_read: ["process.readFile", FileText],
+  files_write: ["process.writeFile", FileText],
+  files_list: ["process.listFiles", FileText],
+  publish_file: ["process.publishFile", FileText],
+  web_search: ["process.search", Globe],
+  web_fetch: ["process.readPage", Globe],
+  request_user_input: ["status.waitingReply", Wrench],
+  request_computer_permission: ["process.requestComputer", Monitor],
+  memory_search: ["process.findMemory", Brain],
+  memory_save: ["process.saveMemory", Brain],
+  memory_delete: ["process.deleteMemory", Brain],
+  schedule_create: ["process.createTask", Wrench],
+  schedule_update: ["process.updateTask", Wrench],
+  schedule_list: ["process.listTasks", Wrench],
+  generate_image: ["process.generateImage", FileText],
 };
 function info(step: Step): [string, LucideIcon] {
+  const named = names[step.name];
+  if (named) return [t(named[0]), named[1]];
   return (
-    names[step.name] ??
     (step.name.startsWith("browser_")
-      ? ["操作网页", Globe]
+      ? [t("process.browse"), Globe]
       : step.name.startsWith("computer_")
-        ? ["操作电脑", Monitor]
+        ? [t("process.useComputer"), Monitor]
         : step.name.startsWith("mcp_")
           ? [step.name.replace(/^mcp_/, "").replace(/_/g, " "), Wrench]
           : step.name.startsWith("skills_")
-            ? ["使用 Skill", Wrench]
+            ? [t("process.useSkill"), Wrench]
             : [step.name.replace(/_/g, " "), Wrench])
   );
 }
@@ -58,6 +60,7 @@ export const StepRow = memo(function StepRow({ step, expansion, onExpansionChang
   expansion?: StepExpansion;
   onExpansionChange?: (id: string, expansion: StepExpansion) => void;
 }) {
+  useI18n();
   const { colors, fonts } = useTheme();
   const [localExpansion, setLocalExpansion] = useState<StepExpansion>({ open: false, technical: false });
   const currentExpansion = expansion ?? localExpansion;
@@ -132,7 +135,7 @@ export const StepRow = memo(function StepRow({ step, expansion, onExpansionChang
             <View style={styles.heading}>
               <AppText size={13}>{label}</AppText>
               {step.status === "failed" && (
-                <AppText size={11} style={{ color: colors.error }}>失败</AppText>
+                <AppText size={11} style={{ color: colors.error }}>{t("common.failed")}</AppText>
               )}
             </View>
             {target && (
@@ -243,7 +246,7 @@ export const StepRow = memo(function StepRow({ step, expansion, onExpansionChang
                 )}
                 {typeof result?.exit_code === "number" && (
                   <AppText muted size={12}>
-                    退出 {result.exit_code}
+                    {t("process.exit")}{result.exit_code}
                   </AppText>
                 )}
               </>
@@ -253,7 +256,7 @@ export const StepRow = memo(function StepRow({ step, expansion, onExpansionChang
               style={{ paddingVertical: 4 }}
             >
               <AppText muted size={12}>
-                {technical ? "收起技术详情" : "技术详情"}
+                {technical ? t("process.hideTechnical") : t("process.technical")}
               </AppText>
             </Pressable>
             {technical && (
@@ -294,6 +297,7 @@ const SiteIcon = memo(function SiteIcon({ url }: { url: string }) {
 });
 
 const SearchSummary = memo(function SearchSummary({ results }: { results: SearchResult[] }) {
+  useI18n();
   const sites = useMemo(() => {
     const seen = new Set<string>();
     return results.filter((result) => {
@@ -308,16 +312,17 @@ const SearchSummary = memo(function SearchSummary({ results }: { results: Search
       <View style={styles.siteStack}>
         {sites.map((site) => <SiteIcon key={website(site.url)?.host} url={site.url} />)}
       </View>
-      <AppText muted size={11}>{results.length ? `${results.length} 个结果` : "没有找到结果"}</AppText>
+      <AppText muted size={11}>{results.length ? t("search.resultCount", { count: results.length }) : t("search.noResults")}</AppText>
     </View>
   );
 });
 
 const SearchLinks = memo(function SearchLinks({ results }: { results: SearchResult[] }) {
+  useI18n();
   const { colors } = useTheme();
   return (
     <View style={styles.searchLinks}>
-      {results.length === 0 && <AppText muted size={12}>没有找到结果</AppText>}
+      {results.length === 0 && <AppText muted size={12}>{t("search.noResults")}</AppText>}
       {results.map((result) => (
         <Pressable
           key={result.url}

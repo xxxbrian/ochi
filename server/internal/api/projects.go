@@ -1,11 +1,11 @@
 package api
 
 import (
-	"errors"
 	"net/http"
-	"ochi/server/internal/agent"
 	"strings"
 
+	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/storage"
 )
 
@@ -59,7 +59,7 @@ func (s *Server) registerProjectRoutes(mux *http.ServeMux) {
 			v.Instructions = strings.TrimSpace(*input.Instructions)
 		}
 		if v.Name == "" || len([]rune(v.Name)) > 120 || len(v.Instructions) > 32000 {
-			writeError(w, http.StatusBadRequest, errors.New("项目名称或说明长度不正确"))
+			writeError(w, http.StatusBadRequest, i18n.New("project_invalid"))
 			return
 		}
 		v, err = s.store.SaveProject(r.Context(), currentUser(r).ID, v)

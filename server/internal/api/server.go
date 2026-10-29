@@ -18,13 +18,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/runtime"
 	"ochi/server/internal/selfupdate"
 	"ochi/server/internal/storage"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type Server struct {
@@ -177,7 +178,40 @@ func (s *Server) Handler() http.Handler {
 	s.registerExtraRoutes(mux)
 	s.registerTaskRoutes(mux)
 	s.registerContextRoutes(mux)
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Language", i18n.Negotiate(r.Header.Get("Accept-Language")))
+		w.Header().Add("Vary", "Accept-Language")
+		if handler, pattern := mux.Handler(r); pattern == "" {
+			// Only inspect ServeMux's built-in route errors. Actual handlers keep
+			// the original writer, including its SSE and WebSocket capabilities.
+			probe := routeErrorResponse{headers: make(http.Header)}
+			handler.ServeHTTP(&probe, r)
+			if probe.status == http.StatusNotFound || probe.status == http.StatusMethodNotAllowed {
+				code := "not_found"
+				if probe.status == http.StatusMethodNotAllowed {
+					code = "method_not_allowed"
+					w.Header().Set("Allow", probe.headers.Get("Allow"))
+				}
+				writeError(w, probe.status, i18n.New(code))
+				return
+			}
+		}
+		mux.ServeHTTP(w, r)
+	})
+}
+
+type routeErrorResponse struct {
+	headers http.Header
+	status  int
+}
+
+func (w *routeErrorResponse) Header() http.Header    { return w.headers }
+func (w *routeErrorResponse) WriteHeader(status int) { w.status = status }
+func (w *routeErrorResponse) Write(data []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	return len(data), nil
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
@@ -299,7 +333,7 @@ func (s *Server) updateSession(w http.ResponseWriter, r *http.Request) {
 	if req.Title != nil {
 		title = strings.TrimSpace(*req.Title)
 		if title == "" || len([]rune(title)) > 120 {
-			writeError(w, http.StatusBadRequest, errors.New("标题应为 1 到 120 个字符"))
+			writeError(w, http.StatusBadRequest, i18n.New("invalid_title"))
 			return
 		}
 	}
@@ -407,10 +441,10 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 	req.Message = strings.TrimSpace(req.Message)
 	if req.Message == "" && req.RetryRunID == "" {
 		if len(req.AttachmentIDs) == 0 {
-			writeError(w, http.StatusBadRequest, errors.New("请输入消息"))
+			writeError(w, http.StatusBadRequest, i18n.New("message_required"))
 			return
 		}
-		req.Message = "请查看这些附件。"
+		req.Message = i18n.Text(w.Header().Get("Content-Language"), "attachments_prompt", nil)
 	}
 	returnRun, err := s.startRun(withClientTimezone(r.Context(), r.Header.Get("X-Client-Timezone")), currentUser(r).ID, r.PathValue("id"), req.Message, req.ModelID, req.Effort, req.AttachmentIDs, storage.Revision{EditMessageID: req.EditMessageID, RetryRunID: req.RetryRunID, Priority: req.StopCurrent})
 	if err != nil {
@@ -421,7 +455,7 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID, prompt, modelID, effort string, attachmentIDs []string, revision ...storage.Revision) (runtime.Snapshot, error) {
 	if s.agent == nil {
-		return runtime.Snapshot{}, errors.New("no model runner is configured")
+		return runtime.Snapshot{}, i18n.New("runner_unconfigured")
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 10*time.Second)
 	defer cancel()
@@ -431,7 +465,7 @@ func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID
 	}
 	if len(revision) > 0 && (revision[0].EditMessageID != "" || revision[0].RetryRunID != "") {
 		if revision[0].EditMessageID != "" && revision[0].RetryRunID != "" {
-			return runtime.Snapshot{}, errors.New("修改和重试不能同时进行")
+			return runtime.Snapshot{}, i18n.New("edit_retry_conflict")
 		}
 		last, e := s.store.LastUserMessage(ctx, userID, sessionID, revision[0])
 		if e != nil {
@@ -457,7 +491,7 @@ func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID
 	var model storage.Model
 	var provider storage.Provider
 	if _, demo := s.agent.(agent.DemoGenerator); demo {
-		model.Name = "演示模式"
+		model.Name = "Demo"
 	} else {
 		model, provider, err = s.selectedModel(ctx, modelID, effort)
 		if err != nil {
@@ -478,7 +512,7 @@ func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID
 				continue
 			}
 			if attachment.Size > 8*1024*1024 {
-				return runtime.Snapshot{}, errors.New("图像超过 8 MB，请缩小后上传")
+				return runtime.Snapshot{}, i18n.New("image_input_too_large")
 			}
 			item, fetchErr := s.store.GetArtifact(ctx, userID, attachment.ID)
 			if fetchErr != nil {
@@ -535,13 +569,13 @@ func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID
 	req.Compaction, err = s.store.Compaction(ctx, sessionID)
 	if err != nil {
 		snapshot.Status = runtime.StatusFailed
-		snapshot.Error = "读取上下文失败"
+		snapshot.Error, snapshot.ErrorCode = i18n.New("context_read_failed").Error(), "context_read_failed"
 		_ = s.store.CompleteRun(ctx, snapshot)
 		return runtime.Snapshot{}, err
 	}
 	run, e := s.runtime.Start(snapshot, func(run *runtime.Run) { s.execute(run, req) })
 	if e != nil {
-		snapshot.Status, snapshot.Error = runtime.StatusInterrupted, "服务已停止，请重试"
+		snapshot.Status, snapshot.Error, snapshot.ErrorCode = runtime.StatusInterrupted, i18n.New("run_interrupted").Error(), "run_interrupted"
 		snapshot.UpdatedAt = time.Now().UTC()
 		_ = s.store.CompleteRun(ctx, snapshot)
 		return runtime.Snapshot{}, e
@@ -661,7 +695,7 @@ func (s *Server) execute(run *runtime.Run, request agent.Request) {
 			log.Printf("load run %s published artifacts: %v", request.RunID, e)
 		}
 	}
-	status, message := runtime.StatusCompleted, ""
+	status := runtime.StatusCompleted
 	if err == nil {
 		ctx, cancel := context.WithTimeout(runContext, 10*time.Second)
 		if _, checkErr := s.verifyCurrentTask(ctx, request.Scope); checkErr != nil {
@@ -670,9 +704,9 @@ func (s *Server) execute(run *runtime.Run, request agent.Request) {
 		cancel()
 	}
 	if err != nil {
-		status, message = runtime.StatusFailed, err.Error()
+		status = runtime.StatusFailed
 	}
-	if saveErr := run.Finalize(status, message, func(snapshot runtime.Snapshot) error {
+	if saveErr := run.Finalize(status, err, func(snapshot runtime.Snapshot) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return s.store.CompleteRun(ctx, snapshot)
@@ -707,7 +741,7 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 func (s *Server) runEvents(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeError(w, http.StatusInternalServerError, errors.New("streaming is unavailable"))
+		writeError(w, http.StatusInternalServerError, i18n.New("streaming_unavailable"))
 		return
 	}
 	run, err := s.ownedRun(r)
@@ -791,14 +825,14 @@ func writeSSE(w io.Writer, eventType string, id uint64, value any) error {
 
 func decodeRequest(w http.ResponseWriter, r *http.Request, dst any) bool {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
-		writeError(w, http.StatusUnsupportedMediaType, errors.New("expected application/json"))
+		writeError(w, http.StatusUnsupportedMediaType, i18n.New("unsupported_media_type"))
 		return false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dst); err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("invalid JSON request"))
+		writeError(w, http.StatusBadRequest, i18n.New("invalid_json"))
 		return false
 	}
 	return true
@@ -811,25 +845,57 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, status int, err error) {
-	writeJSON(w, status, map[string]string{"error": err.Error()})
+	code, params, public := i18n.Details(err)
+	if !public {
+		switch status {
+		case http.StatusBadRequest:
+			code = "bad_request"
+		case http.StatusUnauthorized:
+			code = "unauthenticated"
+		case http.StatusForbidden:
+			code = "forbidden"
+		case http.StatusNotFound:
+			code = "not_found"
+		case http.StatusConflict:
+			code = "conflict"
+		case http.StatusRequestEntityTooLarge:
+			code = "payload_too_large"
+		case http.StatusTooManyRequests:
+			code = "rate_limited"
+		case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
+			code = "service_unavailable"
+		default:
+			code = "internal_error"
+		}
+		log.Printf("HTTP %d request failed: %v", status, err)
+	}
+	writeJSON(w, status, struct {
+		Error  string         `json:"error"`
+		Code   string         `json:"code"`
+		Params map[string]any `json:"params,omitempty"`
+	}{i18n.Text(w.Header().Get("Content-Language"), code, params), code, params})
 }
 
 func writeStoreError(w http.ResponseWriter, err error) {
 	if errors.Is(err, pgx.ErrNoRows) {
-		writeError(w, http.StatusNotFound, errors.New("not found"))
+		writeError(w, http.StatusNotFound, i18n.New("not_found"))
 		return
 	}
 	if errors.Is(err, storage.ErrActiveRun) {
 		writeError(w, http.StatusConflict, storage.ErrActiveRun)
 		return
 	}
+	if _, _, public := i18n.Details(err); public {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "22P02" {
-		writeError(w, http.StatusBadRequest, errors.New("invalid session or run ID"))
+		writeError(w, http.StatusBadRequest, i18n.New("invalid_resource_id"))
 		return
 	}
 	log.Printf("database request failed: %v", err)
-	writeError(w, http.StatusInternalServerError, errors.New("could not read or save conversation"))
+	writeError(w, http.StatusInternalServerError, i18n.New("conversation_storage_failed"))
 }
 
 func newID() (string, error) {
@@ -854,7 +920,7 @@ func (s *Server) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.Answer) == "" {
-		writeError(w, http.StatusBadRequest, errors.New("请输入回复"))
+		writeError(w, http.StatusBadRequest, i18n.New("reply_required"))
 		return
 	}
 	s.permissionMu.Lock()
@@ -864,7 +930,7 @@ func (s *Server) resumeRun(w http.ResponseWriter, r *http.Request) {
 	pending := run.Snapshot().WaitingInput
 	if pending != nil && pending.Kind == "computer_permission" {
 		if answer != "allow_once" && answer != "allow_session" && answer != "deny" {
-			writeError(w, http.StatusBadRequest, errors.New("请选择权限选项"))
+			writeError(w, http.StatusBadRequest, i18n.New("permission_choice_required"))
 			return
 		}
 		allowed := answer != "deny"
@@ -882,7 +948,7 @@ func (s *Server) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !resumed {
-		writeError(w, http.StatusConflict, errors.New("当前任务不在等待输入"))
+		writeError(w, http.StatusConflict, i18n.New("run_not_waiting"))
 		return
 	}
 	writeJSON(w, http.StatusAccepted, run.Snapshot())
@@ -910,7 +976,7 @@ func (s *Server) selectedModel(ctx context.Context, id, effort string) (storage.
 		return model, storage.Provider{}, err
 	}
 	if model.ID == "" || !model.Enabled || model.Kind == "embedding" || (model.Source == "remote" && !model.Available) {
-		return model, storage.Provider{}, errors.New("请选择可用的模型")
+		return model, storage.Provider{}, i18n.New("model_selection_invalid")
 	}
 	validEffort := effort == "" || effort == "default"
 	if model.EffortParameter != "" && effort != "" {
@@ -921,14 +987,14 @@ func (s *Server) selectedModel(ctx context.Context, id, effort string) (storage.
 		}
 	}
 	if !validEffort {
-		return model, storage.Provider{}, errors.New("当前模型不支持该思考程度")
+		return model, storage.Provider{}, i18n.New("reasoning_unsupported")
 	}
 	provider, err := s.store.Provider(ctx, model.ProviderID)
 	if err != nil {
 		return model, provider, err
 	}
 	if !provider.Enabled || (provider.APIKey == "" && !provider.AllowNoKey) {
-		return model, provider, errors.New("当前模型的服务尚未启用")
+		return model, provider, i18n.New("provider_disabled")
 	}
 	return model, provider, nil
 }
@@ -960,7 +1026,7 @@ func (s *Server) checkHistoryCompatibility(ctx context.Context, sessionID string
 			return err
 		}
 		if hasImages {
-			return errors.New("此对话包含图像，请选择支持图像的模型，或新建对话")
+			return i18n.New("history_requires_vision")
 		}
 	}
 	if !model.SupportsTools && model.MetadataKnown["supports_tools"] {
@@ -969,7 +1035,7 @@ func (s *Server) checkHistoryCompatibility(ctx context.Context, sessionID string
 			return err
 		}
 		if hasTools {
-			return errors.New("此对话包含工具操作，请选择支持工具的模型，或新建对话")
+			return i18n.New("history_requires_tools")
 		}
 	}
 	return nil

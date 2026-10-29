@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/storage"
 )
 
@@ -141,12 +143,12 @@ func (a *authentication) require(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := requestToken(r)
 		if token == "" {
-			writeError(w, http.StatusUnauthorized, errors.New("请先登录"))
+			writeError(w, http.StatusUnauthorized, i18n.New("unauthenticated"))
 			return
 		}
 		user, err := a.store.LoginUser(r.Context(), tokenHash(token))
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, errors.New("请先登录"))
+			writeError(w, http.StatusUnauthorized, i18n.New("unauthenticated"))
 			return
 		}
 		next(w, r.WithContext(context.WithValue(r.Context(), userContextKey{}, user)))
@@ -155,7 +157,7 @@ func (a *authentication) require(next http.HandlerFunc) http.HandlerFunc {
 func (a *authentication) admin(next http.HandlerFunc) http.HandlerFunc {
 	return a.require(func(w http.ResponseWriter, r *http.Request) {
 		if currentUser(r).Role != "admin" {
-			writeError(w, http.StatusForbidden, errors.New("需要管理员权限"))
+			writeError(w, http.StatusForbidden, i18n.New("admin_required"))
 			return
 		}
 		next(w, r)
@@ -175,12 +177,12 @@ func (a *authentication) login(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := a.store.GetUser(r.Context(), strings.TrimSpace(req.Username))
 	if err != nil || !user.Enabled || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
-		writeError(w, http.StatusUnauthorized, errors.New("用户名或密码不正确"))
+		writeError(w, http.StatusUnauthorized, i18n.New("invalid_credentials"))
 		return
 	}
 	var bytes [32]byte
 	if _, err := rand.Read(bytes[:]); err != nil {
-		writeError(w, http.StatusInternalServerError, errors.New("无法登录"))
+		writeError(w, http.StatusInternalServerError, i18n.New("login_failed"))
 		return
 	}
 	token := hex.EncodeToString(bytes[:])
@@ -218,7 +220,7 @@ func (a *authentication) logout(w http.ResponseWriter, r *http.Request) {
 func (a *authentication) webview(w http.ResponseWriter, r *http.Request) {
 	next := r.URL.Query().Get("next")
 	if r.Method == http.MethodGet && !validWebviewPath(next) {
-		writeError(w, http.StatusBadRequest, errors.New("预览地址无效"))
+		writeError(w, http.StatusBadRequest, i18n.New("invalid_preview_url"))
 		return
 	}
 	token := requestToken(r)

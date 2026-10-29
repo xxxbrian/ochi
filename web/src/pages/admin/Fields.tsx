@@ -1,3 +1,4 @@
+import { t, useAdminI18n } from "./i18n";
 import { LoaderCircle, Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 export function Field({
@@ -7,6 +8,7 @@ export function Field({
   title: string;
   children: ReactNode;
 }) {
+  useAdminI18n();
   return (
     <label className="form-field">
       <span>{title}</span>
@@ -25,6 +27,7 @@ export function Toggle({
   onChange: (value: boolean) => void;
   disabled?: boolean;
 }) {
+  useAdminI18n();
   return (
     <label className="toggle-field">
       <span>{title}</span>
@@ -49,6 +52,7 @@ export function InlineSwitch({
   onChange: (value: boolean) => void;
   updating?: boolean;
 }) {
+  useAdminI18n();
   return (
     <label className={`admin-inline-switch${updating ? " is-pending" : ""}`} title={title}>
       <input type="checkbox" role="switch" aria-label={title}
@@ -81,7 +85,7 @@ export function KeyValueEditor({
   onChange,
   onRemove,
   secret,
-  labels = ["名称", "值"],
+  labels = [t("name"), t("value")],
 }: {
   rows: KeyValue[];
   onChange: (rows: KeyValue[]) => void;
@@ -89,6 +93,7 @@ export function KeyValueEditor({
   secret?: boolean;
   labels?: string[];
 }) {
+  useAdminI18n();
   return (
     <div className="key-value-editor">
       {rows.map((row, index) => (
@@ -109,7 +114,7 @@ export function KeyValueEditor({
           <input
             aria-label={labels[1]}
             value={row.value}
-            placeholder={row.retained ? "保留现有值" : labels[1]}
+            placeholder={row.retained ? t("keepExistingValue") : labels[1]}
             type={secret ? "password" : "text"}
             autoComplete="off"
             onChange={(event) =>
@@ -123,7 +128,7 @@ export function KeyValueEditor({
           <button
             type="button"
             className="icon-button"
-            aria-label="删除配置项"
+            aria-label={t("deleteConfigEntry")}
             onClick={() => {
               if (row.retained) onRemove?.(row.key);
               onChange(rows.filter((_, i) => i !== index));
@@ -139,8 +144,7 @@ export function KeyValueEditor({
         onClick={() => onChange([...rows, { key: "", value: "" }])}
       >
         <Plus size={14} />
-        添加一项
-      </button>
+        {t("addEntry")}</button>
     </div>
   );
 }
@@ -151,6 +155,7 @@ export function ErrorNotice({
   error?: string;
   notice?: string;
 }) {
+  useAdminI18n();
   return (
     <>
       {error && (

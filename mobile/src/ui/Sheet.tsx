@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { useState, type ReactNode } from 'react';
 import { Dimensions, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useGenericKeyboardHandler, useKeyboardContext } from 'react-native-keyboard-controller';
@@ -14,6 +15,7 @@ export function Sheet({ visible, onClose, onShow, title, children, height = 'lar
   onShow?: () => void;
   height?: number | 'full' | 'large';
 }) {
+  useI18n();
   const { colors, fonts } = useTheme();
   const viewport = useWindowDimensions();
   const screen = Dimensions.get('screen');
@@ -63,14 +65,14 @@ export function Sheet({ visible, onClose, onShow, title, children, height = 'lar
         if (width > 0 && height > 0) setModalSize((current) => current.geometry === geometry && current.width === width && current.height === height ? current : { geometry, width, height });
       }}>
         {/* The backdrop must not shrink or move with the keyboard. */}
-        <Animated.View style={[StyleSheet.absoluteFill, motion.backdrop]}><Pressable style={[StyleSheet.absoluteFill, { backgroundColor: '#00000050' }]} onPress={onClose} accessibilityLabel="关闭" /></Animated.View>
+        <Animated.View style={[StyleSheet.absoluteFill, motion.backdrop]}><Pressable style={[StyleSheet.absoluteFill, { backgroundColor: '#00000050' }]} onPress={onClose} accessibilityLabel={t("common.close")} /></Animated.View>
         <Animated.View pointerEvents="box-none" style={[styles.avoiding, { paddingTop: insets.top + 8, paddingLeft: insets.left, paddingRight: insets.right }, avoidance]}>
           <Animated.View style={[styles.sheet, { backgroundColor: colors.surface }, size, safeArea, motion.surface]}>
             <View style={[styles.handleArea, compact && { height: 12 }]}><View style={[styles.handle, { backgroundColor: colors.muted }]} /></View>
             <View style={[styles.header, compact && { minHeight: 44 }]}>
               <View style={styles.spacer} />
               {title && <Text numberOfLines={1} style={[styles.title, { color: colors.text, fontFamily: fonts.semibold }]}>{title}</Text>}
-              <IconButton icon={X} label="关闭" onPress={onClose} variant="glass" size={40} iconSize={20} />
+              <IconButton icon={X} label={t("common.close")} onPress={onClose} variant="glass" size={40} iconSize={20} />
             </View>
             <View style={styles.body}>{motion.mounted && children}</View>
           </Animated.View>

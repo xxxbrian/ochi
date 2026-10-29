@@ -3,9 +3,8 @@ package selfupdate
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/product"
 )
 
@@ -67,7 +67,7 @@ func New(config Config) *Manager {
 			return err
 		}
 		if len(via) >= 10 {
-			return errors.New("更新下载重定向过多")
+			return i18n.New("update_redirect_limit")
 		}
 		if previousRedirect != nil {
 			return previousRedirect(req, via)
@@ -81,13 +81,17 @@ func New(config Config) *Manager {
 	}
 	switch {
 	case config.GOOS != "linux" || (config.GOARCH != "amd64" && config.GOARCH != "arm64"):
-		m.state.UnsupportedReason = "应用内更新仅支持 Linux amd64 / arm64 发布包"
+		m.state.UnsupportedReasonCode = "update_platform_unsupported"
+		m.state.UnsupportedReason = i18n.New("update_platform_unsupported").Error()
 	case config.BuildType != "release" || !config.EmbeddedWeb:
-		m.state.UnsupportedReason = "开发构建不支持应用内更新，请使用包含网页的正式发布镜像"
+		m.state.UnsupportedReasonCode = "update_development_build"
+		m.state.UnsupportedReason = i18n.New("update_development_build").Error()
 	case validateBuild(config.Current) != nil:
-		m.state.UnsupportedReason = "当前构建缺少有效的发布身份"
+		m.state.UnsupportedReasonCode = "update_identity_missing"
+		m.state.UnsupportedReason = i18n.New("update_identity_missing").Error()
 	}
 	if err := validateURL(m.manifestURL); err != nil {
+		m.state.UnsupportedReasonCode, _, _ = i18n.Details(err)
 		m.state.UnsupportedReason = err.Error()
 	}
 	path := config.TargetPath
@@ -102,7 +106,8 @@ func New(config Config) *Manager {
 		path, err = filepath.EvalSymlinks(path)
 	}
 	if err != nil {
-		m.state.UnsupportedReason = "无法确定当前程序的文件路径"
+		m.state.UnsupportedReasonCode = "update_path_unavailable"
+		m.state.UnsupportedReason = i18n.New("update_path_unavailable").Error()
 	}
 	// Keep the startup path: after replacement Linux may report the running inode
 	// as .backup or (deleted), which must never become the next update target.
@@ -111,9 +116,10 @@ func New(config Config) *Manager {
 	if m.state.Supported {
 		if err := m.loadDisk(); err != nil {
 			m.state.Supported = false
-			m.state.UnsupportedReason = "更新状态无法读取，请检查部署文件：" + err.Error()
+			m.state.UnsupportedReasonCode = "update_state_unreadable"
+			m.state.UnsupportedReason = i18n.New("update_state_unreadable").Error()
 			m.state.Phase = "failed"
-			m.state.Error = m.state.UnsupportedReason
+			m.state.setError(i18n.New("update_state_unreadable"))
 		}
 	}
 	return m
@@ -128,6 +134,7 @@ func (m *Manager) State() State {
 func (m *Manager) snapshotLocked() State {
 	state := m.state
 	state.Current = m.state.Current
+	state.ErrorParams = maps.Clone(m.state.ErrorParams)
 	if m.state.Latest != nil {
 		copy := *m.state.Latest
 		state.Latest = &copy
@@ -155,7 +162,8 @@ func (m *Manager) Check(ctx context.Context) (State, error) {
 		m.mu.Unlock()
 		return state, ErrConflict
 	}
-	m.state.Phase, m.state.Error = "checking", ""
+	m.state.Phase = "checking"
+	m.state.setError(nil)
 	m.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -167,16 +175,18 @@ func (m *Manager) Check(ctx context.Context) (State, error) {
 	}
 	m.state.CheckedAt = m.now().UTC().Format(time.RFC3339)
 	if err != nil {
-		m.state.Phase, m.state.Error = "failed", err.Error()
+		m.state.Phase = "failed"
+		m.state.setError(err)
 		m.manifest, m.state.Latest = nil, nil
-		m.state.Available, m.state.BlockedReason = false, ""
+		m.state.Available, m.state.BlockedReason, m.state.BlockedReasonCode = false, "", ""
 		return m.snapshotLocked(), err
 	}
 	m.manifest, m.state.Latest = manifest, &manifest.Build
 	m.state.Available = manifest.Revision != m.state.Current.Revision
-	m.state.Phase, m.state.BlockedReason = "idle", ""
+	m.state.Phase, m.state.BlockedReason, m.state.BlockedReasonCode = "idle", "", ""
 	if m.state.Available && manifest.SchemaSHA256 != m.state.Current.SchemaSHA256 {
-		m.state.BlockedReason = "新构建包含数据库结构变更，需要人工维护后通过镜像部署，不能直接应用内更新"
+		m.state.BlockedReasonCode = "update_schema_changed"
+		m.state.BlockedReason = i18n.New("update_schema_changed").Error()
 	}
 	return m.snapshotLocked(), nil
 }
@@ -191,14 +201,15 @@ func (m *Manager) Apply(revision string) (State, error) {
 		return m.snapshotLocked(), ErrConflict
 	}
 	if m.manifest == nil || !m.state.Available || revision != m.manifest.Revision {
-		return m.snapshotLocked(), errors.New("请先检查更新，再选择已检查的构建")
+		return m.snapshotLocked(), i18n.New("update_choose_build")
 	}
 	if m.state.BlockedReason != "" {
-		return m.snapshotLocked(), errors.New(m.state.BlockedReason)
+		return m.snapshotLocked(), i18n.New("update_schema_changed")
 	}
 	manifest := *m.manifest
 	asset := manifest.Assets[m.platform]
-	m.state.Phase, m.state.Error = "downloading", ""
+	m.state.Phase = "downloading"
+	m.state.setError(nil)
 	m.state.DownloadedBytes, m.state.TotalBytes = 0, asset.Size
 	go m.apply(manifest.Build, asset)
 	return m.snapshotLocked(), nil
@@ -220,7 +231,8 @@ func (m *Manager) apply(build Build, asset Asset) {
 		err = m.install(path, binaryBuild{Build: build, SHA256: digest})
 	}
 	if err != nil {
-		m.state.Phase, m.state.Error = "failed", err.Error()
+		m.state.Phase = "failed"
+		m.state.setError(err)
 		return
 	}
 	m.state.Phase = "ready"
@@ -236,11 +248,11 @@ func (m *Manager) Rollback() (State, error) {
 		return m.snapshotLocked(), ErrConflict
 	}
 	if m.disk.Backup == nil {
-		return m.snapshotLocked(), errors.New("没有可回退的程序备份")
+		return m.snapshotLocked(), i18n.New("update_backup_missing")
 	}
 	backup := *m.disk.Backup
 	if backup.SchemaSHA256 != m.state.Current.SchemaSHA256 {
-		return m.snapshotLocked(), errors.New("备份的数据库结构不同，不能直接回退程序")
+		return m.snapshotLocked(), i18n.New("update_backup_schema_changed")
 	}
 	path, err := copyBinary(m.backupPath(), filepath.Dir(m.targetPath))
 	if err == nil {
@@ -248,17 +260,19 @@ func (m *Manager) Rollback() (State, error) {
 		var digest string
 		digest, err = fileSHA256(path)
 		if err == nil && digest != backup.SHA256 {
-			err = errors.New("程序备份校验失败，不能回退")
+			err = i18n.New("update_backup_invalid")
 		}
 	}
 	if err == nil {
 		err = m.install(path, backup)
 	}
 	if err != nil {
-		m.state.Phase, m.state.Error = "failed", err.Error()
+		m.state.Phase = "failed"
+		m.state.setError(err)
 		return m.snapshotLocked(), err
 	}
-	m.state.Phase, m.state.Error = "ready", ""
+	m.state.Phase = "ready"
+	m.state.setError(nil)
 	return m.snapshotLocked(), nil
 }
 
@@ -309,11 +323,11 @@ func (m *Manager) fetchManifest(ctx context.Context) (*Manifest, error) {
 	defer response.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
 	if err != nil || len(data) > 1<<20 {
-		return nil, errors.New("更新清单读取失败或超出大小限制")
+		return nil, i18n.New("update_manifest_read_failed")
 	}
 	var manifest Manifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, errors.New("更新清单格式无效")
+		return nil, i18n.New("update_manifest_invalid")
 	}
 	if err := validateBuild(manifest.Build); err != nil {
 		return nil, err
@@ -323,13 +337,13 @@ func (m *Manager) fetchManifest(ctx context.Context) (*Manifest, error) {
 		if m.platform != "linux_amd64" && m.platform != "linux_arm64" {
 			return &manifest, nil
 		}
-		return nil, errors.New("更新清单没有当前平台的程序包")
+		return nil, i18n.New("update_asset_missing")
 	}
 	if err := validateURL(asset.URL); err != nil {
 		return nil, err
 	}
 	if !sha256Pattern.MatchString(asset.SHA256) || asset.Size <= 0 || asset.Size > maxArchiveSize {
-		return nil, errors.New("更新程序包缺少有效的 SHA-256 或大小信息")
+		return nil, i18n.New("update_asset_metadata_invalid")
 	}
 	return &manifest, nil
 }
@@ -337,17 +351,17 @@ func (m *Manager) fetchManifest(ctx context.Context) (*Manifest, error) {
 func (m *Manager) get(ctx context.Context, target string) (*http.Response, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
-		return nil, errors.New("更新下载地址无效")
+		return nil, i18n.New("update_url_invalid")
 	}
 	request.Header.Set("User-Agent", product.UserAgent())
 	request.Header.Set("Accept-Encoding", "identity")
 	response, err := m.client.Do(request)
 	if err != nil {
-		return nil, errors.New("无法连接更新源，请稍后重试")
+		return nil, i18n.New("update_connection_failed")
 	}
 	if response.StatusCode != http.StatusOK {
 		response.Body.Close()
-		return nil, fmt.Errorf("更新源返回 HTTP %d", response.StatusCode)
+		return nil, i18n.With("update_http_error", map[string]any{"status": response.StatusCode})
 	}
 	return response, nil
 }
@@ -355,7 +369,7 @@ func (m *Manager) get(ctx context.Context, target string) (*http.Response, error
 func validateURL(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" {
-		return errors.New("更新源和程序包必须使用不含账号或片段的 HTTPS 地址")
+		return i18n.New("update_https_required")
 	}
 	return nil
 }
@@ -363,7 +377,7 @@ func validateURL(raw string) error {
 func validateBuild(build Build) error {
 	_, err := time.Parse(time.RFC3339, build.BuiltAt)
 	if build.Version == "" || len(build.Version) > 80 || !revisionPattern.MatchString(build.Revision) || !sha256Pattern.MatchString(build.SchemaSHA256) || err != nil {
-		return errors.New("更新清单的构建身份无效")
+		return i18n.New("update_build_invalid")
 	}
 	return nil
 }

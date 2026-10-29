@@ -10,11 +10,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"ochi/server/internal/i18n"
 )
 
 var (
-	ErrPluginLocked    = errors.New("this plugin is enabled by the administrator and cannot be disabled")
-	ErrPluginConflict  = errors.New("a plugin or component with this ID already exists")
+	ErrPluginLocked    = i18n.New("plugin_locked")
+	ErrPluginConflict  = i18n.New("plugin_conflict")
 	pluginIDPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 	componentIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 )
@@ -39,22 +41,22 @@ type UserPlugin struct {
 
 func ValidatePlugin(p Plugin) error {
 	if !pluginIDPattern.MatchString(p.ID) {
-		return errors.New("plugin ID must be a lowercase slug of 1-64 letters, digits, hyphens or underscores")
+		return i18n.New("plugin_id_invalid")
 	}
 	if strings.TrimSpace(p.Name) == "" || utf8.RuneCountInString(p.Name) > 100 {
-		return errors.New("plugin name must contain 1-100 characters")
+		return i18n.New("plugin_name_invalid")
 	}
 	if len(p.Description) > 4000 {
-		return errors.New("plugin description must not exceed 4000 bytes")
+		return i18n.New("plugin_description_invalid")
 	}
 	if count := len(p.SkillIDs) + len(p.MCPIDs); count < 1 || count > 64 {
-		return errors.New("a plugin must contain 1-64 components")
+		return i18n.New("plugin_components_invalid")
 	}
 	for _, ids := range [][]string{p.SkillIDs, p.MCPIDs} {
 		seen := map[string]bool{}
 		for _, id := range ids {
 			if !componentIDPattern.MatchString(id) || seen[id] {
-				return errors.New("plugin component IDs must be unique IDs of 1-64 letters, digits, hyphens or underscores")
+				return i18n.New("plugin_component_id_invalid")
 			}
 			seen[id] = true
 		}

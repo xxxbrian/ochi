@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/runtime"
 )
 
@@ -40,36 +42,36 @@ type TaskState struct {
 
 func ValidateTask(v TaskState) error {
 	if strings.TrimSpace(v.Objective) == "" || len(v.Objective) > 3000 {
-		return errors.New("task objective must contain 1-3000 bytes")
+		return i18n.New("task_objective_invalid")
 	}
 	for _, list := range [][]string{v.Constraints, v.Done, v.Remaining} {
 		if len(list) > 24 {
-			return errors.New("task lists are limited to 24 items")
+			return i18n.New("task_list_too_long")
 		}
 		for _, item := range list {
 			if strings.TrimSpace(item) == "" || len(item) > 1000 {
-				return errors.New("task items must contain 1-1000 bytes")
+				return i18n.New("task_item_invalid")
 			}
 		}
 	}
 	if len(v.Acceptance) > 16 {
-		return errors.New("task acceptance is limited to 16 checks")
+		return i18n.New("task_checks_limit")
 	}
 	ids := map[string]bool{}
 	for _, c := range v.Acceptance {
 		if c.ID == "" || len(c.ID) > 80 || ids[c.ID] || c.Target == "" || len(c.Target) > 3000 {
-			return errors.New("task check IDs must be unique and targets must be bounded")
+			return i18n.New("task_check_invalid")
 		}
 		ids[c.ID] = true
 		switch c.Kind {
 		case "artifact_exists", "file_exists", "command_success", "test_success":
 		default:
-			return errors.New("unsupported deterministic task check")
+			return i18n.New("task_check_unsupported")
 		}
 	}
 	data, _ := json.Marshal(v)
 	if len(data) > 18000 {
-		return errors.New("task record exceeds 18000 bytes")
+		return i18n.New("task_record_too_large")
 	}
 	return nil
 }
@@ -114,7 +116,7 @@ func (s *Store) SaveTask(ctx context.Context, userID, sessionID, runID string, v
 		return TaskState{}, err
 	}
 	if expected != revision {
-		return TaskState{}, errors.New("task revision changed; read task before updating")
+		return TaskState{}, i18n.New("task_revision_changed")
 	}
 	if len(old) > 0 && !replace {
 		var previous TaskState
@@ -122,7 +124,7 @@ func (s *Store) SaveTask(ctx context.Context, userID, sessionID, runID string, v
 			return TaskState{}, err
 		}
 		if v.Objective != previous.Objective {
-			return TaskState{}, errors.New("task objective changed; use task_read and preserve its objective verbatim when updating progress or constraints; use new_task only when the user starts a different task")
+			return TaskState{}, i18n.New("task_objective_changed")
 		}
 	}
 	v.Status, v.Verification, v.Revision = "active", nil, revision+1
@@ -152,7 +154,7 @@ func (s *Store) VerifyTask(ctx context.Context, userID, sessionID string, expect
 		return v, err
 	}
 	if v.Revision != expected || len(evidence) != len(v.Acceptance) {
-		return nil, errors.New("task changed during verification")
+		return nil, i18n.New("task_verification_changed")
 	}
 	v.Status = "active"
 	if TaskChecksComplete(*v, evidence) {
@@ -163,7 +165,7 @@ func (s *Store) VerifyTask(ctx context.Context, userID, sessionID string, expect
 	data, _ := json.Marshal(v)
 	tag, err := s.db.Exec(ctx, `UPDATE session_tasks SET state=$4,revision=revision+1,updated_at=now() WHERE session_id=$1 AND user_id=$2 AND revision=$3`, sessionID, userID, expected, data)
 	if err == nil && tag.RowsAffected() == 0 {
-		err = errors.New("task changed during verification")
+		err = i18n.New("task_verification_changed")
 	}
 	return v, err
 }
@@ -179,10 +181,10 @@ type RunInstruction struct {
 	RunStatus    string    `json:"run_status,omitempty"`
 }
 
-var ErrRunNotSteerable = errors.New("run no longer accepts supplemental instructions")
-var ErrInstructionInvalid = errors.New("bounded content and a stable client_key are required")
-var ErrInstructionConflict = errors.New("client_key was used for different content")
-var ErrInstructionLimit = errors.New("supplemental input limit reached for this run")
+var ErrRunNotSteerable = i18n.New("run_not_steerable")
+var ErrInstructionInvalid = i18n.New("instruction_invalid")
+var ErrInstructionConflict = i18n.New("instruction_conflict")
+var ErrInstructionLimit = i18n.New("instruction_limit")
 
 func ValidateInstruction(key, content string) error {
 	if strings.TrimSpace(content) == "" || len(content) > 32000 || len(key) < 8 || len(key) > 120 {

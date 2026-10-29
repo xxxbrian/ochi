@@ -1,3 +1,6 @@
+import { getLocale, t } from "./i18n";
+import { translateError } from "../../../shared/i18n/errors";
+import type { MessageParams } from "../../../shared/i18n";
 import type {
   ApiError,
   AdminRunDetail,
@@ -39,38 +42,21 @@ const API_BASE =
   (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ??
   "";
 
-export function userFacingRunError(error = "", hasArtifacts = false): string {
-  if (hasArtifacts) return "任务未能完成，已有文件仍可使用。";
-  const known = error.toLowerCase();
-  if (/output limit/.test(known))
-    return "模型已达到本轮输出上限，回复尚未完成。";
-  if (/context compaction|auxiliary model returned no content/.test(known))
-    return "暂时无法继续这段对话，请重试。";
-  if (/context canceled|cancelled|server stopped before/.test(known))
-    return "任务已中断，请重试。";
-  if (/deadline exceeded|timeout|timed out/.test(known))
-    return "响应超时，请重试。";
-  if (
-    /model stream|incomplete tool call|model requested tools|provider|openai|invalid api key|unauthorized|too many requests|rate limit/.test(known)
-  )
-    return "模型暂时未能完成回复，请重试。";
-  return /[\u4e00-\u9fff]/.test(error) ? error : "任务未能完成，请重试。";
+export function userFacingRunError(_error = "", hasArtifacts = false, code?: string): string {
+  if (hasArtifacts) return t("runError.artifacts");
+  return translateError(code) ?? t("runError.failed");
 }
 
-function userFacingError(path: string, status: number, detail: string): string {
+function userFacingError(path: string, status: number): string {
   if (status === 401)
-    return path.endsWith("/login") ? "账号或密码不正确" : "请重新登录";
-  if (/[\u4e00-\u9fff]/.test(detail)) return detail;
-  if (status === 404) return "内容不存在";
-  if (status === 409)
-    return detail === "session_busy" ? "此对话正在运行" : "当前操作发生冲突";
-  if (status === 429) return "请稍后再试";
-  if (status >= 500) return "服务暂时不可用";
-  if (status === 400 && detail === "message is required") return "请先输入消息";
-  if (status === 403) return "无法访问";
-  if (status === 400 && /[\u4e00-\u9fff]/.test(detail)) return detail;
-  if (status === 413) return "文件太大，请选择 32 MB 以内的文件";
-  return "请求失败，请重试";
+    return path.endsWith("/login") ? t("error.credentials") : t("error.signInAgain");
+  if (status === 404) return t("error.notFound");
+  if (status === 409) return t("error.conflict");
+  if (status === 429) return t("error.rateLimited");
+  if (status >= 500) return t("error.unavailable");
+  if (status === 403) return t("error.forbidden");
+  if (status === 413) return t("error.fileSize");
+  return t("error.request");
 }
 
 export async function request<T>(
@@ -84,6 +70,7 @@ export async function request<T>(
       ...init,
       credentials: "include",
       headers: {
+        "Accept-Language": getLocale(),
         "X-Client-Timezone": Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         ...(init.body && !(init.body instanceof FormData)
           ? { "Content-Type": "application/json" }
@@ -94,23 +81,33 @@ export async function request<T>(
   } catch (reason) {
     if (init.signal?.aborted) throw reason;
     if (!options.quiet) console.error("API connection failed", path, reason);
-    throw new Error("暂时无法连接");
+    const error = new Error();
+    Object.defineProperty(error, "message", { configurable: true, get: () => t("error.connect") });
+    throw error;
   }
   if (!response.ok) {
     let detail = "";
+    let code: string | undefined;
+    let params: MessageParams | undefined;
     try {
-      const body = (await response.json()) as { error?: string };
+      const body = (await response.json()) as { error?: string; code?: string; params?: MessageParams };
       detail = body.error ?? "";
+      code = body.code;
+      params = body.params;
     } catch {
       /* non-JSON error */
     }
     if (!options.quiet && !(path === "/api/auth/me" && response.status === 401))
       console.error("API request failed", path, response.status, detail);
-    const error = new Error(
-      userFacingError(path, response.status, detail),
-    ) as ApiError;
+    const error = new Error() as ApiError;
+    Object.defineProperty(error, "message", {
+      configurable: true,
+      get: () => translateError(code, params) ?? userFacingError(path, response.status),
+    });
     error.status = response.status;
     error.detail = detail;
+    error.code = code;
+    error.params = params;
     throw error;
   }
   if (response.status === 204) return undefined as T;
@@ -469,6 +466,9 @@ export const adminApi = {
       tools?: unknown[];
       models?: string[];
       error?: string;
+      detail?: string;
+      error_code?: string;
+      error_params?: MessageParams;
       status?: number;
       parameter_accepted?: boolean;
     }>(`/api/admin/${kind}/${encodeURIComponent(id)}/test`, {
@@ -493,9 +493,9 @@ export const adminApi = {
     )
       throw new Error(
         result.timed_out
-          ? "安装超时"
+          ? t("error.installTimeout")
           : result.stderr?.trim().slice(-1000) ||
-              `安装失败${result.exit_code === undefined ? "" : ` (${result.exit_code})`}`,
+              `${t("error.install")}${result.exit_code === undefined ? "" : ` (${result.exit_code})`}`,
       );
     return result;
   },

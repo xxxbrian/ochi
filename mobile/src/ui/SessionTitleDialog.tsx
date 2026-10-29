@@ -1,3 +1,5 @@
+import { errorForDisplay, errorText, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +22,7 @@ export function SessionTitleDialog(props: SessionTitleDialogProps) {
 }
 
 function NativeTitlePrompt({ visible, ...props }: SessionTitleDialogProps) {
+  useI18n();
   const { dark } = useTheme();
   const latest = useRef({ ...props, dark });
   latest.current = { ...props, dark };
@@ -30,9 +33,9 @@ function NativeTitlePrompt({ visible, ...props }: SessionTitleDialogProps) {
     const present = (value: string, message?: string) => {
       if (disposed) return;
       // UIKit owns the text field, keyboard avoidance and system glass alert.
-      Alert.prompt('重命名对话', message, [
-        { text: '取消', style: 'cancel', onPress: () => { if (!disposed) latest.current.onClose(); } },
-        { text: '确定', isPreferred: true, onPress: (input?: string) => {
+      Alert.prompt(t("chat.rename"), message, [
+        { text: t("common.cancel"), style: 'cancel', onPress: () => { if (!disposed) latest.current.onClose(); } },
+        { text: t("common.confirm"), isPreferred: true, onPress: (input?: string) => {
           if (disposed) return;
           const title = (input ?? '').trim();
           const retry = (error: string) => {
@@ -40,11 +43,11 @@ function NativeTitlePrompt({ visible, ...props }: SessionTitleDialogProps) {
             // UIAlertController dismisses automatically before the JS save completes.
             timer = setTimeout(() => present(input ?? '', error), 300);
           };
-          if (!title) { retry('标题不能为空'); return; }
+          if (!title) { retry(t("error.emptyTitle")); return; }
           void latest.current.onSave(title).then(() => {
             if (!disposed) latest.current.onClose();
           }).catch((error: unknown) => {
-            if (!disposed) retry(error instanceof Error ? error.message : '保存失败，请重试');
+            if (!disposed) retry(errorForDisplay(error, "error.saveRetry").message);
           });
         } },
       ], 'plain-text', value, 'default', { userInterfaceStyle: latest.current.dark ? 'dark' : 'light' });
@@ -56,12 +59,13 @@ function NativeTitlePrompt({ visible, ...props }: SessionTitleDialogProps) {
 }
 
 function TitlePrompt({ visible, title, onClose, onSave }: SessionTitleDialogProps) {
+  useI18n();
   const { colors, fonts } = useTheme();
   const insets = useSafeAreaInsets();
   const viewport = useWindowDimensions();
   const compact = viewport.width > viewport.height;
   const [draft, setDraft] = useState(title);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<DisplayError>("");
   const [saving, setSaving] = useState(false);
   const input = useRef<TextInput>(null);
   const focusTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -75,7 +79,7 @@ function TitlePrompt({ visible, title, onClose, onSave }: SessionTitleDialogProp
     setSaving(true);
     setError('');
     try { await onSave(draft.trim()); onClose(); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : '保存失败，请重试'); }
+    catch (reason) { setError(errorForDisplay(reason, "error.saveRetry")); }
     finally { setSaving(false); }
   };
   return (
@@ -88,7 +92,7 @@ function TitlePrompt({ visible, title, onClose, onSave }: SessionTitleDialogProp
         }, 150);
       }}>
       <Animated.View style={[StyleSheet.absoluteFill, motion.backdrop]}>
-        <Pressable accessibilityLabel="取消重命名" disabled={saving} onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: '#00000050' }]} />
+        <Pressable accessibilityLabel={t("chat.cancelRename")} disabled={saving} onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: '#00000050' }]} />
       </Animated.View>
       <KeyboardAvoidingView style={styles.fill} behavior="padding" pointerEvents="box-none">
         <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="none" bounces={false} contentContainerStyle={[styles.center, {
@@ -97,19 +101,19 @@ function TitlePrompt({ visible, title, onClose, onSave }: SessionTitleDialogProp
         }]}>
         <Animated.View style={[styles.dialog, motion.surface]}>
           <GlassSurface style={[styles.panel, compact && { gap: 12, padding: 14 }]}>
-            <AppText size={18} weight="medium" style={styles.title}>重命名对话</AppText>
+            <AppText size={18} weight="medium" style={styles.title}>{t("chat.rename")}</AppText>
             <TextInput ref={input} value={draft} onChangeText={setDraft} selectTextOnFocus editable={!saving} disableFullscreenUI
-              accessibilityLabel="对话标题" returnKeyType="done" onSubmitEditing={() => void save()}
+              accessibilityLabel={t("chat.title")} returnKeyType="done" onSubmitEditing={() => void save()}
               style={[styles.input, { color: colors.text, backgroundColor: colors.hover, fontFamily: fonts.regular }]} />
-            {Boolean(error) && <AppText size={13} style={{ color: colors.error }}>{error}</AppText>}
+            {Boolean(error) && <AppText size={13} style={{ color: colors.error }}>{errorText(error)}</AppText>}
             <View style={styles.buttons}>
               <Pressable accessibilityRole="button" onPress={onClose} disabled={saving}
                 style={({ pressed }) => [styles.button, { backgroundColor: colors.hover, opacity: pressed ? 0.7 : 1 }]}>
-                <AppText weight="medium">取消</AppText>
+                <AppText weight="medium">{t("common.cancel")}</AppText>
               </Pressable>
               <Pressable accessibilityRole="button" onPress={() => void save()} disabled={!draft.trim() || saving}
                 style={({ pressed }) => [styles.button, { backgroundColor: colors.text, opacity: !draft.trim() || pressed ? 0.5 : 1 }]}>
-                {saving ? <ActivityIndicator color={colors.canvas} /> : <AppText weight="medium" style={{ color: colors.canvas }}>确定</AppText>}
+                {saving ? <ActivityIndicator color={colors.canvas} /> : <AppText weight="medium" style={{ color: colors.canvas }}>{t("common.confirm")}</AppText>}
               </Pressable>
             </View>
           </GlassSurface>

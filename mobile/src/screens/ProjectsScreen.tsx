@@ -1,3 +1,5 @@
+import { errorForDisplay, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -42,11 +44,12 @@ import { Composer, type ComposerSubmission } from "../components/Composer";
 import { SessionSearch, sessionDate } from "../components/SessionSearch";
 
 export function ProjectsScreen() {
+  useI18n();
   const { colors, invalidateLists, invalidateVersion } = useApp();
   const contentStyle = usePageContentStyle();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [creating, setCreating] = useState(false);
   const refresh = useCallback(() => {
     setLoading(true);
@@ -54,7 +57,7 @@ export function ProjectsScreen() {
       .projects()
       .then(setProjects)
       .catch((reason) =>
-        setError(reason instanceof Error ? reason.message : "加载失败"),
+        setError(errorForDisplay(reason, "error.load")),
       )
       .finally(() => setLoading(false));
   }, []);
@@ -62,11 +65,11 @@ export function ProjectsScreen() {
   return (
     <View style={[screenStyles.fill, { backgroundColor: colors.canvas }]}>
       <PageHeader
-        title="项目"
+        title={t("project.title")}
         right={
           <ActionIcon
             icon={Plus}
-            label="创建项目"
+            label={t("project.create")}
             onPress={() => setCreating(true)}
           />
         }
@@ -96,13 +99,13 @@ export function ProjectsScreen() {
                   {item.name}
                 </AppText>
                 <AppText muted size={13}>
-                  {item.session_count ?? 0} 个对话
+                  {t("chat.count", { count: item.session_count ?? 0 })}
                 </AppText>
               </View>
               <ChevronRight size={18} color={colors.subtle} />
             </Pressable>
           )}
-          ListEmptyComponent={<EmptyState icon={Folder} text="暂无项目" />}
+          ListEmptyComponent={<EmptyState icon={Folder} text={t("project.none")} />}
           refreshing={loading}
           onRefresh={refresh}
         />
@@ -121,6 +124,7 @@ export function ProjectsScreen() {
 }
 
 export function ProjectScreen({ projectId }: { projectId: string }) {
+  useI18n();
   const { colors, models, invalidateLists, invalidateVersion } = useApp();
   const { height } = useWindowDimensions();
   const compact = height < 500;
@@ -130,7 +134,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
   const [cursor, setCursor] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [paging, setPaging] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [editing, setEditing] = useState(false);
   const [search, setSearch] = useState(false);
   const [modelId, setModelId] = useState("");
@@ -156,7 +160,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
         setError("");
       })
       .catch((reason) =>
-        setError(reason instanceof Error ? reason.message : "加载失败"),
+        setError(errorForDisplay(reason, "error.load")),
       )
       .finally(() => setLoading(false));
   }, [projectId]);
@@ -178,7 +182,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
       ]);
       setCursor(page.next_cursor);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "加载失败");
+      setError(errorForDisplay(reason, "error.load"));
     } finally {
       setPaging(false);
     }
@@ -199,10 +203,10 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
   }
   function remove() {
     if (!project) return;
-    Alert.alert("删除项目？", project.name, [
-      { text: "取消", style: "cancel" },
+    Alert.alert(t("project.deleteConfirm"), project.name, [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "删除",
+        text: t("common.delete"),
         style: "destructive",
         onPress: () =>
           void api
@@ -212,7 +216,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
               router.replace("/projects");
             })
             .catch((reason) =>
-              setError(reason instanceof Error ? reason.message : "删除失败"),
+              setError(errorForDisplay(reason, "error.delete")),
             ),
       },
     ]);
@@ -258,14 +262,14 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
       />
       <View style={styles.sessionHeading}>
         <AppText size={15} weight="medium">
-          对话{" "}
+          {t("chat.chats")}{" "}
           <AppText muted size={13}>
             {project?.session_count ?? sessions.length}
           </AppText>
         </AppText>
         <ActionIcon
           icon={Search}
-          label="搜索项目对话"
+          label={t("project.searchChats")}
           onPress={() => setSearch(true)}
         />
       </View>
@@ -274,20 +278,20 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
   return (
     <View style={[screenStyles.fill, { backgroundColor: colors.canvas }]}>
       <PageHeader
-        title={project?.name ?? "项目"}
+        title={project?.name ?? t("project.title")}
         right={
           <MenuTrigger
-            label="项目选项"
+            label={t("project.options")}
             items={[
               {
                 key: "rename",
-                title: "项目设置",
+                title: t("project.settings"),
                 icon: Pencil,
                 onPress: () => setEditing(true),
               },
               {
                 key: "delete",
-                title: "删除项目",
+                title: t("project.delete"),
                 icon: Trash2,
                 danger: true,
                 separatorBefore: true,
@@ -323,13 +327,13 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
           renderItem={({ item }) => (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={item.title}
+              accessibilityLabel={item.title || t("chat.new")}
               onPress={() => router.push(`/c/${item.id}`)}
               style={[styles.sessionRow, { borderBottomColor: colors.border }]}
             >
               <View style={{ flex: 1, gap: 3 }}>
                 <AppText size={15} numberOfLines={2}>
-                  {item.title}
+                  {item.title || t("chat.new")}
                 </AppText>
                 <AppText muted size={12}>
                   {sessionDate(item.updated_at)}
@@ -338,7 +342,7 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
               <ChevronRight size={17} color={colors.subtle} />
             </Pressable>
           )}
-          ListEmptyComponent={<EmptyState icon={Folder} text="暂无对话" />}
+          ListEmptyComponent={<EmptyState icon={Folder} text={t("chat.none")} />}
           onEndReached={() => void more()}
           onEndReachedThreshold={0.4}
           ListFooterComponent={
@@ -381,10 +385,11 @@ function ProjectEditor({
   onClose: () => void;
   onSaved: (project: Project) => void;
 }) {
+  useI18n();
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   useEffect(() => {
     if (visible) {
       setName(project?.name ?? "");
@@ -405,7 +410,7 @@ function ProjectEditor({
         }),
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(errorForDisplay(reason, "error.save"));
     } finally {
       setBusy(false);
     }
@@ -414,24 +419,23 @@ function ProjectEditor({
     <Sheet
       visible={visible}
       onClose={onClose}
-      title={project ? "项目设置" : "创建项目"}
+      title={project ? t("project.settings") : t("project.create")}
       height={460}
     >
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.editorBody}
       >
-        <Field label="名称" value={name} onChangeText={setName} autoFocus />
+        <Field label={t("common.name")} value={name} onChangeText={setName} autoFocus />
         <Field
-          label="项目指令"
+          label={t("project.instructions")}
           value={instructions}
           onChangeText={setInstructions}
           multiline
         />
         <ErrorNotice error={error} />
         <Button busy={busy} disabled={!name.trim()} onPress={() => void save()}>
-          保存
-        </Button>
+          {t("common.save")}</Button>
       </ScrollView>
     </Sheet>
   );

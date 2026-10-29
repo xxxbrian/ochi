@@ -94,6 +94,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 11
         versionName "0.1.0"
+        resourceConfigurations += ["b+en", "b+zh+Hans", "b+zh+Hant"]
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }

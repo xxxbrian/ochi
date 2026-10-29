@@ -1,3 +1,5 @@
+import { errorText, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import {
   ActivityIndicator,
   Pressable,
@@ -102,6 +104,7 @@ export function PageHeader({
   right?: React.ReactNode;
   onBack?: () => void;
 }) {
+  useI18n();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -122,7 +125,7 @@ export function PageHeader({
         {back && (
           <ActionIcon
             icon={ArrowLeft}
-            label="返回"
+            label={t("common.back")}
             onPress={
               onBack ??
               (() => (router.canGoBack() ? router.back() : router.replace("/")))
@@ -335,23 +338,23 @@ export function ErrorNotice({
   retry,
   safeArea = false,
 }: {
-  error?: string | null;
+  error?: DisplayError | null;
   retry?: () => void;
   safeArea?: boolean;
 }) {
+  useI18n();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   if (!error) return null;
   return (
     <View accessibilityRole="alert" style={[styles.error, safeArea && { paddingLeft: insets.left + 16, paddingRight: insets.right + 16 }]}>
       <AppText size={14} style={{ color: colors.error, flex: 1 }}>
-        {error}
+        {errorText(error)}
       </AppText>
       {retry && (
         <Pressable onPress={retry}>
           <AppText size={14} weight="medium">
-            重试
-          </AppText>
+            {t("common.retry")}</AppText>
         </Pressable>
       )}
     </View>
@@ -386,9 +389,10 @@ export function LoadingState() {
 }
 
 export function FloatingClose({ onPress }: { onPress: () => void }) {
+  useI18n();
   return (
     <GlassSurface style={{ borderRadius: 24 }}>
-      <ActionIcon icon={X} label="关闭" onPress={onPress} />
+      <ActionIcon icon={X} label={t("common.close")} onPress={onPress} />
     </GlassSurface>
   );
 }

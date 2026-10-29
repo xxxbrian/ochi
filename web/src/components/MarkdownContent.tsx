@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { Streamdown, type PluginConfig } from "streamdown";
 import { cjk } from "@streamdown/cjk";
 import { normalizeMath } from "../lib/markdown";
+import { t, useI18n } from "../lib/i18n";
 import "./markdown.css";
 
 // Streamdown reuses stable rendered blocks. KaTeX and Shiki are
@@ -92,7 +93,36 @@ export default function MarkdownContent({
   content: string;
   isStreaming: boolean;
 }) {
+  const { locale } = useI18n();
   const [plugins, setPlugins] = useState(basePlugins);
+  const translations = useMemo(() => ({
+    close: t("markdown.close"),
+    copied: t("markdown.copied"),
+    copyCode: t("markdown.copyCode"),
+    copyLink: t("markdown.copyLink"),
+    copyTable: t("markdown.copyTable"),
+    copyTableAsCsv: t("markdown.copyTableAsCsv"),
+    copyTableAsMarkdown: t("markdown.copyTableAsMarkdown"),
+    copyTableAsTsv: t("markdown.copyTableAsTsv"),
+    downloadDiagram: t("markdown.downloadDiagram"),
+    downloadDiagramAsMmd: t("markdown.downloadDiagramAsMmd"),
+    downloadDiagramAsPng: t("markdown.downloadDiagramAsPng"),
+    downloadDiagramAsSvg: t("markdown.downloadDiagramAsSvg"),
+    downloadFile: t("markdown.downloadFile"),
+    downloadImage: t("markdown.downloadImage"),
+    downloadTable: t("markdown.downloadTable"),
+    downloadTableAsCsv: t("markdown.downloadTableAsCsv"),
+    downloadTableAsMarkdown: t("markdown.downloadTableAsMarkdown"),
+    exitFullscreen: t("markdown.exitFullscreen"),
+    externalLinkWarning: t("markdown.externalLinkWarning"),
+    imageNotAvailable: t("markdown.imageNotAvailable"),
+    openExternalLink: t("markdown.openExternalLink"),
+    openLink: t("markdown.openLink"),
+    resetView: t("markdown.resetView"),
+    viewFullscreen: t("markdown.viewFullscreen"),
+    zoomIn: t("markdown.zoomIn"),
+    zoomOut: t("markdown.zoomOut"),
+  }), [locale]);
   const normalized = useMemo(
     () => normalizeMath(content, isStreaming),
     [content, isStreaming],
@@ -120,6 +150,7 @@ export default function MarkdownContent({
       plugins={plugins}
       components={components}
       controls={controls}
+      translations={translations}
       mode="streaming"
       parseIncompleteMarkdown={isStreaming}
       isAnimating={isStreaming}

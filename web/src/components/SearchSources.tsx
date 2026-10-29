@@ -1,9 +1,11 @@
+import { t, useI18n } from "../lib/i18n";
 import { Globe2 } from "lucide-react";
 import { memo, useState } from "react";
 import type { SearchResult } from "../lib/processTimeline";
 import "./process-timeline.css";
 
 const SiteIcon = memo(function SiteIcon({ url }: { url: string }) {
+  useI18n();
   const [failed, setFailed] = useState(false);
   const site = new URL(url);
   return (
@@ -23,14 +25,16 @@ const SiteIcon = memo(function SiteIcon({ url }: { url: string }) {
 });
 
 export const SearchSiteIcons = memo(function SearchSiteIcons({ results }: { results: SearchResult[] }) {
+  useI18n();
   const sites = [...new Map(results.map((result) => [new URL(result.url).hostname, result.url])).values()].slice(0, 4);
   return <span className="search-site-icons">{sites.map((url) => <SiteIcon key={new URL(url).origin} url={url} />)}</span>;
 });
 
 export const SearchResults = memo(function SearchResults({ results }: { results: SearchResult[] }) {
+  useI18n();
   return (
     <div className="search-results">
-      {results.length === 0 ? <p className="search-empty">没有找到相关结果</p> : results.map((result) => (
+      {results.length === 0 ? <p className="search-empty">{t("search.noResults")}</p> : results.map((result) => (
         <a className="search-result" href={result.url} key={result.url} target="_blank" rel="noopener noreferrer">
           <SiteIcon url={result.url} />
           <span>

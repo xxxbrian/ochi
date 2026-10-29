@@ -1,3 +1,4 @@
+const { testI18n } = require('./helpers/i18n.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -52,6 +53,8 @@ function harness(width = 852, height = 393, insets = { top: 0, left: 59, right: 
     vm.runInNewContext(output + tail, {
       module, exports: module.exports, URL, Date, Intl, Math, Map, Set,
       require(name) {
+        const translated = testI18n.importFor(name); if (translated) return translated;
+
         if (name in imports) return imports[name];
         if (['./ScreenChrome', '../components/ScreenChrome'].includes(name)) return load('src/components/ScreenChrome.tsx');
         if (['./SettingsChrome', '../components/SettingsChrome'].includes(name)) return load('src/components/SettingsChrome.tsx');

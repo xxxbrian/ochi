@@ -1,3 +1,4 @@
+import { t, useI18n, getLocale } from "../lib/i18n";
 import {
   memo,
   useEffect,
@@ -23,6 +24,7 @@ import { Popover } from "@base-ui/react/popover";
 import type { Artifact, Model } from "../lib/types";
 import { api } from "../lib/api";
 import type { InstructionAcceptance } from "../lib/runInstructions";
+import { effortLabel } from "../lib/reasoningLabels";
 import { SelectField } from "./ui/Select";
 import { sizeText } from "./FileCards";
 import { BrandIcon } from "./BrandIcon";
@@ -54,10 +56,6 @@ const recognitionConstructor = () =>
   ).SpeechRecognition ??
   (window as unknown as { webkitSpeechRecognition?: new () => Recognition })
     .webkitSpeechRecognition;
-
-export function effortLabel(effort: string) {
-  return effort || "Provider default";
-}
 
 type Props = {
   onSubmit: (value: string, files: Artifact[]) => Promise<boolean>;
@@ -107,6 +105,7 @@ function ThinkingBudget({
   disabled: boolean;
   onChange: (value: number) => void;
 }) {
+  useI18n();
   const [draftBudget, setDraftBudget] = useState(String(value));
   useEffect(() => setDraftBudget(String(value)), [value]);
   function commitBudget() {
@@ -118,22 +117,22 @@ function ThinkingBudget({
     onChange(next);
   }
   return <Popover.Root>
-    <Popover.Trigger type="button" className="ochi-composer__budget-trigger" disabled={disabled} aria-label="思考预算" title={`思考预算 · ${value} tokens`}>
+    <Popover.Trigger type="button" className="ochi-composer__budget-trigger" disabled={disabled} aria-label={t("reasoning.budget")} title={t("reasoning.budgetValue", { count: value })}>
       <Brain size={18} />
-      <span>{value.toLocaleString()}</span>
+      <span>{value.toLocaleString(getLocale())}</span>
     </Popover.Trigger>
     <Popover.Portal>
       <Popover.Positioner className="choice-positioner" side="top" sideOffset={7} align="start">
         <Popover.Popup className="ochi-composer__budget-popup">
           <div className="ochi-composer__budget-heading">
-            <Popover.Title>思考预算</Popover.Title>
-            <Popover.Close className="icon-button" aria-label="关闭"><X size={16} /></Popover.Close>
+            <Popover.Title>{t("reasoning.budget")}</Popover.Title>
+            <Popover.Close className="icon-button" aria-label={t("common.close")}><X size={16} /></Popover.Close>
           </div>
           <label>
-            <input type="number" aria-label="Thinking token budget" min={min} max={max} step={512} value={draftBudget} onChange={(event) => setDraftBudget(event.target.value)} onBlur={commitBudget} onKeyDown={(event) => {
+            <input type="number" aria-label={t("reasoning.budget")} min={min} max={max} step={512} value={draftBudget} onChange={(event) => setDraftBudget(event.target.value)} onBlur={commitBudget} onKeyDown={(event) => {
               if (event.key === "Enter") { event.preventDefault(); commitBudget(); }
             }} />
-            <span>tokens</span>
+            <span>{t("common.tokens")}</span>
           </label>
         </Popover.Popup>
       </Popover.Positioner>
@@ -168,6 +167,7 @@ export const Composer = memo(function Composer({
   onEffort,
   initialDraft,
 }: Props) {
+  useI18n();
   const [draft, setDraft] = useState(initialDraft ?? readDraft(draftKey));
   const [submitting, setSubmitting] = useState(false);
   const [files, setFiles] = useState<Artifact[]>([]);
@@ -269,7 +269,7 @@ export const Composer = memo(function Composer({
         setFiles((current) => [...current, result]);
       }
     } catch (reason) {
-      onError(reason instanceof Error ? reason.message : "上传失败");
+      onError(reason instanceof Error ? reason.message : t("error.upload"));
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -283,7 +283,7 @@ export const Composer = memo(function Composer({
     const Constructor = recognitionConstructor();
     if (!Constructor) return;
     const instance = new Constructor();
-    instance.lang = "zh-CN";
+    instance.lang = getLocale();
     instance.continuous = false;
     instance.interimResults = false;
     instance.onresult = (event) => {
@@ -295,14 +295,14 @@ export const Composer = memo(function Composer({
     instance.onend = () => setListening(false);
     instance.onerror = () => {
       setListening(false);
-      onError("未能使用麦克风");
+      onError(t("error.microphone"));
     };
     recognition.current = instance;
     try {
       instance.start();
       setListening(true);
     } catch {
-      onError("未能使用麦克风");
+      onError(t("error.microphone"));
     }
   }
 
@@ -329,7 +329,7 @@ export const Composer = memo(function Composer({
                     current.filter((item) => item.id !== file.id),
                   )
                 }
-                aria-label={`移除 ${file.name}`}
+                aria-label={t("file.remove", { name: file.name })}
               >
                 <X size={15} />
               </button>
@@ -343,8 +343,8 @@ export const Composer = memo(function Composer({
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={keyDown}
         rows={1}
-        placeholder={onSupplement ? "补充内容…" : "你想做些什么？"}
-        aria-label="发消息"
+        placeholder={onSupplement ? t("composer.supplementPlaceholder") : t("composer.placeholder")}
+        aria-label={t("composer.messageLabel")}
       />
       <div className="ochi-composer__toolbar">
         <div className="ochi-composer__tools">
@@ -358,8 +358,8 @@ export const Composer = memo(function Composer({
           <button
             type="button"
             className="icon-button"
-            aria-label="添加文件"
-            title="添加文件"
+            aria-label={t("composer.addFile")}
+            title={t("composer.addFile")}
             disabled={uploading || unavailable}
             onClick={() => fileRef.current?.click()}
           >
@@ -370,11 +370,11 @@ export const Composer = memo(function Composer({
             )}
           </button>
           {models.length > 0 && (
-            <div className="ochi-composer__model" title={currentModel?.name || "选择模型"}>
+            <div className="ochi-composer__model" title={currentModel?.name || t("composer.chooseModel")}>
               <SelectField
                 compact
-                label="选择模型"
-                title={currentModel?.name || "选择模型"}
+                label={t("composer.chooseModel")}
+                title={currentModel?.name || t("composer.chooseModel")}
                 icon={<BrandIcon src={currentModel?.icon || currentModel?.provider_icon} size={18} />}
                 value={modelId}
                 onChange={onModel}
@@ -389,16 +389,16 @@ export const Composer = memo(function Composer({
             </div>
           )}
           {efforts.length > 0 && (
-            <div className="ochi-composer__reasoning" title={`思考程度 · ${effort || "默认"}`}>
+            <div className="ochi-composer__reasoning" title={t("reasoning.effortValue", { level: effortLabel(effort) })}>
               <SelectField
                 compact
-                label="思考程度"
-                title={`思考程度 · ${effort || "默认"}`}
+                label={t("reasoning.effort")}
+                title={t("reasoning.effortValue", { level: effortLabel(effort) })}
                 icon={<Brain size={18} />}
                 value={effort}
                 onChange={onEffort}
                 disabled={unavailable}
-                options={[{ value: "", label: "默认" }, ...efforts.map((value) => ({ value, label: value }))]}
+                options={[{ value: "", label: t("common.default") }, ...efforts.map((value) => ({ value, label: effortLabel(value) }))]}
               />
               {effort && <span className="ochi-composer__effort-dot" aria-hidden="true" />}
             </div>
@@ -408,13 +408,13 @@ export const Composer = memo(function Composer({
               type="button"
               className={`effort-button ochi-composer__reasoning-toggle ${reasoningEnabled ? "is-active" : ""}`}
               aria-pressed={reasoningEnabled}
-              aria-label="思考"
-              title={reasoningEnabled ? "思考 · 开启" : "思考 · 关闭"}
+              aria-label={t("reasoning.thinking")}
+              title={reasoningEnabled ? t("reasoning.on") : t("reasoning.off")}
               disabled={unavailable}
               onClick={() => onReasoningEnabled?.(!reasoningEnabled)}
             >
               <Brain size={18} />
-              <span>{reasoningEnabled ? "开启" : "关闭"}</span>
+              <span>{reasoningEnabled ? t("common.on") : t("common.close")}</span>
             </button>
           )}
           {configuredReasoning && budgetThinking && (
@@ -424,9 +424,9 @@ export const Composer = memo(function Composer({
             type="button"
             role="switch"
             className={`computer-switch ochi-composer__computer ${computerEnabled ? "is-active" : ""} ${computerUpdating ? "is-pending" : ""}`}
-            aria-label="允许使用电脑"
+            aria-label={t("computer.allow")}
             aria-checked={computerEnabled}
-            title={computerOnce ? "允许使用电脑 · 仅本次" : computerEnabled ? "允许使用电脑 · 开启" : "允许使用电脑 · 关闭"}
+            title={computerOnce ? t("computer.allowOnce") : computerEnabled ? t("computer.allowOn") : t("computer.allowOff")}
             disabled={unavailable || computerUpdating}
             onClick={() => onComputer(!computerEnabled)}
           >
@@ -435,23 +435,23 @@ export const Composer = memo(function Composer({
             ) : (
               <Monitor size={18} />
             )}
-            <span className="ochi-composer__computer-label">{computerOnce ? "电脑·本次" : "电脑"}</span>
+            <span className="ochi-composer__computer-label">{computerOnce ? t("computer.once") : t("computer.title")}</span>
             <span className="ochi-composer__switch-track" aria-hidden="true"><span /></span>
           </button>
         </div>
         <div className="ochi-composer__send-tools">
           {onSupplement && (
             <button type="button" className="ochi-composer__supplement"
-              aria-label="补充当前任务要求" title={files.length ? "补充要求暂不支持附件" : "补充当前任务要求"}
+              aria-label={t("composer.supplementLabel")} title={files.length ? t("composer.supplementNoFiles") : t("composer.supplementLabel")}
               disabled={!draft.trim() || files.length > 0 || unavailable || submitting || supplementBusy || uploading}
-              onMouseDown={(event) => event.preventDefault()} onClick={() => void supplement()}>补充</button>
+              onMouseDown={(event) => event.preventDefault()} onClick={() => void supplement()}>{t("composer.supplement")}</button>
           )}
           {voiceAvailable && (
             <button
               type="button"
               className={`icon-button voice-button ${listening ? "is-listening" : ""}`}
-              aria-label={listening ? "停止录音" : "语音输入"}
-              title="语音输入"
+              aria-label={listening ? t("composer.stopRecording") : t("composer.voiceInput")}
+              title={t("composer.voiceInput")}
               onClick={toggleVoice}
             >
               <Mic size={19} />
@@ -461,8 +461,8 @@ export const Composer = memo(function Composer({
             <button
               type="button"
               className="icon-button stop-run-button"
-              aria-label="停止当前任务"
-              title="停止"
+              aria-label={t("composer.stopTask")}
+              title={t("common.stop")}
               disabled={stopping || unavailable}
               onClick={onStop}
             >
@@ -473,8 +473,8 @@ export const Composer = memo(function Composer({
             <button
               type="button"
               className="icon-button ochi-composer__send-now"
-              aria-label="停止并立即发送"
-              title="停止并立即发送"
+              aria-label={t("composer.stopAndSend")}
+              title={t("composer.stopAndSend")}
               disabled={unavailable || submitting || supplementBusy || uploading}
               onClick={() => void submit(undefined, true)}
             >
@@ -484,8 +484,8 @@ export const Composer = memo(function Composer({
           <button
             type="submit"
             className="send-button"
-            aria-label={busy ? "排队发送" : "发送"}
-            title={busy ? "排队发送" : "发送"}
+            aria-label={busy ? t("composer.queue") : t("common.send")}
+            title={busy ? t("composer.queue") : t("common.send")}
             disabled={
               (!draft.trim() && !files.length) ||
               unavailable ||

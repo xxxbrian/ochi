@@ -1,3 +1,4 @@
+import { processT as t } from "../../../shared/i18n/process";
 function wallTime(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -25,7 +26,7 @@ export function scheduleWallTime(iso: string | undefined, timezone: string) {
 export function scheduleInstant(value: string, timezone: string) {
   if (!value) return "";
   const desired = Date.parse(`${value}:00Z`);
-  if (!Number.isFinite(desired)) throw new Error("日期或时间无效");
+  if (!Number.isFinite(desired)) throw new Error(t("schedule.invalidDate"));
   let instant = desired;
   // Resolve a selected-zone wall clock without inheriting the device timezone.
   try {
@@ -38,7 +39,7 @@ export function scheduleInstant(value: string, timezone: string) {
       instant += shift;
     }
   } catch {
-    throw new Error("时区无效");
+    throw new Error(t("schedule.invalidTimezone"));
   }
-  throw new Error("此时间在所选时区不存在");
+  throw new Error(t("schedule.nonexistentTime"));
 }

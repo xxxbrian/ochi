@@ -6,7 +6,9 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/runtime"
 )
 
@@ -138,7 +140,7 @@ func (s *Store) CreateConfiguredRun(ctx context.Context, userID, sessionID, prom
 			return runtime.Snapshot{}, nil, err
 		}
 		if previousRunID == "" || (v.EditMessageID != "" && v.EditMessageID != messageID) || (v.RetryRunID != "" && v.RetryRunID != previousRunID) {
-			return runtime.Snapshot{}, nil, errors.New("只能修改或重新运行最近的一条消息")
+			return runtime.Snapshot{}, nil, i18n.New("edit_latest_only")
 		}
 		if _, err = tx.Exec(ctx, `UPDATE runs SET archived=true WHERE id=$1`, previousRunID); err != nil {
 			return runtime.Snapshot{}, nil, err
@@ -280,7 +282,7 @@ func (s *Store) CreateConfiguredRun(ctx context.Context, userID, sessionID, prom
 	}
 	history = append(history, m)
 	currentSystem = system
-	if _, err = tx.Exec(ctx, `UPDATE sessions SET title=CASE WHEN title='新对话' AND title_source='pending' THEN left($2,60) ELSE title END,model_id=NULLIF($3,'')::uuid,effort=$4,system_prompt=$5,updated_at=now() WHERE id=$1`, sessionID, prompt, model.ID, effort, currentSystem); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE sessions SET title=CASE WHEN title='' AND title_source='pending' THEN left($2,60) ELSE title END,model_id=NULLIF($3,'')::uuid,effort=$4,system_prompt=$5,updated_at=now() WHERE id=$1`, sessionID, prompt, model.ID, effort, currentSystem); err != nil {
 		return snapshot, nil, err
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM run_requests WHERE run_id=$1`, runID); err != nil {
@@ -363,7 +365,7 @@ func (s *Store) LastUserMessage(ctx context.Context, userID, sessionID string, r
 		return m, err
 	}
 	if m.RunID == nil || (revision.EditMessageID != "" && m.ID != revision.EditMessageID) || (revision.RetryRunID != "" && *m.RunID != revision.RetryRunID) {
-		return m, errors.New("只能修改或重新运行最近的一条消息")
+		return m, i18n.New("edit_latest_only")
 	}
 	return m, nil
 }

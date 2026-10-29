@@ -50,9 +50,9 @@ func TestDrainWaitsForClaimedPreparationAndRunningCleanup(t *testing.T) {
 		close(started)
 		select {
 		case <-release:
-			run.Finish(runtime.StatusCompleted, "")
+			run.Finish(runtime.StatusCompleted, nil)
 		case <-run.Context().Done():
-			run.Finish(runtime.StatusInterrupted, "unexpected cancellation")
+			run.Finish(runtime.StatusInterrupted, errors.New("unexpected cancellation"))
 		}
 	})
 	s.queueAdmissions.Done()
@@ -91,7 +91,7 @@ func TestDrainDeadlineLeavesRunAliveUntilForcedShutdown(t *testing.T) {
 	run, err := s.runtime.Start(runtime.Snapshot{RunID: "slow", SessionID: "session"}, func(run *runtime.Run) {
 		close(started)
 		<-run.Context().Done()
-		if err := run.Finalize(runtime.StatusCompleted, "", func(snapshot runtime.Snapshot) error {
+		if err := run.Finalize(runtime.StatusCompleted, nil, func(snapshot runtime.Snapshot) error {
 			if snapshot.Status != runtime.StatusInterrupted {
 				t.Errorf("forced shutdown snapshot = %s", snapshot.Status)
 			}

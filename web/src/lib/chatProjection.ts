@@ -10,6 +10,8 @@ export function projectChatMessages(messages: Message[], snapshot: Snapshot | nu
     id: `run-${snapshot.run_id}`,
     run_id: snapshot.run_id,
     run_status: snapshot.status,
+    run_error: snapshot.error,
+    run_error_code: snapshot.error_code,
     role: "assistant",
     content: snapshot.output,
     attachments: snapshot.artifacts,

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"ochi/server/internal/agent"
 	"ochi/server/internal/runtime"
 )
@@ -183,7 +185,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	}
 	_ = r.UpdateStep(runtime.Step{ID: "read", Name: "files_read", Status: "completed", Output: "file contents"})
 	_ = r.Append("Final answer.")
-	if err = r.Finalize(runtime.StatusCompleted, "", func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
+	if err = r.Finalize(runtime.StatusCompleted, nil, func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
 		t.Fatal(err)
 	}
 	final := r.Snapshot()
@@ -220,7 +222,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	progress := m.Restore(progressSnapshot)
 	_ = progress.Append("I finished the requested action.")
 	_ = progress.ResetOutput()
-	if err = progress.Finalize(runtime.StatusCompleted, "", func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
+	if err = progress.Finalize(runtime.StatusCompleted, nil, func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
 		t.Fatal(err)
 	}
 	page, err = s.MessagesPage(ctx, user, session.ID, "", 20)
@@ -261,7 +263,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	}
 	pending := m.Restore(pendingSnapshot)
 	_ = pending.AppendText("partial", "Still checking sources", true)
-	if err = pending.Finalize(runtime.StatusFailed, "stream failed", func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
+	if err = pending.Finalize(runtime.StatusFailed, errors.New("stream failed"), func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
 		t.Fatal(err)
 	}
 	page, err = s.MessagesPage(ctx, user, session.ID, "", 20)
@@ -270,7 +272,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 		t.Fatal("could not read failed provisional output history")
 	}
 	last := page[len(page)-1]
-	if last.Content != "Still checking sources" || last.RunError != "stream failed" || !last.HasProcess || len(read.Timeline) != 1 || !read.Timeline[0].Pending || read.Timeline[0].Text != "Still checking sources" {
+	if last.Content != "Still checking sources" || last.RunErrorCode != "run_failed" || last.RunError == "" || !last.HasProcess || len(read.Timeline) != 1 || !read.Timeline[0].Pending || read.Timeline[0].Text != "Still checking sources" {
 		t.Fatal("failed public output/error was hidden or provisional output was marked final")
 	}
 	// The same read model applies to a checkpoint interrupted before CompleteRun.
@@ -280,7 +282,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	}
 	messages, err = s.Messages(ctx, user, session.ID)
 	page, pageErr = s.MessagesPage(ctx, user, session.ID, "", 20)
-	if err != nil || pageErr != nil || messages[len(messages)-1].Content != "Still checking sources" || page[len(page)-1].Content != "Still checking sources" || page[len(page)-1].RunError != "stream failed" {
+	if err != nil || pageErr != nil || messages[len(messages)-1].Content != "Still checking sources" || page[len(page)-1].Content != "Still checking sources" || page[len(page)-1].RunErrorCode != "run_failed" || page[len(page)-1].RunError == "" {
 		t.Fatal("history reads hid public text from the run projection")
 	}
 	if page[5].Content != "I will check." || page[5].RunStatus != runtime.StatusInterrupted {
@@ -294,7 +296,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	answer := m.Restore(answerSnapshot)
 	_ = answer.AppendText("answer", "A direct answer.", true)
 	_ = answer.CommitOutput()
-	if err = answer.Finalize(runtime.StatusCompleted, "", func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
+	if err = answer.Finalize(runtime.StatusCompleted, nil, func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
 		t.Fatal(err)
 	}
 	page, err = s.MessagesPage(ctx, user, session.ID, "", 20)

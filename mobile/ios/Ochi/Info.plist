@@ -16,6 +16,12 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+		<string>zh-Hant</string>
+	</array>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -56,13 +62,13 @@
 		<string>_expo._tcp</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>拍摄照片并添加到对话。</string>
+	<string>Take photos to add to a chat.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
+	<string>Use Face ID to access your Ochi credentials.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>连接你的 Ochi 服务。</string>
+	<string>Connect to your Ochi server.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>选择照片并添加到对话。</string>
+	<string>Choose photos to add to a chat.</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

@@ -1,3 +1,4 @@
+import { t, useI18n, getLocale } from "../lib/i18n";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
@@ -35,6 +36,7 @@ export default function ProjectsPage({
   onMenu: () => void;
   renderComposer?: (projectId: string) => ReactNode;
 }) {
+  useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -80,7 +82,7 @@ export default function ProjectsPage({
       }
     } catch (reason) {
       if (token === generation.current)
-        setError(reason instanceof Error ? reason.message : "加载失败");
+        setError(reason instanceof Error ? reason.message : t("error.load"));
     } finally {
       if (token === generation.current) {
         setLoading(false);
@@ -113,7 +115,7 @@ export default function ProjectsPage({
       onNavigate(`/projects/${value.id}`);
       if (value.id === projectId) void refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("error.save"));
     } finally {
       setSaving(false);
     }
@@ -126,25 +128,25 @@ export default function ProjectsPage({
           {projectId && (
             <button
               className="ochi-projects__back"
-              aria-label="所有项目"
+              aria-label={t("projects.all")}
               onClick={() => onNavigate("/projects")}
             >
               <ArrowLeft size={18} />
-              <span>项目</span>
+              <span>{t("projects.title")}</span>
             </button>
           )}
-          {!projectId && <h1>项目</h1>}
+          {!projectId && <h1>{t("projects.title")}</h1>}
         </div>
         {!projectId && <button
           className="secondary-button"
           onClick={() => setEditing({ name: "", instructions: "" })}
         >
           <Plus size={16} />
-          创建项目
+          {t("projects.create")}
         </button>}
-        {projectId && project?.id === projectId && <ActionMenu trigger={<MoreHorizontal size={19} />} label="管理项目">
-          <MenuAction onClick={() => setEditing(project)}><Pencil size={16} />项目设置</MenuAction>
-          <MenuAction danger onClick={() => setDeleting(project)}><Trash2 size={16} />删除项目</MenuAction>
+        {projectId && project?.id === projectId && <ActionMenu trigger={<MoreHorizontal size={19} />} label={t("projects.manage")}>
+          <MenuAction onClick={() => setEditing(project)}><Pencil size={16} />{t("projects.settings")}</MenuAction>
+          <MenuAction danger onClick={() => setDeleting(project)}><Trash2 size={16} />{t("projects.delete")}</MenuAction>
         </ActionMenu>}
       </header>
       <div className="workspace-page-scroll">
@@ -166,7 +168,7 @@ export default function ProjectsPage({
               {project.instructions && (
                 <details className="ochi-projects__context">
                   <summary>
-                    项目说明
+                    {t("projects.instructions")}
                     <ChevronDown size={14} />
                   </summary>
                   <div>
@@ -175,17 +177,17 @@ export default function ProjectsPage({
                 </details>
               )}
               <div className="ochi-projects__sessions-heading">
-                <h3>对话 <span>{project.session_count ?? sessions.length}</span></h3>
+                <h3>{t("chat.conversations")} <span>{project.session_count ?? sessions.length}</span></h3>
                 <div className="ochi-projects__session-tools">
                   {searching ? <label className="ochi-projects__search">
                     <Search size={15} />
-                    <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索对话" aria-label="搜索项目对话" autoFocus />
-                    <button type="button" className="icon-button" onClick={() => { setQuery(""); setSearching(false); }} aria-label="关闭搜索"><X size={16} /></button>
-                  </label> : <button className="icon-button" onClick={() => setSearching(true)} aria-label="搜索项目对话"><Search size={17} /></button>}
+                    <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("search.conversations")} aria-label={t("projects.searchConversations")} autoFocus />
+                    <button type="button" className="icon-button" onClick={() => { setQuery(""); setSearching(false); }} aria-label={t("common.closeSearch")}><X size={16} /></button>
+                  </label> : <button className="icon-button" onClick={() => setSearching(true)} aria-label={t("projects.searchConversations")}><Search size={17} /></button>}
                   <button
                   className="icon-button"
-                  title="新对话"
-                  aria-label="项目新对话"
+                  title={t("chat.newConversation")}
+                  aria-label={t("projects.newConversation")}
                   onClick={() => {
                     composerRef.current?.scrollIntoView({ block: "nearest" });
                     composerRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
@@ -202,15 +204,15 @@ export default function ProjectsPage({
                     key={session.id}
                     onClick={() => onNavigate(`/c/${session.id}`)}
                   >
-                    <span>{session.title || "新对话"}</span>
+                    <span>{session.title || t("chat.newConversation")}</span>
                     <small className="ochi-projects__session-date">
                       {session.run_status && ["queued", "running", "waiting_user", "waiting_resource", "cancelling"].includes(session.run_status)
                         ? statusLabel(session.run_status)
-                        : new Date(session.updated_at).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}
+                        : new Date(session.updated_at).toLocaleDateString(getLocale(), { month: "short", day: "numeric" })}
                     </small>
                   </button>
                 ))}
-                {!sessions.length && !searchLoading && <div className="ochi-projects__empty">{debouncedQuery ? "没有找到对话" : "暂无对话"}</div>}
+                {!sessions.length && !searchLoading && <div className="ochi-projects__empty">{debouncedQuery ? t("search.noConversations") : t("chat.empty")}</div>}
                 {cursor && <button disabled={moreLoading || searchLoading} className="search-load-more" onClick={() => {
                   const token = generation.current;
                   setMoreLoading(true);
@@ -223,7 +225,7 @@ export default function ProjectsPage({
                     setCursor(page.next_cursor);
                   }).catch((reason: Error) => { if (token === generation.current) setError(reason.message); })
                     .finally(() => { if (token === generation.current) setMoreLoading(false); });
-                }}>{moreLoading ? <LoaderCircle size={15} className="spin" /> : "更早的对话"}</button>}
+                }}>{moreLoading ? <LoaderCircle size={15} className="spin" /> : t("sidebar.earlier")}</button>}
               </div>
             </>
           ) : (
@@ -237,7 +239,7 @@ export default function ProjectsPage({
                     <Folder size={20} />
                     <div>
                       <strong>{item.name}</strong>
-                      <span>{item.session_count ?? 0} 个对话</span>
+                      <span>{t("chat.count", { count: item.session_count ?? 0 })}</span>
                     </div>
                     <ChevronRight size={17} />
                   </button>
@@ -246,7 +248,7 @@ export default function ProjectsPage({
               {!projects.length && (
                 <div className="ochi-projects__empty">
                   <Folder size={26} />
-                  <span>暂无项目</span>
+                  <span>{t("projects.empty")}</span>
                 </div>
               )}
             </>
@@ -255,7 +257,7 @@ export default function ProjectsPage({
       </div>
       {editing && (
         <Modal
-          title={editing.id ? "编辑项目" : "创建项目"}
+          title={editing.id ? t("projects.edit") : t("projects.create")}
           size="small"
           onClose={() => setEditing(null)}
           footer={
@@ -265,7 +267,7 @@ export default function ProjectsPage({
                 className="secondary-button"
                 onClick={() => setEditing(null)}
               >
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
@@ -273,7 +275,7 @@ export default function ProjectsPage({
                 className="primary-button"
                 disabled={saving || !editing.name?.trim()}
               >
-                保存
+                {t("common.save")}
               </button>
             </div>
           }
@@ -287,7 +289,7 @@ export default function ProjectsPage({
             }}
           >
             <label className="form-field">
-              <span>名称</span>
+              <span>{t("common.name")}</span>
               <input
                 required
                 autoFocus
@@ -298,7 +300,7 @@ export default function ProjectsPage({
               />
             </label>
             <label className="form-field">
-              <span>项目说明</span>
+              <span>{t("projects.instructions")}</span>
               <textarea
                 rows={4}
                 value={editing.instructions ?? ""}
@@ -313,7 +315,7 @@ export default function ProjectsPage({
       )}
       {deleting && (
         <Modal
-          title="删除项目？"
+          title={t("projects.deleteConfirm")}
           onClose={() => setDeleting(null)}
           size="small"
           footer={
@@ -322,7 +324,7 @@ export default function ProjectsPage({
                 className="secondary-button"
                 onClick={() => setDeleting(null)}
               >
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 className="danger-button"
@@ -341,7 +343,7 @@ export default function ProjectsPage({
                     .finally(() => setSaving(false));
                 }}
               >
-                删除
+                {t("common.delete")}
               </button>
             </div>
           }

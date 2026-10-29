@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Eye,
@@ -25,6 +26,7 @@ export function ComputerPanel({
   onClose: () => void;
   standalone?: boolean;
 }) {
+  useI18n();
   const [state, setState] = useState<ComputerState | null>(null);
   const [connection, setConnection] = useState<
     "connecting" | "connected" | "disconnected"
@@ -65,7 +67,7 @@ export function ComputerPanel({
         client.current = null;
         setState(null);
         setConnection("disconnected");
-        setError(reason instanceof Error ? reason.message : "无法访问电脑");
+        setError(reason instanceof Error ? reason.message : t("computer.accessError"));
       }
       throw reason;
     }
@@ -94,7 +96,7 @@ export function ComputerPanel({
         const current = await refreshState();
         if (disposed) return;
         if (!current.available || !current.desktop_url) {
-          setError("电脑暂时不可用");
+          setError(t("computer.unavailable"));
           setConnection("disconnected");
           return;
         }
@@ -132,11 +134,11 @@ export function ComputerPanel({
           );
         });
         rfb.addEventListener("securityfailure", () => {
-          if (!disposed) setError("无法连接电脑");
+          if (!disposed) setError(t("computer.connectError"));
         });
       } catch (reason) {
         if (!disposed) {
-          setError(reason instanceof Error ? reason.message : "连接失败");
+          setError(reason instanceof Error ? reason.message : t("error.connection"));
           setConnection("disconnected");
         }
       }
@@ -198,7 +200,7 @@ export function ComputerPanel({
         !controller.signal.aborted &&
         mounted.current
       )
-        setError(reason instanceof Error ? reason.message : "接管失败");
+        setError(reason instanceof Error ? reason.message : t("computer.takeoverError"));
     } finally {
       if (controlRequest.current === controller) {
         if (mounted.current) setBusy(false);
@@ -222,28 +224,28 @@ export function ComputerPanel({
         <span>
           {connection === "connected"
             ? state?.view_only
-              ? "观看中"
-              : "控制中"
+              ? t("computer.watching")
+              : t("computer.controlling")
             : connection === "connecting"
-              ? "正在连接"
-              : "连接断开"}
+              ? t("status.connecting")
+              : t("status.disconnected")}
         </span>
         {state?.busy && (
           <span className="desktop-owner" title={state.owner_title}>
-            {state.owner_title || "正在使用"}
+            {state.owner_title || t("computer.inUse")}
           </span>
         )}
         <div className="toolbar-actions">
           <button
             className="icon-button"
-            aria-label="重新连接"
+            aria-label={t("common.reconnect")}
             onClick={() => setRetry((value) => value + 1)}
           >
             <RefreshCw size={16} />
           </button>
           <button
             className="icon-button"
-            aria-label={fit ? "原始大小" : "适应屏幕"}
+            aria-label={fit ? t("computer.actualSize") : t("computer.fit")}
             onClick={() => setFit((value) => !value)}
           >
             {fit ? <ZoomIn size={17} /> : <ZoomOut size={17} />}
@@ -251,7 +253,7 @@ export function ComputerPanel({
           {!fit && (
             <button
               className={`icon-button ${pan ? "is-active" : ""}`}
-              aria-label="拖动视图"
+              aria-label={t("computer.dragView")}
               onClick={() => setPan((value) => !value)}
             >
               <Move size={17} />
@@ -259,7 +261,7 @@ export function ComputerPanel({
           )}
           {!standalone && <button
             className="icon-button"
-            aria-label={full ? "退出全屏" : "全屏"}
+            aria-label={full ? t("common.exitFullscreen") : t("common.fullscreen")}
             onClick={() => setFull((value) => !value)}
           >
             {full ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
@@ -287,7 +289,7 @@ export function ComputerPanel({
         >
           {state?.view_only ? <Hand size={16} /> : <Eye size={16} />}
           {busy ? <LoaderCircle size={15} className="spin" /> : null}
-          {busy ? "取消等待" : state?.view_only ? "接管" : "停止接管"}
+          {busy ? t("computer.cancelWait") : state?.view_only ? t("computer.takeover") : t("computer.release")}
         </button>
         <div className="toolbar-actions">
           <button
@@ -296,7 +298,7 @@ export function ComputerPanel({
             onClick={() => keyboard.current?.focus()}
           >
             <Keyboard size={17} />
-            键盘
+            {t("computer.keyboard")}
           </button>
           <button
             className="secondary-button"
@@ -333,14 +335,14 @@ export function ComputerPanel({
           ref={keyboard}
           value={text}
           onChange={(event) => setText(event.target.value)}
-          placeholder="输入文字"
+          placeholder={t("computer.typeText")}
           disabled={state?.view_only}
-          aria-label="输入到电脑"
+          aria-label={t("computer.sendText")}
         />
         <button
           className="icon-button"
           disabled={state?.view_only || !text}
-          aria-label="输入到电脑"
+          aria-label={t("computer.sendText")}
         >
           <Send size={17} />
         </button>
@@ -350,7 +352,7 @@ export function ComputerPanel({
   return standalone ? (
     <main className="native-computer-page">{content}</main>
   ) : (
-    <Modal title="电脑" onClose={onClose} size="preview" fullscreen={full} bodyClassName="computer-body">
+    <Modal title={t("computer.title")} onClose={onClose} size="preview" fullscreen={full} bodyClassName="computer-body">
       {content}
     </Modal>
   );

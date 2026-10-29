@@ -1,3 +1,6 @@
+import { localizedError } from "./errors";
+import { t, getLocale } from "./i18n";
+import { translateError } from '../../../shared/i18n/errors';
 import { fetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
@@ -21,9 +24,9 @@ export function getAPIBaseURL() { return serverURL; }
 
 function normalizeAPIBaseURL(value: string) {
   let url: URL;
-  try { url = new URL(value.trim()); } catch { throw new Error('请输入有效的服务地址'); }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('请输入 HTTP 或 HTTPS 服务地址');
-  if (url.username || url.password || url.search || url.hash || !['/', '/api', '/api/'].includes(url.pathname)) throw new Error('请输入服务根地址，不要包含账号、路径或查询参数');
+  try { url = new URL(value.trim()); } catch { throw localizedError("error.serverAddress"); }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw localizedError("error.serverProtocol");
+  if (url.username || url.password || url.search || url.hash || !['/', '/api', '/api/'].includes(url.pathname)) throw localizedError("error.serverRoot");
   return url.origin;
 }
 
@@ -36,7 +39,7 @@ export function isConfiguredAPIBaseURL(value = serverURL) {
 }
 
 function requireAPIBaseURL() {
-  if (!isConfiguredAPIBaseURL()) throw new Error('请先设置服务地址');
+  if (!isConfiguredAPIBaseURL()) throw localizedError("error.configureServer");
   return serverURL;
 }
 
@@ -72,7 +75,7 @@ export function fileURL(value: string | Artifact) {
 
 export function resourceHeaders(value: string | Artifact) {
   if (!serverURL) return {};
-  return new URL(fileURL(value)).origin === new URL(serverURL).origin ? authHeaders() : {};
+  return new URL(fileURL(value)).origin === new URL(serverURL).origin ? { ...authHeaders(), 'Accept-Language': getLocale() } : {};
 }
 
 export function imageSource(value: string | Artifact): ImageURISource[] {
@@ -82,19 +85,20 @@ export function imageSource(value: string | Artifact): ImageURISource[] {
 
 // Only the trusted computer viewer needs a cookie-enabled same-origin WebView.
 export function webViewSource(path: string) {
-  return { uri: `${requireAPIBaseURL()}/api/auth/webview?next=${encodeURIComponent(path)}`, headers: authHeaders() };
+  return { uri: `${requireAPIBaseURL()}/api/auth/webview?next=${encodeURIComponent(path)}`, headers: { ...authHeaders(), 'Accept-Language': getLocale() } };
 }
 
-function errorMessage(path: string, status: number, detail: string) {
-  if (status === 401) return path.endsWith('/login') ? '账号或密码不正确' : '请重新登录';
-  if (/[\u4e00-\u9fff]/.test(detail)) return detail;
-  if (status === 404) return '内容不存在';
-  if (status === 403) return '无法访问';
-  if (status === 409) return '当前操作发生冲突，请重试';
-  if (status === 413) return '文件太大，请选择 32 MB 以内的文件';
-  if (status === 429) return '请稍后再试';
-  if (status >= 500) return '服务暂时不可用';
-  return '请求失败，请重试';
+function errorMessage(path: string, status: number, code?: string, params?: Record<string, string | number>) {
+  const translated = translateError(code, params);
+  if (translated) return translated;
+  if (status === 401) return path.endsWith('/login') ? t("error.credentials") : t("error.signInAgain");
+  if (status === 404) return t("error.notFound");
+  if (status === 403) return t("error.forbidden");
+  if (status === 409) return t("error.conflict");
+  if (status === 413) return t("error.fileTooLarge");
+  if (status === 429) return t("error.tryLater");
+  if (status >= 500) return t("error.serviceUnavailable");
+  return t("error.request");
 }
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -105,19 +109,22 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       ...init,
       headers: {
         'X-Client-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        'Accept-Language': getLocale(),
         ...(init.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
         ...authHeaders(), ...init.headers,
       },
     });
   } catch (reason) {
     if (init.signal?.aborted) throw reason;
-    throw new Error('暂时无法连接');
+    throw localizedError("error.connection");
   }
   if (!response.ok) {
-    const detail = await response.json().then((body: { error?: string }) => body.error ?? '').catch(() => '');
-    const error = new Error(errorMessage(path, response.status, detail)) as ApiError;
+    const body = await response.json().catch(() => ({})) as { error?: string; code?: string; params?: Record<string, string | number> };
+    const error = new Error(errorMessage(path, response.status, body.code, body.params)) as ApiError;
     error.status = response.status;
-    error.detail = detail;
+    error.detail = body.error ?? '';
+    error.code = body.code;
+    error.params = body.params;
     if (response.status === 401 && !path.endsWith('/login')) onUnauthorized?.();
     throw error;
   }
@@ -132,7 +139,7 @@ export const api = {
   me: () => request<User>('/api/auth/me'),
   login: async (username: string, password: string) => {
     const response = await request<User & { access_token: string; expires_at: string }>('/api/auth/login', json('POST', { username, password, native: true }));
-    if (!response.access_token) throw new Error('此服务尚不支持客户端登录');
+    if (!response.access_token) throw localizedError("error.nativeLogin");
     accessToken = response.access_token;
     await SecureStore.setItemAsync(AUTH_KEY, accessToken, storageOptions);
     const { access_token: _token, expires_at: _expires, ...user } = response;
@@ -165,7 +172,7 @@ export const api = {
   deleteProject: (projectId: string) => request<void>(`/api/projects/${id(projectId)}`, { method: 'DELETE' }),
   upload: async (file: NativeUpload) => {
     const source = new File(file.uri);
-    if (source.size > 32 * 1024 * 1024) throw new Error('文件太大，请选择 32 MB 以内的文件');
+    if (source.size > 32 * 1024 * 1024) throw localizedError("error.fileTooLarge");
     const boundary = `ochi-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const name = file.name.replace(/["\r\n\\]/g, '_');
     const mime = (file.mimeType || source.type || 'application/octet-stream').replace(/[\r\n]/g, '');
@@ -200,11 +207,7 @@ export function isActiveStatus(status?: RunStatus): boolean {
   return status === 'running' || status === 'cancelling' || status === 'waiting_user' || status === 'waiting_resource' || status === 'queued';
 }
 
-export function userFacingRunError(error = '', hasArtifacts = false) {
-  if (hasArtifacts) return '任务未能完成，已有文件仍可使用。';
-  if (/output limit/i.test(error)) return '模型已达到本轮输出上限，回复尚未完成。';
-  if (/[\u4e00-\u9fff]/.test(error)) return error;
-  if (/timeout|deadline exceeded/i.test(error)) return '响应超时，请重试。';
-  if (/cancelled|context canceled/i.test(error)) return '任务已中断，请重试。';
-  return '任务未能完成，请重试。';
+export function userFacingRunError(_error = '', hasArtifacts = false, code?: string) {
+  if (hasArtifacts) return t("error.runWithFiles");
+  return translateError(code) ?? t("error.run");
 }

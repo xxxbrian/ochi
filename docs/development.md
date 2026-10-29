@@ -58,6 +58,17 @@ regressions, not private one-off smoke runs. Their READMEs describe ownership.
 For a native dependency change also verify a real native build. JavaScript
 export, type checking and fixture tests do not certify interaction or visuals.
 
+Language catalogs use semantic keys with explicit `en`, `zh-CN` and `zh-TW`
+entries. Reuse complete sentences with named parameters instead of joining
+translated fragments. Web's `i18n-shared.test.cjs` checks catalog coverage,
+placeholder parity, locale resolution and formatting; client tests exercise
+preference persistence, request headers and in-place updates. Add public server
+errors to `server/internal/i18n/messages.json` and return typed errors from
+business code. Do not identify failures by comparing translated prose, or add
+client copies of the shared public error catalog. Language changes also need
+browser/native checks for label width, menus, draft/focus preservation and
+localized errors. See [Architecture](architecture.md) for the wire contract.
+
 ## Source And Output Boundaries
 
 Commit maintained source/tests, lockfiles, generated design tokens, owned native

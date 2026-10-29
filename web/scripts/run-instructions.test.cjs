@@ -4,6 +4,8 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const ts = require('typescript');
+const { createI18nHarness } = require("./i18n-harness.cjs");
+const i18n = createI18nHarness();
 
 const root = path.resolve(__dirname, '../..');
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -16,7 +18,7 @@ function load(file, imports = {}, globals = {}) {
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(output, { module, exports: module.exports, AbortController, TextEncoder, Date, Math, Map, Set, Promise, JSON, Error, ...globals,
-    require(name) { if (name in imports) return imports[name]; throw new Error(`Unexpected import: ${name}`); },
+    require(name) { if (name in imports) return imports[name]; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
   }, { filename: file });
   return module.exports;
 }
@@ -105,7 +107,7 @@ test('New and session changes discard late successful and failed POSTs without c
     h.store.select('New:2');
     if (failed) post.reject(new Error('Old failed')); else post.resolve(item());
     assert.equal(await pending, false); await flush();
-    assert.deepEqual(plain(h.store.getSnapshot()), { owner: 'New:2', items: [], submitting: false, error: '', syncError: '', retry: false });
+    assert.deepEqual(plain(h.store.getSnapshot()), { owner: 'New:2', items: [], submitting: false, error: null, syncError: null, retry: false });
     h.store.dispose(); assert.equal(h.time.size, 0);
   }
 });
@@ -138,7 +140,7 @@ test('GET results and errors are scoped; foreign selection never hydrates previo
     const read = deferred(); const h = storeHarness({ runInstructions: () => read.promise });
     h.store.select('B:2', 'B');
     if (failed) read.reject(new Error('Stale')); else read.resolve([item()]); await flush();
-    assert.equal(h.store.getSnapshot().items.length, 0); assert.equal(h.store.getSnapshot().syncError, ''); h.store.dispose();
+    assert.equal(h.store.getSnapshot().items.length, 0); assert.equal(h.store.getSnapshot().syncError, null); h.store.dispose();
   }
 });
 
@@ -173,7 +175,7 @@ test('POST deadlines abort two bounded attempts and retain an idempotent retry r
 
 test('server byte bounds are enforced without dropping a long draft or issuing a POST', async () => {
   const h = storeHarness(); assert.equal(await h.store.send('S:1', '字'.repeat(10667)), false);
-  assert.equal(h.posts.length, 0); assert.equal(h.store.getSnapshot().error, '补充要求太长'); h.store.dispose();
+  assert.equal(h.posts.length, 0); assert.equal(h.domain.instructionIssueText(h.store.getSnapshot().error), '补充要求太长'); h.store.dispose();
 });
 
 test('a next-turn transition retains an in-flight old receipt until its actual terminal disposition is loaded', async () => {
@@ -197,7 +199,7 @@ test('an archived previous run cannot prevent the current run receipts from refr
   } });
   await flush(); stage = 1; h.store.select('S:1', 'S', 'B', 'running'); await flush();
   assert.equal(h.store.getSnapshot().items.find((value) => value.id === 'B').status, 'applied');
-  assert.equal(h.store.getSnapshot().syncError, '补充状态暂时无法同步'); h.store.dispose();
+  assert.equal(h.domain.instructionIssueText(h.store.getSnapshot().syncError), '补充状态暂时无法同步'); h.store.dispose();
 });
 
 const jsx = (type, props, key) => ({ type, props: props ?? {}, key });
@@ -258,6 +260,27 @@ function composerHarness(native, patch = {}) {
 
 for (const native of [false, true]) {
   const platform = native ? 'native' : 'web';
+  test(`${platform} language switching updates the mounted composer without dropping its draft or input identity`, async () => {
+    const h = composerHarness(native);
+    try {
+      await h.settle();
+      const before = h.input();
+      h.change('Keep my multilingual draft 中文');
+      i18n.runtime.setLanguage('en');
+      h.render();
+      assert.equal(h.input().props.value, 'Keep my multilingual draft 中文');
+      assert.equal(h.input().type, before.type);
+      assert.equal(h.input().props.ref, before.props.ref);
+      assert.ok(h.find(native ? 'Add instructions to this task' : 'Add instructions to the current task'));
+      i18n.runtime.setLanguage('zh-TW');
+      h.render();
+      assert.equal(h.input().props.value, 'Keep my multilingual draft 中文');
+      assert.ok(h.find(native ? '補充目前任務要求' : '補充目前工作的要求'));
+    } finally {
+      i18n.runtime.setLanguage('zh-CN');
+      h.unmount();
+    }
+  });
   test(`${platform} supplements reuse the existing toolbar and input instead of increasing the composer height`, async () => {
     const h = composerHarness(native); await h.settle();
     const input = h.input(), supplement = h.find('补充当前任务要求');
@@ -302,6 +325,22 @@ for (const native of [false, true]) {
     await h.submit(); assert.equal(native ? sent[0].files[0].id : sent[1][0].id, 'file'); h.unmount();
   });
 }
+
+test('instruction notices retain stable identity and render in the current language after a switch', async () => {
+  const h = storeHarness();
+  try {
+    assert.equal(await h.store.send('S:1', 'x'.repeat(32001)), false);
+    const snapshot = h.store.getSnapshot();
+    assert.equal(snapshot.error.key, 'instruction.tooLong');
+    assert.equal(h.domain.instructionIssueText(snapshot.error), '补充要求太长');
+    i18n.runtime.setLanguage('en');
+    assert.equal(h.domain.instructionIssueText(snapshot.error), 'Additional instructions are too long');
+    assert.equal(h.store.getSnapshot(), snapshot, 'changing language must not restart or mutate the request store');
+  } finally {
+    i18n.runtime.setLanguage('zh-CN');
+    h.store.dispose();
+  }
+});
 
 test('native edit mode never exposes a supplement action and preserves the existing mounted TextInput', async () => {
   const h = composerHarness(true); await h.settle(); const type = h.input().type;

@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"sync"
 	"testing"
@@ -72,7 +73,7 @@ func TestProcessTimelineMixedOrderStableUpsertsAndReplyBoundary(t *testing.T) {
 	<-events
 	must(r.Append("Here is the final answer."))
 	<-events
-	must(r.Finalize(StatusCompleted, "", func(saved Snapshot) error { return nil }))
+	must(r.Finalize(StatusCompleted, nil, func(saved Snapshot) error { return nil }))
 	terminal := <-events
 	final := r.Snapshot()
 	if len(final.Timeline) != 7 || final.Output != "Here is the final answer." || !final.Timeline[6].Final || !reflect.DeepEqual(terminal.Timeline, final.Timeline) {
@@ -107,7 +108,7 @@ func TestProcessSnapshotsAndSubscribersAreIsolated(t *testing.T) {
 	if r.Snapshot().Timeline[0].Step.Status != "running" {
 		t.Fatal("returned snapshot shares writable timeline")
 	}
-	if err := r.Finalize(StatusFailed, "upstream lost", func(saved Snapshot) error {
+	if err := r.Finalize(StatusFailed, errors.New("upstream lost"), func(saved Snapshot) error {
 		if saved.Timeline[0].Step.Status != "failed" {
 			t.Fatal("unfinished tool was not closed before persistence")
 		}
@@ -183,7 +184,7 @@ func TestProcessCancelAndSnapshotRaceKeepsCompletionOrder(t *testing.T) {
 		if err := r.UpdateStep(Step{ID: "read", Name: "files_read", Status: "completed", Output: "observed before cancellation"}); err != nil {
 			t.Error(err)
 		}
-		if err := r.Finalize(StatusCompleted, "", func(saved Snapshot) error { return nil }); err != nil {
+		if err := r.Finalize(StatusCompleted, nil, func(saved Snapshot) error { return nil }); err != nil {
 			t.Error(err)
 		}
 	}()

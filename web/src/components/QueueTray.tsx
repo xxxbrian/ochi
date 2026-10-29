@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { useState } from "react";
 import { Clock3, Pencil, Trash2 } from "lucide-react";
 import type { PendingRun } from "../lib/types";
@@ -12,6 +13,7 @@ export function QueueTray({
   onCancel: (id: string) => Promise<void>;
   onEdit: (id: string, message: string) => Promise<void>;
 }) {
+  useI18n();
   const [editing, setEditing] = useState<PendingRun | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -24,7 +26,7 @@ export function QueueTray({
       await onEdit(editing.run_id, text.trim());
       setEditing(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("error.save"));
     } finally {
       setBusy(false);
     }
@@ -37,12 +39,12 @@ export function QueueTray({
           <article key={item.run_id}>
             <Clock3 size={15} />
             <span>
-              <small>排队 {index + 1}</small>
+              <small>{t("queue.title")} {index + 1}</small>
               {item.message}
             </span>
             <button
               className="icon-button"
-              aria-label="编辑排队消息"
+              aria-label={t("queue.edit")}
               onClick={() => {
                 setEditing(item);
                 setText(item.message);
@@ -53,7 +55,7 @@ export function QueueTray({
             </button>
             <button
               className="icon-button"
-              aria-label="取消排队消息"
+              aria-label={t("queue.cancel")}
               onClick={() => void onCancel(item.run_id)}
             >
               <Trash2 size={14} />
@@ -63,7 +65,7 @@ export function QueueTray({
       </div>
       {editing && (
         <Modal
-          title="编辑排队消息"
+          title={t("queue.edit")}
           onClose={() => setEditing(null)}
           footer={
             <>
@@ -72,14 +74,14 @@ export function QueueTray({
                 onClick={() => setEditing(null)}
                 disabled={busy}
               >
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 className="primary-button"
                 disabled={busy || !text.trim()}
                 onClick={() => void save()}
               >
-                保存
+                {t("common.save")}
               </button>
             </>
           }
@@ -95,7 +97,7 @@ export function QueueTray({
               rows={5}
               value={text}
               onChange={(event) => setText(event.target.value)}
-              aria-label="排队消息内容"
+              aria-label={t("queue.content")}
             />
             {error && <p className="form-error">{error}</p>}
           </form>

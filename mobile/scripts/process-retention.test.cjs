@@ -1,3 +1,4 @@
+const { createI18n, testI18n } = require('./helpers/i18n.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -10,12 +11,18 @@ function load(file, imports, tail = '', globals = {}) {
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(output + tail, { module, exports: module.exports, URL, Set, Map, ...globals,
-    require(name) { if (name in imports) return imports[name]; throw new Error(`Unexpected import: ${name}`); },
+    require(name) {
+        const translated = testI18n.importFor(name); if (translated) return translated;
+ if (name in imports) return imports[name]; throw new Error(`Unexpected import: ${name}`); },
   }, { filename: file });
   return module.exports;
 }
 
 const process = load('src/lib/processTimeline.ts', {});
+const runErrors = createI18n({ imports: {
+  'expo/fetch': { fetch() { throw new Error('Unexpected request'); } },
+  'expo-file-system': { File: class {} },
+} }).load('src/lib/api.ts');
 const jsx = (type, props, key) => ({ type, props: props ?? {}, key });
 const walk = (node) => Array.isArray(node) ? node.flatMap(walk) : node && typeof node === 'object' && 'type' in node ? [node, ...walk(node.props.children)] : [];
 const matches = (node, type) => node.type === type || node.type?.name === type;
@@ -76,6 +83,7 @@ function harness(file, name, initialProps, overrides = {}) {
     './OchiActivityMark': { ActivityDisclosure: 'ActivityDisclosure', ActivityStatusText: 'ActivityStatusText', OchiActivityMark: 'OchiActivityMark', useReducedMotion: () => false },
     ...overrides,
   };
+  imports['../lib/api'] = { userFacingRunError: runErrors.userFacingRunError, ...imports['../lib/api'] };
   const exports = { Activity: 'exports.ProcessViewport = ProcessViewport; exports.ToolGroup = ToolGroup; exports.DetailSection = DetailSection; exports.ProcessText = ProcessText; exports.PublicText = PublicText;', ChatMessages: 'exports.AssistantBubble = AssistantBubble; exports.projectRows = projectRows;' };
   const module = load(file, imports, `\n${exports[file.split('/').at(-1).split('.')[0]] ?? ''}`, {
     requestAnimationFrame(fn) { const id = ++frameID; frames.set(id, fn); return id; },
@@ -550,24 +558,26 @@ test('failed run without a persisted final body preserves its genuine pending pr
   h.unmount();
 });
 
-test('cold terminal rows show persisted public replies and exact errors without opening the process inspector', async () => {
+test('cold terminal rows show persisted public replies and localized coded errors without opening the process inspector', async () => {
   for (const status of ['failed', 'cancelled', 'interrupted']) {
     let fetches = 0;
     const copied = [];
     const intro = { id: 'intro', seq: 1, kind: 'progress', text: 'Checking the code' };
     const result = { id: 'result', seq: 4, kind: 'progress', text: 'The first task passed its tests.' };
     const error = status === 'cancelled' ? undefined : 'model returned an incomplete tool call';
-    const terminal = snapshot({ status, output: '', timeline: [intro, tool('t', 2), { id: 'thought', seq: 3, kind: 'reasoning', reasoning: { id: 'thought', kind: 'reasoning', text: 'Not a public reply', done: true } }, result], error });
+    const errorCode = error ? 'model_tool_protocol' : undefined;
+    const visibleError = runErrors.userFacingRunError(error, false, errorCode);
+    const terminal = snapshot({ status, output: '', timeline: [intro, tool('t', 2), { id: 'thought', seq: 3, kind: 'reasoning', reasoning: { id: 'thought', kind: 'reasoning', text: 'Not a public reply', done: true } }, result], error, error_code: errorCode });
     const content = 'Checking the code\n\nThe first task passed its tests.';
     const h = harness('src/components/ChatMessages.tsx', 'AssistantBubble', {
-      message: message({ run_status: status, content, run_error: error }), onResume: async () => {}, onProcessReadingChange() {},
+      message: message({ run_status: status, content, run_error: error, run_error_code: errorCode }), onResume: async () => {}, onProcessReadingChange() {},
     }, {
       '../lib/api': { isActiveStatus: () => false, api: { run: async () => { fetches++; return terminal; } } },
       'expo-clipboard': { setStringAsync: async (value) => { copied.push(value); } },
     });
     assert.equal(fetches, 0, 'opening history must not fetch every full run');
     assert.equal(h.find('ArtifactMarkdown').props.content, content);
-    assert.ok(!error || h.all('ErrorNotice').some((node) => node.props.error === error));
+    assert.ok(!error || h.all('ErrorNotice').some((node) => node.props.error === visibleError));
     h.all('ActionIcon').find((node) => node.props.label === '复制回复').props.onPress();
     await flush(); h.render();
     h.find('Pressable').props.onPress();
@@ -577,7 +587,7 @@ test('cold terminal rows show persisted public replies and exact errors without 
     const activity = harness('src/components/Activity.tsx', 'Activity', { snapshot: h.find('Activity').props.snapshot });
     assert.deepEqual(activity.all('PublicText').map((node) => node.props.entry.text), [intro.text, result.text]);
     assert.ok(activity.all('PublicText').every((node) => !node.props.hidden));
-    assert.ok(!error || activity.all('AppText').some((node) => node.props.children === error));
+    assert.ok(!error || activity.all('AppText').some((node) => node.props.children === visibleError));
     h.all('ActionIcon').find((node) => node.props.label === '复制回复').props.onPress();
     await flush();
     assert.deepEqual(copied, [content, content], 'copy preserves every public reply before and after process expansion');
@@ -595,7 +605,7 @@ test('terminal recovery shows every persisted partial reply during delayed and f
     let requests = 0, rejectFirst;
     const copied = [];
     const live = snapshot({ seq: 4, output: candidate.text, timeline: [first, tool('t', 2), candidate, thought] });
-    const final = snapshot({ status, seq: 8, output: missed.text, timeline: [...live.timeline, missed], error: 'The run stopped' });
+    const final = snapshot({ status, seq: 8, output: missed.text, timeline: [...live.timeline, missed], error: 'The run stopped', error_code: 'run_interrupted' });
     const h = harness('src/components/ChatMessages.tsx', 'AssistantBubble', {
       message: message({ run_status: 'running', content: '' }), snapshot: live, onResume: async () => {}, onProcessReadingChange() {},
     }, {
@@ -607,7 +617,7 @@ test('terminal recovery shows every persisted partial reply during delayed and f
       'expo-clipboard': { setStringAsync: async (value) => { copied.push(value); } },
     });
     const initial = h.find('Activity');
-    h.render({ snapshot: undefined, message: message({ run_status: status, content, run_error: 'The run stopped' }) });
+    h.render({ snapshot: undefined, message: message({ run_status: status, content, run_error: 'The run stopped', run_error_code: 'run_interrupted' }) });
     const checkPartial = () => {
       const display = h.find('Activity').props.snapshot;
       assert.equal(h.find('Activity').type, initial.type, 'the process panel remains mounted');
@@ -638,7 +648,7 @@ test('terminal recovery shows every persisted partial reply during delayed and f
     const activity = harness('src/components/Activity.tsx', 'Activity', { snapshot: h.find('Activity').props.snapshot });
     assert.deepEqual(activity.all('PublicText').map((node) => node.props.entry.text), [first.text, candidate.text, missed.text]);
     assert.ok(activity.all('PublicText').every((node) => !node.props.hidden));
-    assert.ok(activity.all('AppText').some((node) => node.props.children === 'The run stopped'));
+    assert.ok(activity.all('AppText').some((node) => node.props.children === runErrors.userFacingRunError('The run stopped', false, 'run_interrupted')));
     activity.unmount();
     h.unmount();
   }
@@ -655,16 +665,17 @@ test('already-terminal cached snapshots fill a missing display error from the me
       '../lib/api': { isActiveStatus: (status) => status === 'running', api: { run: async () => { requests++; throw new Error('Unexpected run fetch'); } } },
     });
     assert.equal(h.find('Activity').props.snapshot, cached);
-    h.render({ message: message({ run_status: status, content: publicEntry.text, run_error: 'Provider closed the response early' }) });
+    h.render({ message: message({ run_status: status, content: publicEntry.text, run_error: 'Provider closed the response early', run_error_code: 'model_stream' }) });
     const display = h.find('Activity').props.snapshot;
     assert.equal(display.error, 'Provider closed the response early');
+    assert.equal(display.error_code, 'model_stream');
     assert.equal(display.output, cached.output);
     assert.equal(display.timeline, cached.timeline);
     assert.equal(h.find('ArtifactMarkdown'), undefined, 'the public timeline still owns the body');
     assert.equal(cached.error, '', 'the cached snapshot is not mutated');
     assert.equal(requests, 0, 'an error does not trigger an unnecessary full history fetch');
     const activity = harness('src/components/Activity.tsx', 'Activity', { snapshot: display });
-    assert.ok(activity.all('AppText').some((node) => node.props.children === 'Provider closed the response early'));
+    assert.ok(activity.all('AppText').some((node) => node.props.children === runErrors.userFacingRunError('Provider closed the response early', false, 'model_stream')));
     assert.equal(activity.find('PublicText').props.entry.text, publicEntry.text);
     assert.equal(activity.find('PublicText').props.hidden, false);
     activity.unmount(); h.unmount();
@@ -709,7 +720,7 @@ test('terminal states remain visible without process history or text and cold fa
     assert.ok(h.find('ProcessElapsed'), 'cold stopped rows retain a status header even without process entries');
     assert.equal(h.find('ArtifactMarkdown'), undefined);
     if (status !== 'cancelled') {
-      assert.ok(h.all('ErrorNotice').some((node) => node.props.error === 'Request failed'));
+      assert.ok(h.all('ErrorNotice').some((node) => node.props.error === runErrors.userFacingRunError('Request failed')));
       assert.ok(h.all('Pressable').some((node) => node.props.children?.props?.children === '重试'));
     }
     const activity = harness('src/components/Activity.tsx', 'Activity', { snapshot: snapshot({ status }) });

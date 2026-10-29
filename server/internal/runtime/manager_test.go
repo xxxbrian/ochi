@@ -3,10 +3,11 @@ package runtime
 import (
 	"context"
 	"encoding/json"
-	"ochi/server/internal/agent"
-	"strings"
+	"errors"
 	"testing"
 	"time"
+
+	"ochi/server/internal/agent"
 )
 
 func TestReasoningSnapshotAndDeltasStaySeparateFromReply(t *testing.T) {
@@ -32,7 +33,7 @@ func TestReasoningSnapshotAndDeltasStaySeparateFromReply(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-events
-	if err := r.Finalize(StatusFailed, "upstream interrupted", func(final Snapshot) error {
+	if err := r.Finalize(StatusFailed, errors.New("upstream interrupted"), func(final Snapshot) error {
 		if !final.Reasoning[1].Done {
 			t.Error("unfinished provider reasoning remained active after failure")
 		}
@@ -66,7 +67,7 @@ func TestSnapshotThenDeltasRebuildOutput(t *testing.T) {
 				t.Error(err)
 			}
 		}
-		run.Finish(StatusCompleted, "")
+		run.Finish(StatusCompleted, nil)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +125,7 @@ func TestCancelWaitsForPersistenceAndKeepsSessionBusy(t *testing.T) {
 		if err := run.UpdateStep(Step{ID: "tool", Name: "read_file", Status: "completed", Output: "finished before releasing the workspace"}); err != nil {
 			t.Errorf("cancel prevented an in-flight tool from finishing: %v", err)
 		}
-		if err := run.Finalize(StatusCompleted, "", func(snapshot Snapshot) error {
+		if err := run.Finalize(StatusCompleted, nil, func(snapshot Snapshot) error {
 			persisted <- snapshot
 			return nil
 		}); err != nil {
@@ -196,8 +197,8 @@ func TestShutdownWaitsForRunCleanup(t *testing.T) {
 		<-run.Context().Done()
 		close(cancelled)
 		<-release
-		if err := run.Finalize(StatusCompleted, "", func(snapshot Snapshot) error {
-			if snapshot.Status != StatusInterrupted || !strings.Contains(snapshot.Error, "server stopped") {
+		if err := run.Finalize(StatusCompleted, nil, func(snapshot Snapshot) error {
+			if snapshot.Status != StatusInterrupted || snapshot.ErrorCode != "run_interrupted" || snapshot.Error == "" {
 				t.Errorf("shutdown snapshot = %+v", snapshot)
 			}
 			close(saved)
@@ -252,7 +253,7 @@ func TestWaitingInputReconnectAndResume(t *testing.T) {
 			t.Error(err)
 		}
 		done <- answer
-		r.Finish(StatusCompleted, "")
+		r.Finish(StatusCompleted, nil)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -327,7 +328,7 @@ func TestTerminalRunExpiresComputerGrant(t *testing.T) {
 		run := manager.Restore(Snapshot{RunID: "once", SessionID: "session", Status: StatusRunning, ComputerGranted: true})
 		_, events, unsubscribe := run.Subscribe()
 		if finalize {
-			if err := run.Finalize(StatusCompleted, "", func(snapshot Snapshot) error {
+			if err := run.Finalize(StatusCompleted, nil, func(snapshot Snapshot) error {
 				if snapshot.ComputerGranted {
 					t.Fatal("terminal checkpoint kept one-turn grant")
 				}
@@ -336,7 +337,7 @@ func TestTerminalRunExpiresComputerGrant(t *testing.T) {
 				t.Fatal(err)
 			}
 		} else {
-			run.Finish(StatusCancelled, "")
+			run.Finish(StatusCancelled, nil)
 		}
 		if run.Snapshot().ComputerGranted {
 			t.Fatal("terminal snapshot kept one-turn grant")

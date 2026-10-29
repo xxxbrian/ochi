@@ -3,10 +3,11 @@ package storage
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/runtime"
 )
 
@@ -54,7 +55,7 @@ func (s *Store) EnqueueRun(ctx context.Context, v PendingRun, priority bool) (ru
 	if _, err = tx.Exec(ctx, `INSERT INTO run_requests(run_id,user_id,session_id,message,model_id,effort,attachment_ids,revision,created_at,timezone) VALUES($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $9 THEN COALESCE((SELECT min(created_at)-interval '1 millisecond' FROM run_requests WHERE session_id=$3),now()) ELSE now() END,$10)`, v.RunID, v.UserID, v.SessionID, v.Message, v.ModelID, v.Effort, ids, rev, priority, v.Timezone); err != nil {
 		return snapshot, err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE sessions SET title=CASE WHEN title='新对话' AND title_source='pending' THEN left($2,60) ELSE title END,updated_at=now() WHERE id=$1`, v.SessionID, v.Message); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE sessions SET title=CASE WHEN title='' AND title_source='pending' THEN left($2,60) ELSE title END,updated_at=now() WHERE id=$1`, v.SessionID, v.Message); err != nil {
 		return snapshot, err
 	}
 	snapshot.ModelID, snapshot.ModelName, snapshot.Effort = v.ModelID, v.ModelName, v.Effort
@@ -169,7 +170,7 @@ func (s *Store) EditPendingRun(ctx context.Context, userID, sessionID, runID, me
 		return PendingRun{}, err
 	}
 	if status != "queued" {
-		return PendingRun{}, errors.New("消息已开始执行")
+		return PendingRun{}, i18n.New("queued_input_started")
 	}
 	if _, err = tx.Exec(ctx, `UPDATE run_requests SET message=$2,model_id=$3,effort=$4 WHERE run_id=$1`, runID, message, modelID, effort); err != nil {
 		return PendingRun{}, err

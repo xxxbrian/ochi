@@ -1,3 +1,5 @@
+import { errorForDisplay, localizedError, errorText, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Keyboard, Linking, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -33,14 +35,15 @@ export function DocumentViewer({ file, onClose }: { file: Artifact; onClose: () 
 }
 
 function DocumentPreview({ file, onClose }: { file: Artifact; onClose: () => void }) {
+  useI18n();
   const { colors, dark } = useTheme();
   const type = fileType(file);
   const previewable = ["pdf", "html", "markdown", "code"].includes(type);
   const [source, setSource] = useState("");
   const [uri, setURI] = useState("");
   const [loading, setLoading] = useState(previewable);
-  const [error, setError] = useState("");
-  const [shareError, setShareError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
+  const [shareError, setShareError] = useState<DisplayError>("");
   const [attempt, setAttempt] = useState(0);
   const [mode, setMode] = useState<"preview" | "source">("preview");
   const [sharing, setSharing] = useState(false);
@@ -68,13 +71,13 @@ function DocumentPreview({ file, onClose }: { file: Artifact; onClose: () => voi
           return;
         }
         const info = await FileSystem.getInfoAsync(local.uri);
-        if (!info.exists) throw new Error("无法加载文件");
-        if (info.size > textPreviewLimit) throw new Error("文件较大，请下载后查看");
+        if (!info.exists) throw localizedError("error.fileLoad");
+        if (info.size > textPreviewLimit) throw localizedError("error.previewTooLarge");
         const text = await FileSystem.readAsStringAsync(local.uri);
         if (!controller.signal.aborted) { setSource(text); setURI(local.uri); setLoading(false); }
       } catch (reason) {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "无法加载文件");
+          setError(errorForDisplay(reason, "error.fileLoad"));
           setLoading(false);
         }
       } finally {
@@ -91,7 +94,7 @@ function DocumentPreview({ file, onClose }: { file: Artifact; onClose: () => voi
     if (sharing) return;
     setSharing(true); setShareError("");
     try { await shareArtifact(file, uri || undefined); }
-    catch (reason) { if (active.current) setShareError(reason instanceof Error ? reason.message : "下载失败"); }
+    catch (reason) { if (active.current) setShareError(errorForDisplay(reason, "error.download")); }
     finally { if (active.current) setSharing(false); }
   }
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "text";
@@ -103,19 +106,19 @@ function DocumentPreview({ file, onClose }: { file: Artifact; onClose: () => voi
         <StatusBar style={dark ? "light" : "dark"} />
         <SafeAreaView style={styles.root}>
           <View style={[styles.toolbar, { borderBottomColor: colors.border }]}>
-            <IconButton icon={X} label="关闭文件" onPress={onClose} variant="glass" size={44} />
+            <IconButton icon={X} label={t("file.close")} onPress={onClose} variant="glass" size={44} />
             <View style={styles.title}>
               <AppText size={15} weight="medium" numberOfLines={1}>{file.name}</AppText>
-              <AppText muted size={12}>{pages.total ? `${pages.page} / ${pages.total} 页 · ` : ""}{fileSize(file.size)}</AppText>
+              <AppText muted size={12}>{pages.total ? `${t("file.pageCount", { page: pages.page, total: pages.total })} · ` : ""}{fileSize(file.size)}</AppText>
             </View>
-            <IconButton icon={Share2} label="下载或分享" disabled={sharing} onPress={() => void share()} variant="glass" size={44} />
+            <IconButton icon={Share2} label={t("file.share")} disabled={sharing} onPress={() => void share()} variant="glass" size={44} />
           </View>
           {["html", "markdown"].includes(type) && (
             <View style={styles.modeToolbar}>
               <View style={[styles.segment, { backgroundColor: colors.hover }]}>
                 {(["preview", "source"] as const).map((value) => (
                   <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: mode === value }} onPress={() => setMode(value)} style={[styles.segmentItem, mode === value && { backgroundColor: colors.raised }]}>
-                    <AppText size={13} weight="medium">{value === "preview" ? "预览" : "源码"}</AppText>
+                    <AppText size={13} weight="medium">{value === "preview" ? t("file.preview") : t("file.source")}</AppText>
                   </Pressable>
                 ))}
               </View>
@@ -126,21 +129,21 @@ function DocumentPreview({ file, onClose }: { file: Artifact; onClose: () => voi
             {Boolean(error) ? (
               <ScrollView contentContainerStyle={styles.empty}>
                 <FileText size={40} color={colors.muted} />
-                <AppText accessibilityRole="alert" style={styles.centered}>{error}</AppText>
-                <Button onPress={() => setAttempt((value) => value + 1)}>重新加载</Button>
+                <AppText accessibilityRole="alert" style={styles.centered}>{errorText(error)}</AppText>
+                <Button onPress={() => setAttempt((value) => value + 1)}>{t("common.reload")}</Button>
               </ScrollView>
             ) : type === "pdf" && uri ? (
               <Pdf key={`${uri}:${attempt}`} source={{ uri, cache: false }} trustAllCerts={false} fitPolicy={0} maxScale={5} enableDoubleTapZoom enableTextSelection
                 onLoadComplete={(total) => { if (isCurrentPreview()) { setPages({ page: 1, total }); setLoading(false); } }}
                 onPageChanged={(page, total) => { if (isCurrentPreview()) setPages({ page, total }); }}
-                onError={() => { if (isCurrentPreview()) { setError("无法打开 PDF，文件可能损坏或需要密码"); setLoading(false); } }}
+                onError={() => { if (isCurrentPreview()) { setError(localizedError("error.pdfInvalid")); setLoading(false); } }}
                 onPressLink={openDocumentLink}
                 renderActivityIndicator={() => <ActivityIndicator color={colors.muted} />}
                 style={[styles.root, { backgroundColor: colors.surface }]} />
             ) : loading ? null : type === "html" && mode === "preview" ? (
               <WebView incognito source={{ html: source, baseUrl: "about:blank" }}
                 startInLoadingState renderLoading={() => <ActivityIndicator color={colors.muted} style={styles.loading} />}
-                onError={() => { if (isCurrentPreview()) setError("无法打开预览"); }}
+                onError={() => { if (isCurrentPreview()) setError(localizedError("error.preview")); }}
                 originWhitelist={["*"]} javaScriptEnabled mixedContentMode="never" setSupportMultipleWindows={false}
                 allowFileAccess={false} allowFileAccessFromFileURLs={false} allowUniversalAccessFromFileURLs={false}
                 onShouldStartLoadWithRequest={(request) => {
@@ -157,8 +160,8 @@ function DocumentPreview({ file, onClose }: { file: Artifact; onClose: () => voi
               <ScrollView contentContainerStyle={styles.empty}>
                 <FileText size={44} color={colors.muted} />
                 <AppText numberOfLines={2} style={styles.centered}>{file.name}</AppText>
-                <AppText muted size={14}>此格式暂不支持预览</AppText>
-                <Button busy={sharing} onPress={() => void share()}>下载文件</Button>
+                <AppText muted size={14}>{t("file.previewUnavailable")}</AppText>
+                <Button busy={sharing} onPress={() => void share()}>{t("file.download")}</Button>
               </ScrollView>
             )}
             {loading && !error && <View pointerEvents="none" style={[styles.loading, { backgroundColor: colors.surface }]}><ActivityIndicator color={colors.muted} /></View>}

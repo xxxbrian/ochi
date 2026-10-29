@@ -8,7 +8,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 )
 
 const (
@@ -155,7 +157,7 @@ func (s *Store) ListProviderTraces(ctx context.Context, runID string, limit, off
 	page := ProviderTracePage{Items: []ProviderTraceSummary{}, Limit: limit, Offset: offset,
 		RetentionDays: ProviderTraceRetentionDays, MaxRequestsPerRun: ProviderTraceMaxRequestsPerRun}
 	if limit < 1 || limit > 100 || offset < 0 {
-		return page, errors.New("invalid provider request debug pagination")
+		return page, i18n.New("debug_pagination_invalid")
 	}
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {

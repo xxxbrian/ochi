@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { ChevronLeft, X } from "lucide-react-native";
 import { router } from "expo-router";
@@ -30,6 +31,7 @@ export function SettingsHeader({
   root?: boolean;
   right?: React.ReactNode;
 }) {
+  useI18n();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const compact = height < 500;
@@ -38,7 +40,7 @@ export function SettingsHeader({
       <View style={styles.side}>
         <IconButton
           icon={root ? X : ChevronLeft}
-          label={root ? "关闭设置" : "返回"}
+          label={root ? t("settings.close") : t("common.back")}
           variant="glass"
           size={42}
           onPress={() =>

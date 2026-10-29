@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,8 +14,11 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/product"
+	"ochi/server/internal/runtime"
 	"ochi/server/internal/storage"
 )
 
@@ -147,14 +149,14 @@ func (s *Server) adminProviders(w http.ResponseWriter, r *http.Request) {
 		}
 	case "replace":
 		if req.APIKey == "" {
-			writeError(w, http.StatusBadRequest, errors.New("请输入新的密钥"))
+			writeError(w, http.StatusBadRequest, i18n.New("api_key_required"))
 			return
 		}
 		p.APIKey = req.APIKey
 	case "delete":
 		p.APIKey = ""
 	default:
-		writeError(w, http.StatusBadRequest, errors.New("密钥操作无效"))
+		writeError(w, http.StatusBadRequest, i18n.New("api_key_action_invalid"))
 		return
 	}
 	if p.Headers == nil {
@@ -162,7 +164,7 @@ func (s *Server) adminProviders(w http.ResponseWriter, r *http.Request) {
 	}
 	for k, v := range req.Headers {
 		if k == "" || strings.ContainsAny(k, "\r\n :") || strings.ContainsAny(v, "\r\n") {
-			writeError(w, http.StatusBadRequest, errors.New("请求头格式无效"))
+			writeError(w, http.StatusBadRequest, i18n.New("headers_invalid"))
 			return
 		}
 		if v != "" {
@@ -173,16 +175,16 @@ func (s *Server) adminProviders(w http.ResponseWriter, r *http.Request) {
 		delete(p.Headers, k)
 	}
 	if p.TimeoutSeconds < 5 || p.TimeoutSeconds > 1800 {
-		writeError(w, http.StatusBadRequest, errors.New("请求超时应在 5 到 1800 秒之间"))
+		writeError(w, http.StatusBadRequest, i18n.New("provider_timeout_invalid"))
 		return
 	}
 	parsed, err := url.Parse(p.BaseURL)
 	if p.Name == "" || err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || (p.Enabled && p.APIKey == "" && !p.AllowNoKey) {
-		writeError(w, http.StatusBadRequest, errors.New("请填写名称、有效服务地址和密钥；无密钥服务需显式开启"))
+		writeError(w, http.StatusBadRequest, i18n.New("provider_configuration_invalid"))
 		return
 	}
 	if p.Protocol != "openai" && p.Protocol != "openai-responses" {
-		writeError(w, http.StatusBadRequest, errors.New("请选择 OpenAI Chat Completions 或 Responses 协议"))
+		writeError(w, http.StatusBadRequest, i18n.New("provider_protocol_invalid"))
 		return
 	}
 	result, err := s.store.SaveProvider(r.Context(), p)
@@ -196,11 +198,13 @@ func (s *Server) adminProviders(w http.ResponseWriter, r *http.Request) {
 		// listing endpoint does not discard a successfully saved connection.
 		ids, _, discoverErr := fetchProviderModels(r.Context(), result)
 		if discoverErr != nil {
-			response["sync_error"] = storage.SanitizeProviderError(result, discoverErr)
+			response["sync_error"] = i18n.Text(w.Header().Get("Content-Language"), "provider_sync_failed", nil)
+			response["sync_error_code"] = "provider_sync_failed"
 		} else {
 			refs := resolvedCatalogReferences(r.Context(), result, ids)
 			if _, imported, _, syncErr := s.store.SyncProviderModels(r.Context(), result, ids, refs); syncErr != nil {
-				response["sync_error"] = "模型列表未同步，请重新同步"
+				response["sync_error"] = i18n.Text(w.Header().Get("Content-Language"), "provider_sync_failed", nil)
+				response["sync_error_code"] = "provider_sync_failed"
 			} else {
 				response["imported"] = imported
 			}
@@ -245,11 +249,11 @@ func fetchProviderModels(ctx context.Context, provider storage.Provider) ([]stri
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, 0, errors.New("连接失败，请检查服务地址和网络")
+		return nil, 0, i18n.Wrap("provider_connection_failed", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, resp.StatusCode, fmt.Errorf("服务拒绝了模型列表请求 (HTTP %d)", resp.StatusCode)
+		return nil, resp.StatusCode, i18n.With("provider_model_list_rejected", map[string]any{"status": resp.StatusCode})
 	}
 	var body struct {
 		Data []struct {
@@ -257,7 +261,7 @@ func fetchProviderModels(ctx context.Context, provider storage.Provider) ([]stri
 		} `json:"data"`
 	}
 	if err = json.NewDecoder(io.LimitReader(resp.Body, 8*1024*1024)).Decode(&body); err != nil {
-		return nil, resp.StatusCode, errors.New("服务响应不是有效模型列表")
+		return nil, resp.StatusCode, i18n.Wrap("provider_model_list_invalid", err)
 	}
 	ids := []string{}
 	seen := map[string]bool{}
@@ -280,13 +284,36 @@ func (s *Server) testProvider(w http.ResponseWriter, r *http.Request) {
 	ids, status, testErr := fetchProviderModels(r.Context(), provider)
 	result := map[string]any{"ok": testErr == nil, "status": status, "checked_at": time.Now().UTC(), "models": ids}
 	if testErr != nil {
-		result["error"] = storage.SanitizeProviderError(provider, testErr)
+		setConnectionTestError(result, testErr)
+		result["detail"] = storage.SanitizeProviderError(provider, testErr)
 	}
 	if err = s.store.SaveProviderTest(r.Context(), provider.ID, result); err != nil {
 		writeStoreError(w, err)
 		return
 	}
+	localizeConnectionTest(result, w.Header().Get("Content-Language"))
 	writeJSON(w, http.StatusOK, result)
+}
+
+func setConnectionTestError(result map[string]any, err error) {
+	code, params, public := i18n.Details(err)
+	if !public {
+		code = runtime.FailureCode(err)
+		if code == "run_failed" {
+			code = "provider_request_failed"
+		}
+	}
+	result["error"], result["error_code"] = i18n.Text(i18n.English, code, params), code
+	if len(params) > 0 {
+		result["error_params"] = params
+	}
+}
+
+func localizeConnectionTest(result map[string]any, locale string) {
+	if code, ok := result["error_code"].(string); ok && code != "" {
+		params, _ := result["error_params"].(map[string]any)
+		result["error"] = i18n.Text(locale, code, params)
+	}
 }
 func (s *Server) discoverProviderModels(w http.ResponseWriter, r *http.Request) {
 	provider, err := s.store.Provider(r.Context(), r.PathValue("id"))
@@ -296,7 +323,7 @@ func (s *Server) discoverProviderModels(w http.ResponseWriter, r *http.Request) 
 	}
 	ids, status, err := fetchProviderModels(r.Context(), provider)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, errors.New(storage.SanitizeProviderError(provider, err)))
+		writeError(w, http.StatusBadGateway, i18n.Wrap("provider_request_failed", err))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": status, "models": ids})
@@ -308,12 +335,12 @@ func (s *Server) syncProviderModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !provider.DiscoverModels {
-		writeError(w, http.StatusBadRequest, errors.New("此服务未开启模型发现"))
+		writeError(w, http.StatusBadRequest, i18n.New("provider_discovery_disabled"))
 		return
 	}
 	ids, _, err := fetchProviderModels(r.Context(), provider)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, errors.New(storage.SanitizeProviderError(provider, err)))
+		writeError(w, http.StatusBadGateway, i18n.Wrap("provider_request_failed", err))
 		return
 	}
 	refs := resolvedCatalogReferences(r.Context(), provider, ids)
@@ -361,7 +388,7 @@ func (s *Server) adminModels(w http.ResponseWriter, r *http.Request) {
 	}
 	data, marshalErr := json.Marshal(patch)
 	if marshalErr != nil || json.Unmarshal(data, &m) != nil {
-		writeError(w, http.StatusBadRequest, errors.New("模型配置格式无效"))
+		writeError(w, http.StatusBadRequest, i18n.New("model_configuration_invalid"))
 		return
 	}
 	if m.MetadataOverrides == nil {
@@ -406,19 +433,19 @@ func (s *Server) adminModels(w http.ResponseWriter, r *http.Request) {
 	}
 	m = storage.InferImageMetadata(m)
 	if m.ProviderID == "" || m.Model == "" || m.Name == "" || (m.ContextWindow != 0 && m.ContextWindow < 2048) || m.ContextWindow > 4000000 {
-		writeError(w, http.StatusBadRequest, errors.New("请填写模型名称、标识、服务与有效上下文长度"))
+		writeError(w, http.StatusBadRequest, i18n.New("model_fields_required"))
 		return
 	}
 	if m.IsDefault && !m.Enabled {
-		writeError(w, http.StatusBadRequest, errors.New("默认模型必须启用"))
+		writeError(w, http.StatusBadRequest, i18n.New("default_model_disabled"))
 		return
 	}
 	if m.IsDefault && !m.Available {
-		writeError(w, http.StatusBadRequest, errors.New("默认模型必须在服务中可用"))
+		writeError(w, http.StatusBadRequest, i18n.New("default_model_unavailable"))
 		return
 	}
 	if !validEffortParameter(m.EffortParameter) {
-		writeError(w, http.StatusBadRequest, errors.New("思考参数路径无效"))
+		writeError(w, http.StatusBadRequest, i18n.New("reasoning_path_invalid"))
 		return
 	}
 	if m.ReasoningKind == "" {
@@ -428,23 +455,23 @@ func (s *Server) adminModels(w http.ResponseWriter, r *http.Request) {
 		m.ReasoningKind = "effort"
 	}
 	if !slices.Contains([]string{"unknown", "none", "effort", "toggle", "budget", "always"}, m.ReasoningKind) {
-		writeError(w, http.StatusBadRequest, errors.New("思考类型无效"))
+		writeError(w, http.StatusBadRequest, i18n.New("reasoning_type_invalid"))
 		return
 	}
 	if !slices.Contains([]string{"chat", "embedding", "image"}, m.Kind) {
-		writeError(w, http.StatusBadRequest, errors.New("模型类型无效"))
+		writeError(w, http.StatusBadRequest, i18n.New("model_kind_invalid"))
 		return
 	}
 	if m.Enabled && m.Kind == "chat" && m.MetadataKnown["modalities"] && len(m.Modalities.Output) > 0 && !slices.Contains(m.Modalities.Output, "text") {
-		writeError(w, http.StatusBadRequest, errors.New("此模型不输出聊天文本，当前聊天协议不能启用图像或音频生成模型"))
+		writeError(w, http.StatusBadRequest, i18n.New("chat_model_required"))
 		return
 	}
 	if m.Kind != "chat" && m.IsDefault {
-		writeError(w, http.StatusBadRequest, errors.New("只有聊天模型可以作为默认聊天模型"))
+		writeError(w, http.StatusBadRequest, i18n.New("default_chat_model_required"))
 		return
 	}
 	if m.Kind == "image" && !m.SupportsImageGeneration {
-		writeError(w, http.StatusBadRequest, errors.New("图像模型需要启用生图能力"))
+		writeError(w, http.StatusBadRequest, i18n.New("image_generation_required"))
 		return
 	}
 	if err := agent.ValidateImageOptions(agent.ImageOptions{Size: m.ImageConfig.Size, Quality: m.ImageConfig.Quality, OutputFormat: m.ImageConfig.OutputFormat, Background: m.ImageConfig.Background}); err != nil {
@@ -452,19 +479,19 @@ func (s *Server) adminModels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if (len(m.Efforts) > 0 || m.ReasoningKind == "budget") && m.EffortParameter == "" {
-		writeError(w, http.StatusBadRequest, errors.New("请配置服务支持的思考参数"))
+		writeError(w, http.StatusBadRequest, i18n.New("reasoning_configuration_required"))
 		return
 	}
 	if m.DefaultEffort != "" && !slices.Contains(m.Efforts, m.DefaultEffort) {
-		writeError(w, http.StatusBadRequest, errors.New("默认思考程度不在可用选项中"))
+		writeError(w, http.StatusBadRequest, i18n.New("default_reasoning_invalid"))
 		return
 	}
 	if m.MaxOutputTokens < 0 || m.MaxOutputTokens > 4000000 || m.ReasoningBudgetMin < 0 || m.ReasoningBudgetMax < m.ReasoningBudgetMin || m.ReasoningBudgetDefault < 0 {
-		writeError(w, http.StatusBadRequest, errors.New("Token 范围无效"))
+		writeError(w, http.StatusBadRequest, i18n.New("token_range_invalid"))
 		return
 	}
 	if m.ReasoningBudgetDefault > 0 && (m.ReasoningBudgetDefault < m.ReasoningBudgetMin || (m.ReasoningBudgetMax > 0 && m.ReasoningBudgetDefault > m.ReasoningBudgetMax)) {
-		writeError(w, http.StatusBadRequest, errors.New("默认思考预算超出范围"))
+		writeError(w, http.StatusBadRequest, i18n.New("reasoning_budget_invalid"))
 		return
 	}
 	if m.EffortMapping == nil {
@@ -472,12 +499,12 @@ func (s *Server) adminModels(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, effort := range m.Efforts {
 		if effort == "" {
-			writeError(w, http.StatusBadRequest, errors.New("思考选项不能为空"))
+			writeError(w, http.StatusBadRequest, i18n.New("reasoning_option_required"))
 			return
 		}
 		if _, ok := m.EffortMapping[effort]; !ok {
 			if m.EffortParameter != "reasoning_effort" && m.EffortParameter != "reasoning.effort" {
-				writeError(w, http.StatusBadRequest, errors.New("请为每个思考选项填写服务支持的 JSON 映射"))
+				writeError(w, http.StatusBadRequest, i18n.New("reasoning_mapping_required"))
 				return
 			}
 			m.EffortMapping[effort], _ = json.Marshal(effort)
@@ -485,7 +512,7 @@ func (s *Server) adminModels(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, raw := range m.EffortMapping {
 		if !json.Valid(raw) || string(raw) == "null" {
-			writeError(w, http.StatusBadRequest, errors.New("思考映射必须是有效 JSON 值"))
+			writeError(w, http.StatusBadRequest, i18n.New("reasoning_mapping_invalid"))
 			return
 		}
 	}
@@ -494,7 +521,7 @@ func (s *Server) adminModels(w http.ResponseWriter, r *http.Request) {
 		m.Available = true
 	}
 	if m.IsDefault && !provider.Enabled {
-		writeError(w, http.StatusBadRequest, errors.New("默认模型的服务必须启用"))
+		writeError(w, http.StatusBadRequest, i18n.New("default_provider_disabled"))
 		return
 	}
 	item, err := s.store.SaveModel(r.Context(), m)
@@ -532,7 +559,7 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !found {
-			writeError(w, http.StatusNotFound, errors.New("用户不存在"))
+			writeError(w, http.StatusNotFound, i18n.New("user_not_found"))
 			return
 		}
 	}
@@ -553,27 +580,27 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 	req.Username = strings.TrimSpace(req.Username)
 	req.DisplayName = strings.TrimSpace(req.DisplayName)
 	if req.Username == "__admin__" {
-		writeError(w, http.StatusBadRequest, errors.New("此用户名为系统保留名称"))
+		writeError(w, http.StatusBadRequest, i18n.New("username_reserved"))
 		return
 	}
 	if req.Username == "" || req.DisplayName == "" || (req.Role != "user" && req.Role != "admin") || (id == "" && len(req.Password) < 6) {
-		writeError(w, http.StatusBadRequest, errors.New("请填写用户名、显示名称、角色和至少六位密码"))
+		writeError(w, http.StatusBadRequest, i18n.New("user_fields_required"))
 		return
 	}
 	if id != "" && req.Username != user.Username {
-		writeError(w, http.StatusBadRequest, errors.New("用户名不能修改"))
+		writeError(w, http.StatusBadRequest, i18n.New("username_immutable"))
 		return
 	}
 	user.Username, user.DisplayName, user.Role, user.Enabled = req.Username, req.DisplayName, req.Role, req.Enabled
 	user.PasswordHash = ""
 	if req.Password != "" {
 		if len(req.Password) < 6 {
-			writeError(w, http.StatusBadRequest, errors.New("密码至少六位"))
+			writeError(w, http.StatusBadRequest, i18n.New("password_too_short"))
 			return
 		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, errors.New("密码过长"))
+			writeError(w, http.StatusBadRequest, i18n.New("password_too_long"))
 			return
 		}
 		user.PasswordHash = string(hash)
@@ -622,7 +649,7 @@ func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if settings.MaxToolRounds < 1 || settings.MaxToolRounds > 200 {
-			writeError(w, http.StatusBadRequest, errors.New("操作上限应在 1 到 200 之间"))
+			writeError(w, http.StatusBadRequest, i18n.New("tool_round_limit_invalid"))
 			return
 		}
 		for _, slot := range []struct{ id, kind string }{{settings.CompactionModelID, "chat"}, {settings.MemoryModelID, "chat"}, {settings.EmbeddingModelID, "embedding"}, {settings.TitleModelID, "chat"}, {settings.ImageModelID, "image"}} {
@@ -631,16 +658,16 @@ func (s *Server) adminSettings(w http.ResponseWriter, r *http.Request) {
 			}
 			model, modelErr := s.store.Model(r.Context(), slot.id)
 			if modelErr != nil {
-				writeError(w, http.StatusBadRequest, errors.New("辅助模型不存在"))
+				writeError(w, http.StatusBadRequest, i18n.New("auxiliary_model_not_found"))
 				return
 			}
 			provider, providerErr := s.store.Provider(r.Context(), model.ProviderID)
 			if providerErr != nil || !provider.Enabled || !model.Available || model.Kind != slot.kind {
-				writeError(w, http.StatusBadRequest, errors.New("辅助模型类型不符或服务不可用"))
+				writeError(w, http.StatusBadRequest, i18n.New("auxiliary_model_invalid"))
 				return
 			}
 			if slot.kind == "image" && (!model.Enabled || !model.SupportsImageGeneration) {
-				writeError(w, http.StatusBadRequest, errors.New("生图模型需要先启用"))
+				writeError(w, http.StatusBadRequest, i18n.New("image_model_disabled"))
 				return
 			}
 		}
@@ -704,7 +731,7 @@ func (s *Server) modelCatalog(w http.ResponseWriter, r *http.Request) {
 	}
 	provider, ok := catalog[r.URL.Query().Get("provider")]
 	if !ok {
-		writeError(w, http.StatusNotFound, errors.New("能力目录中没有此服务"))
+		writeError(w, http.StatusNotFound, i18n.New("catalog_provider_not_found"))
 		return
 	}
 	query := strings.ToLower(r.URL.Query().Get("q"))
@@ -750,7 +777,7 @@ func (s *Server) applyModelCatalog(w http.ResponseWriter, r *http.Request) {
 		reference, match, ok = storage.ResolveCatalogModel(catalog, provider, model.Model)
 	}
 	if !ok {
-		writeError(w, http.StatusNotFound, errors.New("未找到对应模型能力"))
+		writeError(w, http.StatusNotFound, i18n.New("catalog_model_not_found"))
 		return
 	}
 	if !request.Apply {
@@ -789,12 +816,12 @@ func (s *Server) testModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.Effort != "" && !slices.Contains(model.Efforts, request.Effort) {
-		writeError(w, http.StatusBadRequest, errors.New("思考程度不在此模型支持的选项中"))
+		writeError(w, http.StatusBadRequest, i18n.New("reasoning_unsupported"))
 		return
 	}
 	if request.BudgetTokens > 0 {
 		if model.ReasoningKind != "budget" || request.BudgetTokens < model.ReasoningBudgetMin || (model.ReasoningBudgetMax > 0 && request.BudgetTokens > model.ReasoningBudgetMax) {
-			writeError(w, http.StatusBadRequest, errors.New("思考预算超出范围"))
+			writeError(w, http.StatusBadRequest, i18n.New("reasoning_budget_invalid"))
 			return
 		}
 		request.Effort = fmt.Sprintf("budget:%d", request.BudgetTokens)
@@ -829,12 +856,14 @@ func (s *Server) testModel(w http.ResponseWriter, r *http.Request) {
 	result["ok"] = err == nil
 	result["parameter_accepted"] = err == nil && request.Effort != ""
 	if err != nil {
-		result["error"] = storage.SanitizeProviderError(provider, err)
+		setConnectionTestError(result, err)
+		result["detail"] = storage.SanitizeProviderError(provider, err)
 	}
 	if saveErr := s.store.SaveModelTest(r.Context(), model.ID, result); saveErr != nil {
 		writeStoreError(w, saveErr)
 		return
 	}
+	localizeConnectionTest(result, w.Header().Get("Content-Language"))
 	writeJSON(w, http.StatusOK, result)
 }
 func (s *Server) adminHealth(w http.ResponseWriter, r *http.Request) {

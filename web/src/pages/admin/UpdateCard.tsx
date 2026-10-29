@@ -1,3 +1,4 @@
+import { t, useAdminI18n, getLocale, formatNumber, translateError, type AdminMessageKey } from "./i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, CircleAlert, Download, LoaderCircle, RefreshCw, RotateCcw } from "lucide-react";
 import { Modal } from "../../components/Modal";
@@ -8,6 +9,12 @@ const RESTART_STORAGE_KEY = "ochi-admin-update-restart";
 const RESTART_WAIT_MS = 15 * 60 * 1000;
 type RestartIntent = { revision: string; startedAt: number };
 type UpdateAction = "check" | "apply" | "rollback" | "restart";
+type UpdateIssue = AdminMessageKey | Pick<ApiError, "message" | "code" | "params">;
+
+function issueText(issue: UpdateIssue | null) {
+  if (!issue) return "";
+  return typeof issue === "string" ? t(issue) : translateError(issue.code, issue.params) ?? issue.message;
+}
 
 function storedRestart(): RestartIntent | null {
   try {
@@ -26,7 +33,7 @@ function isActive(phase?: UpdateState["phase"]) {
 function useUpdateController() {
   const [state, setState] = useState<UpdateState | null>(null);
   const [action, setAction] = useState<UpdateAction | null>(null);
-  const [error, setError] = useState("");
+  const [issue, setIssue] = useState<UpdateIssue | null>(null);
   const [connectionLost, setConnectionLost] = useState(false);
   const [confirmedRevision, setConfirmedRevision] = useState("");
   const [restartIntent, setRestartIntent] = useState(storedRestart);
@@ -50,7 +57,7 @@ function useUpdateController() {
 
   const acceptState = useCallback((value: UpdateState) => {
     setState(value);
-    setError("");
+    setIssue(null);
     setConnectionLost(false);
     if (intent.current && value.current.revision === intent.current.revision) {
       setConfirmedRevision(intent.current.revision);
@@ -58,7 +65,7 @@ function useUpdateController() {
       rememberRestart(null);
     } else if (intent.current && value.phase === "failed") {
       rememberRestart(null);
-      setError(value.error || "重启未完成，请检查服务状态后重试。");
+      setIssue(value.error_code ? { code: value.error_code, params: value.error_params, message: value.error ?? "" } : "restartIncomplete");
     } else if (!intent.current && value.phase === "restarting" && value.pending) {
       rememberRestart({ revision: value.pending.revision, startedAt: Date.now() });
     }
@@ -87,7 +94,7 @@ function useUpdateController() {
       if (stale() || operation.current) return;
       if (intent.current && Date.now() - intent.current.startedAt >= RESTART_WAIT_MS) {
         setRestartExpired(true);
-        setError("仍未确认目标构建已启动，请检查容器日志，或继续检查状态。不要重复重启服务。");
+        setIssue("restartUnconfirmedHint");
         return;
       }
       controller = new AbortController();
@@ -105,10 +112,10 @@ function useUpdateController() {
         if (stale()) return;
         const status = (reason as ApiError).status;
         if (status === 401 || status === 403) {
-          setError(reason instanceof Error ? reason.message : "请重新登录管理员账号");
+          setIssue(reason instanceof Error ? reason : "adminLoginRequired");
           again = false;
         } else if (pollMode === "initial" && !intent.current) {
-          setError(controller.signal.aborted ? "获取更新状态超时，请重试。" : reason instanceof Error ? reason.message : "无法获取更新状态");
+          setIssue(controller.signal.aborted ? "updateStatusTimeout" : reason instanceof Error ? reason : "updateStatusFailed");
         } else {
           setConnectionLost(true);
           again = true;
@@ -142,7 +149,7 @@ function useUpdateController() {
     generation.current += 1;
     polling.current?.abort();
     setAction(name);
-    setError("");
+    setIssue(null);
     setConfirmedRevision("");
     setConnectionLost(false);
     if (name === "restart") rememberRestart({ revision: pending!.revision, startedAt: Date.now() });
@@ -165,7 +172,7 @@ function useUpdateController() {
         setState(null);
       } else {
         if (name === "restart") rememberRestart(null);
-        setError(timedOut ? "操作超时，请重试。" : reason instanceof Error ? reason.message : "操作失败，请重试");
+        setIssue(timedOut ? "operationTimeout" : reason instanceof Error ? reason : "operationFailedRetry");
       }
     } finally {
       clearTimeout(timeout);
@@ -176,39 +183,40 @@ function useUpdateController() {
   }
 
   function retry() {
-    setError("");
+    setIssue(null);
     setConnectionLost(false);
     setRestartExpired(false);
     if (intent.current) rememberRestart({ ...intent.current, startedAt: Date.now() });
     setRetryKey((key) => key + 1);
   }
 
-  return { state, action, error, connectionLost, confirmedRevision, restartIntent, restartExpired, perform, retry };
+  return { state, action, error: issueText(issue), connectionLost, confirmedRevision, restartIntent, restartExpired, perform, retry };
 }
 
 function shortRevision(revision: string) {
-  return !revision || revision === "unknown" ? "本地构建" : revision.slice(0, 8);
+  return !revision || revision === "unknown" ? t("localBuild") : revision.slice(0, 8);
 }
 
 function buildLabel(build: UpdateBuild) {
-  return `${build.version || "开发构建"} · ${shortRevision(build.revision)}`;
+  return `${build.version || t("developmentBuild")} · ${shortRevision(build.revision)}`;
 }
 
 function dateLabel(value?: string) {
   if (!value) return "";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("zh-CN", {
+  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat(getLocale(), {
     dateStyle: "medium", timeStyle: "short",
   }).format(date);
 }
 
 function byteLabel(value: number) {
-  if (value < 1024) return `${Math.max(0, value)} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  if (value < 1024) return `${formatNumber(Math.max(0, value))} B`;
+  if (value < 1024 * 1024) return `${formatNumber(value / 1024, { maximumFractionDigits: 1 })} KB`;
+  return `${formatNumber(value / (1024 * 1024), { maximumFractionDigits: 1 })} MB`;
 }
 
 export function UpdateCard() {
+  useAdminI18n();
   const control = useUpdateController();
   const { state, action, error, connectionLost, confirmedRevision, restartIntent, restartExpired } = control;
   const [confirm, setConfirm] = useState<"restart" | "rollback" | null>(null);
@@ -217,83 +225,84 @@ export function UpdateCard() {
   const ready = state?.phase === "ready" && state.pending;
   const downloading = state?.phase === "downloading";
   const checking = action === "check" || state?.phase === "checking";
+  const stateError = translateError(state?.error_code, state?.error_params) ?? state?.error;
   const canApply = state?.supported && state.available && state.latest && !state.blocked_reason && !state.pending && !active;
-  const status = restarting ? "正在等待任务完成并重启"
-    : downloading ? "正在下载更新"
-    : action === "apply" ? "正在准备下载"
-    : action === "rollback" ? "正在恢复备份"
-    : ready ? "已准备就绪，等待重启"
-    : checking ? "正在检查更新"
-    : confirmedRevision ? "更新成功，已运行目标构建"
-    : state?.phase === "failed" ? "更新未完成"
-    : state?.blocked_reason ? "此构建需要手动升级"
-    : state?.latest ? state.available ? "发现可用更新" : "已是最新构建"
-    : "尚未检查更新";
+  const status = restarting ? t("waitingForRestart")
+    : downloading ? t("downloadingUpdate")
+    : action === "apply" ? t("preparingDownload")
+    : action === "rollback" ? t("restoringBackup")
+    : ready ? t("readyToRestart")
+    : checking ? t("checkingUpdates")
+    : confirmedRevision ? t("updateConfirmed")
+    : state?.phase === "failed" ? t("updateIncomplete")
+    : state?.blocked_reason ? t("manualUpgradeRequired")
+    : state?.latest ? state.available ? t("updateAvailable") : t("upToDate")
+    : t("notChecked");
 
   return (
     <section className="settings-card update-card" aria-labelledby="update-card-heading">
       <div className="update-card-heading">
-        <h3 id="update-card-heading">软件更新</h3>
+        <h3 id="update-card-heading">{t("softwareUpdate")}</h3>
         {state && <button type="button" className="secondary-button" disabled={active || Boolean(state.pending)}
           onClick={() => void control.perform("check")}>
           {checking ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}
-          检查更新
-        </button>}
+          {t("checkUpdates")}</button>}
       </div>
       {!state ? (
         error ? <div className="update-card-error" role="alert"><span>{error}</span>
-          <button type="button" className="text-button" onClick={control.retry}>重试</button></div>
-          : <div className="update-card-loading" role="status"><LoaderCircle size={17} className="spin" />正在获取构建信息</div>
+          <button type="button" className="text-button" onClick={control.retry}>{t("retry")}</button></div>
+          : <div className="update-card-loading" role="status"><LoaderCircle size={17} className="spin" />{t("loadingBuild")}</div>
       ) : (
         <>
           <div className="update-build-current">
-            <strong>Ochi {state.current.version || "开发构建"}</strong>
+            <strong>Ochi {state.current.version || t("developmentBuild")}</strong>
             <code title={state.current.revision}>{shortRevision(state.current.revision)}</code>
-            {dateLabel(state.current.built_at) && <span>构建于 {dateLabel(state.current.built_at)}</span>}
+            {dateLabel(state.current.built_at) && <span>{t("builtAt", { date: dateLabel(state.current.built_at) })}</span>}
           </div>
           {(state.pending || state.latest) && <div className="update-build-target">
-            <span>{state.pending ? "重启后运行" : "最新构建"}</span>
+            <span>{state.pending ? t("runAfterRestart") : t("latestBuild")}</span>
             <strong>{buildLabel((state.pending ?? state.latest)!)}</strong>
           </div>}
           <div className={`update-card-status${confirmedRevision ? " is-complete" : ""}`} role="status" aria-live="polite">
             {active ? <LoaderCircle className="spin" size={16} /> : confirmedRevision ? <Check size={16} /> : state.phase === "failed" || state.blocked_reason ? <CircleAlert size={16} /> : null}
-            <span>{restartExpired ? "尚未确认重启完成" : status}</span>
+            <span>{restartExpired ? t("restartNotConfirmed") : status}</span>
           </div>
           {downloading && <div className="update-download">
-            <progress aria-label="更新下载进度" value={state.total_bytes > 0 ? state.downloaded_bytes : undefined}
+            <progress aria-label={t("downloadProgress")} value={state.total_bytes > 0 ? state.downloaded_bytes : undefined}
               max={state.total_bytes > 0 ? state.total_bytes : undefined} />
-            <span>{byteLabel(state.downloaded_bytes)}{state.total_bytes > 0 ? ` / ${byteLabel(state.total_bytes)}` : " 已下载"}</span>
+            <span>{byteLabel(state.downloaded_bytes)}{state.total_bytes > 0 ? ` / ${byteLabel(state.total_bytes)}` : t("downloadedSuffix")}</span>
           </div>}
-          {restarting && <p className="settings-note">先等待进行中的任务完成，最多等待 10 分钟，再重启服务。短暂断开连接是正常现象；正在核对目标构建，可离开此页。</p>}
-          {connectionLost && !restartExpired && <p className="settings-note">{restarting ? "服务连接已断开，正在等待目标构建启动…" : "暂时无法获取进度，正在重新连接…"}</p>}
-          {!state.supported && <p className="settings-note">{state.unsupported_reason || "此环境不支持在线更新，请使用发布构建。"}</p>}
-          {state.blocked_reason && <p className="update-card-warning">{state.blocked_reason}</p>}
-          {(error || state.error) && <div className="update-card-error" role="alert"><span>{error || state.error}</span>
-            {restartExpired && <button type="button" className="text-button" onClick={control.retry}>继续检查</button>}
-            {!restartExpired && error && (isActive(state.phase) || restartIntent) && <button type="button" className="text-button" onClick={control.retry}>重新检查</button>}
+          {restarting && <p className="settings-note">{t("restartProgressHint")}</p>}
+          {connectionLost && !restartExpired && <p className="settings-note">{restarting ? t("waitingForConnection") : t("reconnectingProgress")}</p>}
+          {!state.supported && <p className="settings-note">{translateError(state.unsupported_reason_code) ?? state.unsupported_reason ?? t("onlineUpdateUnsupported")}</p>}
+          {state.blocked_reason && <p className="update-card-warning">{translateError(state.blocked_reason_code) ?? state.blocked_reason}</p>}
+          {(error || stateError) && <div className="update-card-error" role="alert"><span>{error || stateError}</span>
+            {restartExpired && <button type="button" className="text-button" onClick={control.retry}>{t("keepChecking")}</button>}
+            {!restartExpired && error && (isActive(state.phase) || restartIntent) && <button type="button" className="text-button" onClick={control.retry}>{t("checkAgain")}</button>}
           </div>}
           <div className="update-card-actions">
-            {canApply && <button type="button" className="primary-button" onClick={() => void control.perform("apply")}><Download size={15} />下载更新</button>}
-            {ready && !restarting && <button type="button" className="primary-button" disabled={active || !state.supported} onClick={() => setConfirm("restart")}><RefreshCw size={15} />重启并应用</button>}
-            {confirmedRevision && <button type="button" className="secondary-button" onClick={() => window.location.reload()}>刷新页面</button>}
+            {canApply && <button type="button" className="primary-button" onClick={() => void control.perform("apply")}><Download size={15} />{t("downloadUpdate")}</button>}
+            {ready && !restarting && <button type="button" className="primary-button" disabled={active || !state.supported} onClick={() => setConfirm("restart")}><RefreshCw size={15} />{t("restartAndApply")}</button>}
+            {confirmedRevision && <button type="button" className="secondary-button" onClick={() => window.location.reload()}>{t("refreshPage")}</button>}
             {state.backup && !state.pending && <button type="button" className="text-button" disabled={active || !state.supported}
-              onClick={() => setConfirm("rollback")}><RotateCcw size={14} />恢复备份 <code>{shortRevision(state.backup.revision)}</code></button>}
-            {state.checked_at && !active && <span className="update-checked">上次检查 {dateLabel(state.checked_at)}</span>}
+              onClick={() => setConfirm("rollback")}><RotateCcw size={14} />{t("restoreBackup")}<code>{shortRevision(state.backup.revision)}</code></button>}
+            {state.checked_at && !active && <span className="update-checked">{t("lastChecked", { date: dateLabel(state.checked_at) })}</span>}
           </div>
-          <p className="settings-note update-card-footnote">仅更新 Ochi 前后端，不更新数据库或 Computer 工作区。重建容器会恢复镜像自带的程序版本。</p>
+          <p className="settings-note update-card-footnote">{t("updateScopeHint")}</p>
         </>
       )}
-      {confirm && <Modal className="ochi-admin-modal" size="small" title={confirm === "restart" ? "重启并应用更新？" : "恢复备份程序？"}
+      {confirm && <Modal className="ochi-admin-modal" size="small" title={confirm === "restart" ? t("applyUpdateQuestion") : t("restoreBackupQuestion")}
         onClose={() => setConfirm(null)} footer={<div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={() => setConfirm(null)}>取消</button>
+          <button type="button" className="secondary-button" onClick={() => setConfirm(null)}>{t("cancel")}</button>
           <button type="button" className="primary-button" disabled={active} onClick={() => {
             const command = confirm;
             setConfirm(null);
             void control.perform(command);
-          }}>{confirm === "restart" ? "确认重启" : "恢复备份"}</button>
+          }}>{confirm === "restart" ? t("confirmRestart") : t("restoreBackup")}</button>
         </div>}>
-        {confirm === "restart" ? <p>将运行 {state?.pending ? buildLabel(state.pending) : "目标构建"}。服务会先等待进行中的任务完成，最多等待 10 分钟；超时仍未完成的任务会中断。重启时会短暂断开连接。</p>
-          : <p>将恢复 {state?.backup ? buildLabel(state.backup) : "备份构建"}，之后仍需确认重启才会生效。此操作不恢复数据库或用户文件。</p>}
+        <p>{confirm === "restart"
+          ? t("restartWarning", { build: state?.pending ? buildLabel(state.pending) : t("targetBuild") })
+          : t("restoreWarning", { build: state?.backup ? buildLabel(state.backup) : t("backupBuild") })}</p>
       </Modal>}
     </section>
   );

@@ -1,3 +1,4 @@
+import { t, useI18n, getLocale } from "../lib/i18n";
 import {
   memo,
   useCallback,
@@ -27,7 +28,7 @@ import { MarkdownMessage } from "./MarkdownMessage";
 import { UserMessage } from "./UserMessage";
 import { HistoryProcess } from "./HistoryProcess";
 import { FileCards } from "./FileCards";
-import { effortLabel } from "./Composer";
+import { effortLabel } from "../lib/reasoningLabels";
 import { WaitingInputCard } from "./WaitingInputCard";
 import "./chat.css";
 
@@ -54,6 +55,7 @@ const MessageActions = memo(function MessageActions({
   message: Message;
   onRetry?: (message: Message) => void;
 }) {
+  useI18n();
   const [copied, setCopied] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   async function copy() {
@@ -74,7 +76,7 @@ const MessageActions = memo(function MessageActions({
     const utterance = new SpeechSynthesisUtterance(
       message.content.replace(/[#*`]/g, ""),
     );
-    utterance.lang = "zh-CN";
+    utterance.lang = getLocale();
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
     window.speechSynthesis.cancel();
@@ -86,8 +88,8 @@ const MessageActions = memo(function MessageActions({
       <button
         className="icon-button"
         onClick={() => void copy()}
-        aria-label={copied ? "已复制" : "复制"}
-        title="复制"
+        aria-label={copied ? t("common.copied") : t("common.copy")}
+        title={t("common.copy")}
       >
         {copied ? <Check size={15} /> : <Copy size={15} />}
       </button>
@@ -95,8 +97,8 @@ const MessageActions = memo(function MessageActions({
         <button
           className={`icon-button ${speaking ? "is-active" : ""}`}
           onClick={speak}
-          aria-label={speaking ? "停止朗读" : "朗读"}
-          title="朗读"
+          aria-label={speaking ? t("message.stopSpeech") : t("message.readAloud")}
+          title={t("message.readAloud")}
         >
           <Volume2 size={16} />
         </button>
@@ -105,8 +107,8 @@ const MessageActions = memo(function MessageActions({
         <button
           className="icon-button"
           onClick={() => onRetry(message)}
-          aria-label="重新生成"
-          title="重新生成"
+          aria-label={t("message.regenerate")}
+          title={t("message.regenerate")}
         >
           <RotateCcw size={15} />
         </button>
@@ -130,6 +132,7 @@ const HistoryMessage = memo(function HistoryMessage({
   processOpen?: boolean;
   onProcessOpen?: (runId: string, expanded: boolean) => void;
 }) {
+  useI18n();
   const process =
     message.role === "assistant" &&
     message.run_id &&
@@ -163,6 +166,7 @@ const HistoryMessage = memo(function HistoryMessage({
         hasProcess={message.has_process}
         status={message.run_status}
         runError={message.run_error}
+        runErrorCode={message.run_error_code}
         hasArtifacts={Boolean(message.attachments?.length || snapshot?.artifacts?.length)}
         snapshot={snapshot}
         output={message.content}
@@ -214,6 +218,7 @@ const History = memo(function History({
   processExpansion: Record<string, boolean>;
   onProcessOpen: (runId: string, expanded: boolean) => void;
 }) {
+  useI18n();
   let lastUser = -1,
     lastAssistant = -1;
   messages.forEach((message, index) => {
@@ -246,6 +251,7 @@ export function MessageList({
   onEdit,
   onResume,
 }: Props) {
+  useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const columnRef = useRef<HTMLDivElement>(null);
   const shouldStick = useRef(true);
@@ -392,7 +398,7 @@ export function MessageList({
       <div
         className="messages-scroll"
         role="region"
-        aria-label="消息列表"
+        aria-label={t("message.listLabel")}
         tabIndex={0}
         ref={scrollRef}
         onScroll={onScroll}
@@ -421,7 +427,7 @@ export function MessageList({
               {olderLoading ? (
                 <LoaderCircle size={15} className="spin" />
               ) : (
-                "加载更早的消息"
+                t("message.loadEarlier")
               )}
             </button>
           )}
@@ -443,7 +449,7 @@ export function MessageList({
           )}
           {messages.length === 0 && !snapshot && (
             <div className="empty-state">
-              <h2>你想探索什么？</h2>
+              <h2>{t("message.explore")}</h2>
             </div>
           )}
         </div>
@@ -451,7 +457,7 @@ export function MessageList({
       {showJump && (
         <button
           className="jump-latest icon-button"
-          aria-label="回到最新消息"
+          aria-label={t("message.latest")}
           onClick={jumpDown}
         >
           <ArrowDown size={18} />

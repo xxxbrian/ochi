@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { memo, useMemo, useState } from "react";
 import { Linking, ScrollView, StyleSheet, View } from "react-native";
 import {
@@ -36,6 +37,7 @@ export const Markdown = memo(function Markdown({
   compact?: boolean;
   onLink?: (url: string) => boolean;
 }) {
+  useI18n();
   const { colors, fonts, dark } = useTheme();
   const [code, setCode] = useState<{ code: string; language?: string } | null>(
     null,
@@ -194,9 +196,9 @@ export const Markdown = memo(function Markdown({
         }}
         enableTaskListItemToggle={false}
         selectionMenuConfig={{
-          copy: { label: "复制" },
-          copyAsMarkdown: { label: "复制 Markdown" },
-          copyImageUrl: { label: "复制图片链接" },
+          copy: { label: t("common.copy") },
+          copyAsMarkdown: { label: t("markdown.copy") },
+          copyImageUrl: { label: t("image.copyLink") },
         }}
         onLinkPress={({ url }) => {
           if (onLink?.(url)) return;
@@ -207,7 +209,7 @@ export const Markdown = memo(function Markdown({
       />
       <Sheet
         visible={Boolean(code)}
-        title={code?.language || "代码"}
+        title={code?.language || t("markdown.code")}
         onClose={() => setCode(null)}
         height="large"
       >
@@ -217,7 +219,7 @@ export const Markdown = memo(function Markdown({
           </AppText>
           <ActionIcon
             icon={Copy}
-            label="复制代码"
+            label={t("markdown.copyCode")}
             onPress={() => {
               if (code) void Clipboard.setStringAsync(code.code);
             }}

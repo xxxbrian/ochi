@@ -1,3 +1,4 @@
+const { testI18n } = require('./helpers/i18n.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -40,6 +41,8 @@ function harness(platform = 'ios') {
   vm.runInNewContext(output, {
     module, exports: module.exports, AbortController, Map, Error,
     require(name) {
+        const translated = testI18n.importFor(name); if (translated) return translated;
+
       if (name === 'react') return hooks;
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
       if (name === 'react-native') return {
@@ -111,7 +114,7 @@ test('failed mutations roll back and retry refreshes authoritative admin policy 
   h.mutations[0].reject(new Error('保存失败')); await h.settle();
   assert.equal(h.switch('optional').value, false);
   assert.equal(h.switch('optional').disabled, false);
-  assert.equal(h.error, '保存失败');
+  assert.equal(h.error.message, '保存失败');
   h.list.ListHeaderComponent.props.retry(); await h.settle();
   assert.equal(h.list.data.length, 1);
   assert.equal(h.list.refreshing, true);

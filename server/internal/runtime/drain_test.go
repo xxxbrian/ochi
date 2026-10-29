@@ -15,9 +15,9 @@ func TestDrainRejectsNewRunsWithoutCancellingExistingRun(t *testing.T) {
 		close(started)
 		select {
 		case <-release:
-			run.Finish(StatusCompleted, "")
+			run.Finish(StatusCompleted, nil)
 		case <-run.Context().Done():
-			run.Finish(StatusInterrupted, "")
+			run.Finish(StatusInterrupted, nil)
 		}
 	})
 	if err != nil {

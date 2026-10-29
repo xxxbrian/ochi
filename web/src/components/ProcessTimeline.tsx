@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { ChevronRight, LoaderCircle, MessageCircle } from "lucide-react";
 import { lazy, memo, Suspense, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ProcessEntry } from "../lib/types";
@@ -9,6 +10,7 @@ import "./process-timeline.css";
 const MarkdownContent = lazy(() => import("./MarkdownContent"));
 
 export const PublicProgress = memo(function PublicProgress({ text, preview = false, streaming = false }: { text: string; preview?: boolean; active?: boolean; streaming?: boolean }) {
+  useI18n();
   return (
     <div className={preview ? "process-progress-preview" : "process-progress"}>
       {!preview ? <span className="process-progress-icon" aria-hidden="true"><MessageCircle size={14} /></span> : null}
@@ -28,17 +30,18 @@ const ToolGroup = memo(function ToolGroup({ row, expanded, expansion, onExpanded
   onExpandedChange: (id: string, expanded: boolean) => void;
   onStepExpandedChange: (id: string, expanded: boolean) => void;
 }) {
+  useI18n();
   const steps = row.entries.flatMap((entry) => entry.step ? [entry.step] : []);
   const open = expanded ?? steps.some((step) => expansion[step.id]);
   const running = steps.some((step) => step.status === "running");
-  const noun = { terminal: "个命令", files: "次文件操作", browser: "次网页操作", computer: "次电脑操作", search: "次搜索", image: "次生图", tool: "个工具" }[row.family];
+  const title = t(`process.group.${running ? "running" : "done"}.${row.family}`, { count: steps.length });
   return (
     <div className={`process-tool-group ${open ? "is-expanded" : ""}`} data-process-id={row.id}>
       <button className="process-group-toggle step-summary" aria-expanded={open} onClick={() => onExpandedChange(row.id, !open)}>
         <span className="process-group-icon" aria-hidden="true">
           {running ? <LoaderCircle size={14} className="spin" /> : toolIcon(row.family)}
         </span>
-        <span className="process-group-title">{running ? row.family === "tool" ? "正在调用" : "正在执行" : row.family === "tool" ? "已调用" : "已执行"} {steps.length} {noun}</span>
+        <span className="process-group-title">{title}</span>
         <ChevronRight size={14} className="process-group-chevron" />
       </button>
       {open ? <div className="process-group-children"><StepList steps={steps} expansion={expansion} onExpandedChange={onStepExpandedChange} /></div> : null}
@@ -47,6 +50,7 @@ const ToolGroup = memo(function ToolGroup({ row, expanded, expansion, onExpanded
 });
 
 const TimelineEntry = memo(function TimelineEntry({ entry, active, workingProgress, expanded, onExpandedChange }: { entry: ProcessEntry; active: boolean; workingProgress: boolean; expanded?: boolean; onExpandedChange: (id: string, expanded: boolean) => void }) {
+  useI18n();
   let content;
   if (entry.kind === "tool" && entry.step) content = <StepCard step={entry.step} expanded={expanded} onExpandedChange={onExpandedChange} />;
   else if (entry.kind === "progress" && entry.text?.trim()) content = <PublicProgress text={entry.text} active={workingProgress} streaming={active && Boolean(entry.pending)} />;
@@ -68,6 +72,7 @@ export const ProcessTimeline = memo(function ProcessTimeline({
   error?: string;
   bounded?: boolean;
 }) {
+  useI18n();
   const viewport = useRef<HTMLDivElement>(null);
   const contents = useRef<HTMLDivElement>(null);
   const followLatest = useRef(active);
@@ -144,7 +149,7 @@ export const ProcessTimeline = memo(function ProcessTimeline({
       onKeyDown={(event) => { if (["ArrowUp", "PageUp", "Home"].includes(event.key)) pauseForExpansion(); }}
       onClickCapture={(event) => { if (event.target instanceof Element && event.target.closest("button, summary")) pauseForExpansion(); }}
       role="region"
-      aria-label="处理过程"
+      aria-label={t("process.title")}
       tabIndex={0}
     >
       <div className="process-timeline" ref={contents}>
@@ -152,7 +157,7 @@ export const ProcessTimeline = memo(function ProcessTimeline({
           if (row.kind === "tools") return <ToolGroup key={row.id} row={row} expanded={groupExpansion[row.id]} expansion={stepExpansion} onExpandedChange={changeGroupExpansion} onStepExpandedChange={changeStepExpansion} />;
           return <TimelineEntry key={row.id} entry={row.entry} active={active} workingProgress={working && row.id === latestProgressId} expanded={row.entry.step ? Boolean(stepExpansion[row.entry.step.id]) : undefined} onExpandedChange={changeStepExpansion} />;
         })}
-        {error ? <details className="technical-details"><summary>错误详情</summary><pre>{error}</pre></details> : null}
+        {error ? <details className="technical-details"><summary>{t("error.details")}</summary><pre>{error}</pre></details> : null}
       </div>
     </div>
   );

@@ -4,12 +4,14 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 const ts = require("typescript");
+const { createI18nHarness } = require("./i18n-harness.cjs");
+const i18n = createI18nHarness();
 
 function load(file, imports = {}) {
   const source = fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(output, { module, exports: module.exports, require(name) { if (name in imports) return imports[name]; throw new Error(`Unexpected import ${name}`); } });
+  vm.runInNewContext(output, { module, exports: module.exports, require(name) { if (name in imports) return imports[name]; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); } });
   return module.exports;
 }
 const process = load("src/lib/processTimeline.ts");

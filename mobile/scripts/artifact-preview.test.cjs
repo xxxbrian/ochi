@@ -1,3 +1,4 @@
+const { testI18n } = require('./helpers/i18n.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -10,6 +11,8 @@ function load(file, imports, tail = '') {
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(output + tail, { module, exports: module.exports, URL, Date, JSON, Error, AbortController, require(name) {
+        const translated = testI18n.importFor(name); if (translated) return translated;
+
     if (!(name in imports)) throw new Error(`Unexpected import ${name}`);
     return imports[name];
   } }, { filename: file });
@@ -21,11 +24,11 @@ const response = (status = 200, headers = {}) => ({ info: () => ({ status, heade
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
 function filesHarness() {
-  const state = { server: 'https://api.example', token: 'Bearer synthetic-token', calls: [], removed: [], directories: [], copies: [], shared: [], replies: [], cancelCount: 0, available: true };
+  const state = { server: 'https://api.example', token: 'Bearer synthetic-token', locale: 'en', calls: [], removed: [], directories: [], copies: [], shared: [], replies: [], cancelCount: 0, available: true };
   const api = {
     getAPIBaseURL: () => state.server,
     fileURL: (value) => new URL(typeof value === 'string' ? value : value.url, state.server).href,
-    resourceHeaders: (value) => new URL(typeof value === 'string' ? value : value.url, state.server).origin === new URL(state.server).origin ? { Authorization: state.token } : {},
+    resourceHeaders: (value) => new URL(typeof value === 'string' ? value : value.url, state.server).origin === new URL(state.server).origin ? { Authorization: state.token, 'Accept-Language': state.locale } : {},
   };
   const FileSystem = {
     cacheDirectory: 'file:///private/cache/',
@@ -157,6 +160,20 @@ test('a backend or credential switch while downloading discards the old response
     await assert.rejects(result, /取消/);
     assert.equal(h.state.removed.length, 1);
   }
+});
+
+test('changing only the UI language does not cancel an in-flight document preview', async () => {
+  const h = filesHarness();
+  const pending = deferred();
+  h.state.replies.push(pending);
+  const result = h.downloadArtifact(file);
+  await new Promise(setImmediate);
+  h.state.locale = 'zh-TW';
+  pending.resolve(response());
+  const local = await result;
+  assert.match(local.uri, /\.pdf$/);
+  assert.equal(h.state.removed.length, 0);
+  assert.equal(h.state.calls[0].headers['Accept-Language'], 'en');
 });
 
 test('sharing copies local preview bytes to an independent safe filename and keeps the receiver file alive after chooser dismissal', async () => {

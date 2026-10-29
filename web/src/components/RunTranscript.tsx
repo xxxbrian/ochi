@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { memo, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { ProcessEntry, RunStatus, WaitingInput } from "../lib/types";
@@ -13,6 +14,7 @@ type Props = {
   waitingKind?: WaitingInput["kind"];
   resource?: string;
   error?: string;
+  errorCode?: string;
   hasArtifacts?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -26,6 +28,7 @@ type Props = {
 const TranscriptSlot = memo(function TranscriptSlot({ id, order, destination, publicText, children }: {
   id: string; order: number; destination: RefObject<HTMLDivElement | null>; publicText?: boolean; children: ReactNode;
 }) {
+  useI18n();
   const [host] = useState(() => typeof document === "undefined" ? null : document.createElement("div"));
   useLayoutEffect(() => {
     const target = destination.current;
@@ -58,7 +61,8 @@ function readerPaused(scroll: HTMLElement | null) {
     (scroll.matches(".workspace-page-scroll") && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight > 96);
 }
 
-export const RunTranscript = memo(function RunTranscript({ timeline, output, status, waitingKind, resource, error, hasArtifacts = false, createdAt, updatedAt, expanded, onExpandedChange, renderBody }: Props) {
+export const RunTranscript = memo(function RunTranscript({ timeline, output, status, waitingKind, resource, error, errorCode, hasArtifacts = false, createdAt, updatedAt, expanded, onExpandedChange, renderBody }: Props) {
+  useI18n();
   const plan = useMemo(() => transcriptPlan(timeline, output, status), [timeline, output, status]);
   const root = useRef<HTMLDivElement>(null);
   const work = useRef<HTMLDivElement>(null);
@@ -78,7 +82,7 @@ export const RunTranscript = memo(function RunTranscript({ timeline, output, sta
   const answerRequested = useRef(false);
   const active = isActiveStatus(status);
   const failed = status === "failed" || status === "interrupted";
-  const failureMessage = error || failed ? userFacingRunError(error, hasArtifacts) : "";
+  const failureMessage = error || errorCode || failed ? userFacingRunError(error, hasArtifacts, errorCode) : "";
   const archived = rolledUp && plan.canRollUp;
 
   function preserveAnswer() {
@@ -173,7 +177,7 @@ export const RunTranscript = memo(function RunTranscript({ timeline, output, sta
     {(active || plan.hasWork || failed || status === "cancelled" || error) ? <div className="run-transcript-summary">
       <ProcessSummary timeline={timeline} active={active} status={status} waitingKind={waitingKind} resource={resource} hasOutput={hasPublic}
         expanded={open} onExpandedChange={archived ? changeOpen : undefined} createdAt={createdAt} updatedAt={updatedAt} />
-      {answerReady && <button className="run-answer-ready" onClick={showAnswer}>查看答复</button>}
+      {answerReady && <button className="run-answer-ready" onClick={showAnswer}>{t("message.viewResponse")}</button>}
     </div> : null}
     <div className="run-work-surface" hidden={archived && !open}>
       <div className="run-work-contents" ref={work} />

@@ -13,18 +13,22 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+
+	"ochi/server/internal/i18n"
 )
 
 type Preferences struct {
 	MemoryEnabled    bool   `json:"memory_enabled"`
 	ComputerDefault  bool   `json:"computer_default"`
 	PreferredModelID string `json:"preferred_model_id"`
+	Language         string `json:"language"`
 	MemoryRevision   int64  `json:"-"`
 }
 type PreferencesPatch struct {
 	MemoryEnabled    *bool   `json:"memory_enabled"`
 	ComputerDefault  *bool   `json:"computer_default"`
 	PreferredModelID *string `json:"preferred_model_id"`
+	Language         *string `json:"language"`
 }
 type Memory struct {
 	ID               string     `json:"id"`
@@ -57,16 +61,23 @@ func scanMemory(row pgx.Row, extra ...any) (Memory, error) {
 	return m, err
 }
 func (s *Store) Preferences(ctx context.Context, userID string) (Preferences, error) {
-	v := Preferences{MemoryEnabled: true}
-	err := s.db.QueryRow(ctx, `SELECT COALESCE((SELECT memory_enabled FROM user_preferences WHERE user_id=$1),true),COALESCE((SELECT memory_revision FROM user_preferences WHERE user_id=$1),0),COALESCE((SELECT computer_default FROM user_preferences WHERE user_id=$1),false),COALESCE((SELECT preferred_model_id FROM user_preferences WHERE user_id=$1),'')`, userID).Scan(&v.MemoryEnabled, &v.MemoryRevision, &v.ComputerDefault, &v.PreferredModelID)
+	v := Preferences{MemoryEnabled: true, Language: "system"}
+	err := s.db.QueryRow(ctx, `SELECT COALESCE((SELECT memory_enabled FROM user_preferences WHERE user_id=$1),true),COALESCE((SELECT memory_revision FROM user_preferences WHERE user_id=$1),0),COALESCE((SELECT computer_default FROM user_preferences WHERE user_id=$1),false),COALESCE((SELECT preferred_model_id FROM user_preferences WHERE user_id=$1),''),COALESCE((SELECT language FROM user_preferences WHERE user_id=$1),'system')`, userID).Scan(&v.MemoryEnabled, &v.MemoryRevision, &v.ComputerDefault, &v.PreferredModelID, &v.Language)
 	return v, err
 }
 func (s *Store) SavePreferences(ctx context.Context, userID string, v Preferences) error {
-	_, err := s.PatchPreferences(ctx, userID, PreferencesPatch{MemoryEnabled: &v.MemoryEnabled, ComputerDefault: &v.ComputerDefault, PreferredModelID: &v.PreferredModelID})
+	patch := PreferencesPatch{MemoryEnabled: &v.MemoryEnabled, ComputerDefault: &v.ComputerDefault, PreferredModelID: &v.PreferredModelID}
+	if v.Language != "" {
+		patch.Language = &v.Language
+	}
+	_, err := s.PatchPreferences(ctx, userID, patch)
 	return err
 }
 
 func (s *Store) PatchPreferences(ctx context.Context, userID string, patch PreferencesPatch) (Preferences, error) {
+	if patch.Language != nil && !i18n.ValidPreference(*patch.Language) {
+		return Preferences{}, i18n.New("invalid_language")
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return Preferences{}, err
@@ -81,7 +92,7 @@ func (s *Store) PatchPreferences(ctx context.Context, userID string, patch Prefe
 			return Preferences{}, ErrModelSelection
 		}
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO user_preferences(user_id,memory_enabled,computer_default,preferred_model_id) VALUES($1,COALESCE($2,true),COALESCE($3,false),COALESCE($4,'')) ON CONFLICT(user_id) DO UPDATE SET memory_enabled=COALESCE($2,user_preferences.memory_enabled),computer_default=COALESCE($3,user_preferences.computer_default),preferred_model_id=COALESCE($4,user_preferences.preferred_model_id),memory_revision=user_preferences.memory_revision+CASE WHEN $2 IS NOT NULL AND user_preferences.memory_enabled<>$2 THEN 1 ELSE 0 END`, userID, patch.MemoryEnabled, patch.ComputerDefault, patch.PreferredModelID)
+	_, err = tx.Exec(ctx, `INSERT INTO user_preferences(user_id,memory_enabled,computer_default,preferred_model_id,language) VALUES($1,COALESCE($2,true),COALESCE($3,false),COALESCE($4,''),COALESCE($5,'system')) ON CONFLICT(user_id) DO UPDATE SET memory_enabled=COALESCE($2,user_preferences.memory_enabled),computer_default=COALESCE($3,user_preferences.computer_default),preferred_model_id=COALESCE($4,user_preferences.preferred_model_id),language=COALESCE($5,user_preferences.language),memory_revision=user_preferences.memory_revision+CASE WHEN $2 IS NOT NULL AND user_preferences.memory_enabled<>$2 THEN 1 ELSE 0 END`, userID, patch.MemoryEnabled, patch.ComputerDefault, patch.PreferredModelID, patch.Language)
 	if err != nil {
 		return Preferences{}, err
 	}
@@ -135,7 +146,7 @@ func (s *Store) SaveMemory(ctx context.Context, userID, id, content string) (Mem
 func (s *Store) SaveMemoryRecord(ctx context.Context, userID string, m Memory) (Memory, error) {
 	m.Content = strings.TrimSpace(m.Content)
 	if m.Content == "" || len(m.Content) > 6000 {
-		return m, errors.New("记忆内容应为 1 到 6000 个字节")
+		return m, i18n.New("memory_content_invalid")
 	}
 	if m.Kind == "" {
 		m.Kind = "fact"
@@ -144,7 +155,7 @@ func (s *Store) SaveMemoryRecord(ctx context.Context, userID string, m Memory) (
 		m.Source = "user"
 	}
 	if m.Kind != "fact" && m.Kind != "preference" && m.Kind != "session_summary" && m.Kind != "project_summary" && m.Kind != "method" {
-		return m, errors.New("无效的记忆类型")
+		return m, i18n.New("memory_kind_invalid")
 	}
 	if err := validateMemoryProvenance(&m); err != nil {
 		return m, err

@@ -1,3 +1,5 @@
+import { errorForDisplay, localizedError, type DisplayError } from "../lib/errors";
+import { t, useI18n, getLocale, weekdayNames } from "../lib/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,7 +24,7 @@ import {
   Trash2,
 } from "lucide-react-native";
 import { router } from "expo-router";
-import { api, isActiveStatus } from "../lib/api";
+import { api, isActiveStatus, userFacingRunError } from "../lib/api";
 import { unrepresentedOutput } from "../lib/processTimeline";
 import type { Schedule, ScheduleExecution, Snapshot } from "../lib/types";
 import { useApp } from "../providers/AppProvider";
@@ -45,14 +47,13 @@ import { ArtifactCards } from "../components/Artifacts";
 import { WaitingCard } from "../components/ChatMessages";
 import { ArtifactMarkdown } from "../components/ArtifactMarkdown";
 
-const weekdays = ["一", "二", "三", "四", "五", "六", "日"];
 function timing(task: Schedule) {
   if (task.recurrence === "once")
-    return task.once_at ? taskDate(task.once_at, task.timezone) : "单次";
-  if (task.recurrence === "daily") return `每天 ${task.time_of_day ?? "09:00"}`;
+    return task.once_at ? taskDate(task.once_at, task.timezone) : t("schedule.once");
+  if (task.recurrence === "daily") return t("schedule.dailyAt", { time: task.time_of_day ?? "09:00" });
   if (task.recurrence === "weekly")
-    return `周 ${(task.weekdays ?? []).map((day) => weekdays[day - 1]).join("、")} ${task.time_of_day ?? "09:00"}`;
-  return `每 ${task.interval_minutes} 分钟`;
+    return t("schedule.weeklyAt", { days: (task.weekdays ?? []).map((day) => weekdayNames()[day - 1]).join(getLocale() === "en" ? ", " : "、"), time: task.time_of_day ?? "09:00" });
+  return t("schedule.everyMinutes", { count: task.interval_minutes ?? 0 });
 }
 function taskDate(value?: string, timezone?: string) {
   if (!value) return "";
@@ -61,7 +62,7 @@ function taskDate(value?: string, timezone?: string) {
     timeZone: timezone,
     year: "numeric",
   });
-  return date.toLocaleString("zh-CN", {
+  return date.toLocaleString(getLocale(), {
     timeZone: timezone,
     year: year.format(date) !== year.format(new Date()) ? "numeric" : undefined,
     month: "short",
@@ -75,19 +76,20 @@ function statusText(status?: string) {
   return (
     (
       {
-        completed: "已完成",
-        failed: "失败",
-        running: "进行中",
-        queued: "排队中",
-        skipped: "已跳过",
-        cancelled: "已停止",
-        interrupted: "已中断",
+        completed: t("status.completed"),
+        failed: t("common.failed"),
+        running: t("status.inProgress"),
+        queued: t("status.queued"),
+        skipped: t("status.skipped"),
+        cancelled: t("status.stopped"),
+        interrupted: t("status.interrupted"),
       } as Record<string, string>
-    )[status ?? ""] ?? "未执行"
+    )[status ?? ""] ?? t("status.notRun")
   );
 }
 
 export function TasksScreen() {
+  useI18n();
   const { colors, invalidateVersion, invalidateLists } = useApp();
   const contentStyle = usePageContentStyle({ horizontal: 18, top: 0, bottom: 30, gap: 0 });
   const [items, setItems] = useState<Schedule[]>([]);
@@ -95,14 +97,14 @@ export function TasksScreen() {
   const [filter, setFilter] = useState<"all" | "enabled" | "disabled">("all");
   const [editing, setEditing] = useState<Schedule | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const refresh = useCallback(() => {
     setLoading(true);
     void api
       .schedules()
       .then(setItems)
       .catch((reason) =>
-        setError(reason instanceof Error ? reason.message : "加载失败"),
+        setError(errorForDisplay(reason, "error.load")),
       )
       .finally(() => setLoading(false));
   }, []);
@@ -115,7 +117,7 @@ export function TasksScreen() {
         current.map((item) => (item.id === value.id ? value : item)),
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "操作失败");
+      setError(errorForDisplay(reason, "error.action"));
     } finally {
       setBusy(null);
     }
@@ -131,7 +133,7 @@ export function TasksScreen() {
         record ? `/tasks/${task.id}/runs/${record.id}` : `/tasks/${task.id}`,
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "执行失败");
+      setError(errorForDisplay(reason, "error.runTask"));
     } finally {
       setBusy(null);
     }
@@ -142,11 +144,11 @@ export function TasksScreen() {
   return (
     <View style={[screenStyles.fill, { backgroundColor: colors.canvas }]}>
       <PageHeader
-        title="定时任务"
+        title={t("schedule.title")}
         right={
           <ActionIcon
             icon={Plus}
-            label="创建任务"
+            label={t("schedule.create")}
             onPress={() => setEditing("new")}
           />
         }
@@ -154,9 +156,9 @@ export function TasksScreen() {
       <View style={[styles.filters, contentStyle, { paddingTop: 4, paddingBottom: 4, gap: 5 }]}>
         {(
           [
-            { value: "all", title: "全部" },
-            { value: "enabled", title: "已启用" },
-            { value: "disabled", title: "已停用" },
+            { value: "all", title: t("common.all") },
+            { value: "enabled", title: t("common.enabled") },
+            { value: "disabled", title: t("common.disabled") },
           ] as const
         ).map((item) => (
           <Pressable
@@ -204,7 +206,7 @@ export function TasksScreen() {
                   </AppText>
                 </Pressable>
                 <Switch
-                  accessibilityLabel={`启用 ${item.name}`}
+                  accessibilityLabel={t("schedule.enableNamed", { name: item.name })}
                   value={item.enabled}
                   disabled={busy === item.id}
                   onValueChange={(enabled) => void toggle(item, enabled)}
@@ -238,7 +240,7 @@ export function TasksScreen() {
                 <ActionIcon
                   icon={Play}
                   size={17}
-                  label={`执行 ${item.name}`}
+                  label={t("schedule.runNamed", { name: item.name })}
                   disabled={busy === item.id}
                   onPress={() => void run(item)}
                   style={{ width: 36, height: 40 }}
@@ -246,14 +248,14 @@ export function TasksScreen() {
                 <ActionIcon
                   icon={Pencil}
                   size={17}
-                  label={`编辑 ${item.name}`}
+                  label={t("schedule.editNamed", { name: item.name })}
                   onPress={() => setEditing(item)}
                   style={{ width: 36, height: 40 }}
                 />
                 <ActionIcon
                   icon={ChevronRight}
                   size={17}
-                  label={`查看 ${item.name}`}
+                  label={t("schedule.viewNamed", { name: item.name })}
                   onPress={() => router.push(`/tasks/${item.id}`)}
                   style={{ width: 32, height: 40 }}
                 />
@@ -261,7 +263,7 @@ export function TasksScreen() {
             </View>
           )}
           ListEmptyComponent={
-            <EmptyState icon={CalendarClock} text="暂无任务" />
+            <EmptyState icon={CalendarClock} text={t("schedule.none")} />
           }
         />
       )}
@@ -280,6 +282,7 @@ export function TasksScreen() {
 }
 
 export function TaskScreen({ taskId }: { taskId: string }) {
+  useI18n();
   const { colors, invalidateLists, invalidateVersion } = useApp();
   const contentStyle = usePageContentStyle();
   const [task, setTask] = useState<Schedule | null>(null);
@@ -287,7 +290,7 @@ export function TaskScreen({ taskId }: { taskId: string }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const refresh = useCallback(() => {
     setLoading(true);
     void Promise.all([api.schedule(taskId), api.scheduleExecutions(taskId)])
@@ -297,7 +300,7 @@ export function TaskScreen({ taskId }: { taskId: string }) {
         setError("");
       })
       .catch((reason) =>
-        setError(reason instanceof Error ? reason.message : "加载失败"),
+        setError(errorForDisplay(reason, "error.load")),
       )
       .finally(() => setLoading(false));
   }, [taskId]);
@@ -323,16 +326,16 @@ export function TaskScreen({ taskId }: { taskId: string }) {
       const record = records.find((item) => item.run_id === snapshot.run_id);
       if (record) router.push(`/tasks/${taskId}/runs/${record.id}`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "执行失败");
+      setError(errorForDisplay(reason, "error.runTask"));
     } finally {
       setBusy(false);
     }
   }
   function remove() {
-    Alert.alert("删除任务？", task?.name, [
-      { text: "取消", style: "cancel" },
+    Alert.alert(t("schedule.deleteConfirm"), task?.name, [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "删除",
+        text: t("common.delete"),
         style: "destructive",
         onPress: () =>
           void api
@@ -342,7 +345,7 @@ export function TaskScreen({ taskId }: { taskId: string }) {
               router.replace("/tasks");
             })
             .catch((reason) =>
-              setError(reason instanceof Error ? reason.message : "删除失败"),
+              setError(errorForDisplay(reason, "error.delete")),
             ),
       },
     ]);
@@ -350,11 +353,11 @@ export function TaskScreen({ taskId }: { taskId: string }) {
   return (
     <View style={[screenStyles.fill, { backgroundColor: colors.canvas }]}>
       <PageHeader
-        title="任务"
+        title={t("schedule.task")}
         right={
           <ActionIcon
             icon={Pencil}
-            label="编辑任务"
+            label={t("schedule.edit")}
             disabled={!task}
             onPress={() => setEditing(true)}
           />
@@ -372,14 +375,14 @@ export function TaskScreen({ taskId }: { taskId: string }) {
               </AppText>
               <Switch
                 value={task.enabled}
-                accessibilityLabel="启用任务"
+                accessibilityLabel={t("schedule.enableTask")}
                 onValueChange={(enabled) => {
                   void api
                     .saveSchedule({ id: task.id, enabled })
                     .then(setTask)
                     .catch((reason) =>
                       setError(
-                        reason instanceof Error ? reason.message : "操作失败",
+                        errorForDisplay(reason, "error.action"),
                       ),
                     );
                 }}
@@ -397,29 +400,27 @@ export function TaskScreen({ taskId }: { taskId: string }) {
                 onPress={() => void execute()}
                 style={{ flex: 1 }}
               >
-                立即执行
-              </Button>
+                {t("schedule.runNow")}</Button>
               <ActionIcon
                 icon={Trash2}
-                label="删除任务"
+                label={t("schedule.delete")}
                 color={colors.muted}
                 onPress={remove}
               />
             </View>
             {task.enabled && task.next_run_at && (
               <AppText muted size={12}>
-                下次 {taskDate(task.next_run_at, task.timezone)}
+                {t("schedule.next")}{taskDate(task.next_run_at, task.timezone)}
               </AppText>
             )}
             <SectionTitle
               right={
                 <AppText muted size={12}>
-                  {task.execution_count ?? executions.length} 次
+                  {t("schedule.runCount", { count: task.execution_count ?? executions.length })}
                 </AppText>
               }
             >
-              执行历史
-            </SectionTitle>
+              {t("schedule.history")}</SectionTitle>
             {executions.map((item) => (
               <ExecutionRow
                 key={item.id}
@@ -429,7 +430,7 @@ export function TaskScreen({ taskId }: { taskId: string }) {
               />
             ))}
             {!executions.length && (
-              <EmptyState icon={Clock3} text="暂无执行记录" />
+              <EmptyState icon={Clock3} text={t("schedule.noHistory")} />
             )}
           </ScrollView>
         )
@@ -457,6 +458,7 @@ function ExecutionRow({
   onPress: () => void;
   timezone?: string;
 }) {
+  useI18n();
   const { colors } = useApp();
   return (
     <Pressable
@@ -494,11 +496,11 @@ function ExecutionRow({
           numberOfLines={2}
           style={item.error ? { color: colors.error } : undefined}
         >
-          {item.error || item.output}
+          {item.error ? userFacingRunError(item.error, Boolean(item.artifacts?.length), item.error_code) : item.output}
         </AppText>
       ) : item.artifacts?.length ? (
         <AppText muted size={13}>
-          {item.artifacts.length} 个文件
+          {t("file.count", { count: item.artifacts.length })}
         </AppText>
       ) : null}
     </Pressable>
@@ -512,11 +514,12 @@ export function TaskExecutionScreen({
   taskId: string;
   executionId: string;
 }) {
+  useI18n();
   const { colors } = useApp();
   const contentStyle = usePageContentStyle();
   const [execution, setExecution] = useState<ScheduleExecution | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [stopping, setStopping] = useState(false);
   const transcript = useRef<ScrollView>(null);
   const answerOffset = useRef(0);
@@ -541,10 +544,10 @@ export function TaskExecutionScreen({
       .scheduleExecution(taskId, executionId)
       .then(setExecution)
       .catch((reason) =>
-        setError(reason instanceof Error ? reason.message : "加载失败"),
+        setError(errorForDisplay(reason, "error.load")),
       );
   }, [taskId, executionId]);
-  const stream = useRunStream(refresh, () => setError("请重新登录"));
+  const stream = useRunStream(refresh, () => setError(localizedError("error.signInAgain")));
   useEffect(() => {
     setLoading(true);
     void api
@@ -559,7 +562,7 @@ export function TaskExecutionScreen({
             .catch(() => undefined);
       })
       .catch((reason) =>
-        setError(reason instanceof Error ? reason.message : "加载失败"),
+        setError(errorForDisplay(reason, "error.load")),
       )
       .finally(() => setLoading(false));
     return () => stream.clear();
@@ -572,7 +575,7 @@ export function TaskExecutionScreen({
     try {
       stream.follow(await api.cancelRun(snapshot.run_id));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "停止失败");
+      setError(errorForDisplay(reason, "error.stop"));
     } finally {
       setStopping(false);
     }
@@ -580,12 +583,12 @@ export function TaskExecutionScreen({
   return (
     <View style={[screenStyles.fill, { backgroundColor: colors.canvas }]}>
       <PageHeader
-        title="执行结果"
+        title={t("schedule.result")}
         right={
           snapshot && isActiveStatus(snapshot.status) ? (
             <ActionIcon
               icon={Square}
-              label="停止任务"
+              label={t("schedule.stop")}
               disabled={stopping || snapshot.status === "cancelling"}
               onPress={() => void stop()}
             />
@@ -617,8 +620,7 @@ export function TaskExecutionScreen({
               style={styles.executionTop}
             >
               <AppText muted size={13}>
-                打开对话
-              </AppText>
+                {t("chat.open")}</AppText>
               <ArrowUpRight size={15} color={colors.muted} />
             </Pressable>
           )}
@@ -660,7 +662,7 @@ export function TaskExecutionScreen({
               <ArtifactCards files={execution?.artifacts} />
             </>
           )}
-          <ErrorNotice error={execution?.error} />
+          <ErrorNotice error={execution?.error ? userFacingRunError(execution.error, Boolean(execution.artifacts?.length), execution.error_code) : undefined} />
         </ScrollView>
       )}
     </View>

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"ochi/server/internal/agent"
@@ -87,7 +88,7 @@ func TestLateCommentaryRemovesOnlyMatchingAnswerSegment(t *testing.T) {
 func TestFailedPendingReplyRemainsReadableWithoutBecomingFinal(t *testing.T) {
 	r := processRun(t)
 	_ = r.AppendText("partial", "Checking incomplete sources", true)
-	if err := r.Finalize(StatusFailed, "upstream lost", func(snapshot Snapshot) error {
+	if err := r.Finalize(StatusFailed, errors.New("upstream lost"), func(snapshot Snapshot) error {
 		if len(snapshot.Timeline) != 1 || !snapshot.Timeline[0].Pending || snapshot.Timeline[0].Text != snapshot.Output {
 			t.Fatal("failure discarded unconfirmed text or marked it final")
 		}
@@ -179,7 +180,7 @@ func TestHistoryPublicReplyPreservesMathAndCodeAcrossReasoning(t *testing.T) {
 	_ = r.AppendText("code", "    first()\n", true)
 	_ = r.AppendReasoning(agent.ReasoningPart{ID: "thought-2", Kind: "reasoning", Text: "Private check"})
 	_ = r.AppendText("code", "    second()\n", true)
-	if err := r.Finalize(StatusFailed, "stream failed", func(snapshot Snapshot) error {
+	if err := r.Finalize(StatusFailed, errors.New("stream failed"), func(snapshot Snapshot) error {
 		if got := PublicReply(snapshot); got != "$E = mc^2$\n\n    first()\n    second()\n" {
 			t.Fatalf("history projection corrupted Markdown fragments: %q", got)
 		}

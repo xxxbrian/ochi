@@ -1,4 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { localizedError, type DisplayError } from "../lib/errors";
+import { getLocale, t, useI18n } from "../lib/i18n";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { RefreshCw } from "lucide-react-native";
 import { WebView } from "react-native-webview";
@@ -12,27 +14,37 @@ import {
 } from "../components/ScreenChrome";
 
 export function ComputerScreen() {
-  return <TrustedWebScreen title="电脑" path="/native/computer" />;
+  useI18n();
+  return <TrustedWebScreen title={t("computer.title")} path="/native/computer" />;
 }
 export function AdminScreen() {
-  return <TrustedWebScreen title="管理后台" path="/admin/providers" />;
+  useI18n();
+  return <TrustedWebScreen title={t("admin.title")} path="/admin/providers" />;
 }
 
 function TrustedWebScreen({ title, path }: { title: string; path: string }) {
+  const { locale } = useI18n();
   const { colors, dark } = useTheme();
   const insets = useSafeAreaInsets();
   const ref = useRef<WebView>(null);
   const [retry, setRetry] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const server = getAPIBaseURL();
   const configured = isConfiguredAPIBaseURL(server);
+  // Bootstrap once; live language changes must not reload the remote desktop.
   const source = useMemo(
-    () => configured ? webViewSource(path) : undefined,
+    () => configured ? webViewSource(path === "/native/computer" ? `${path}?locale=${getLocale()}` : path) : undefined,
     [path, retry, server, configured],
   );
   const origin = configured ? new URL(server).origin : undefined;
   const documentScript = `document.documentElement.dataset.theme='${dark ? "dark" : "light"}';document.documentElement.dataset.nativeShell='true';true;`;
+  function updateViewerLocale() {
+    if (path === "/native/computer") ref.current?.injectJavaScript(
+      `window.dispatchEvent(new CustomEvent('ochi:native-locale',{detail:{locale:${JSON.stringify(getLocale())}}}));true;`,
+    );
+  }
+  useEffect(updateViewerLocale, [locale, path]);
   return (
     <View style={{ flex: 1, backgroundColor: colors.canvas }}>
       <PageHeader
@@ -40,7 +52,7 @@ function TrustedWebScreen({ title, path }: { title: string; path: string }) {
         right={
           <ActionIcon
             icon={RefreshCw}
-            label="重新连接"
+            label={t("computer.reconnect")}
             onPress={() => {
               setError("");
               setLoading(true);
@@ -49,7 +61,7 @@ function TrustedWebScreen({ title, path }: { title: string; path: string }) {
           />
         }
       />
-      <ErrorNotice error={source ? error : "请先设置服务地址"} safeArea />
+      <ErrorNotice error={source ? error : t("error.configureServer")} safeArea />
       <View style={{ flex: 1, marginLeft: insets.left, marginRight: insets.right, marginBottom: insets.bottom }}>
         {source && (
           <WebView
@@ -66,13 +78,13 @@ function TrustedWebScreen({ title, path }: { title: string; path: string }) {
             keyboardDisplayRequiresUserAction={false}
             injectedJavaScriptBeforeContentLoaded={documentScript}
             injectedJavaScript={documentScript}
-            onLoadEnd={() => setLoading(false)}
-            onError={(event) => {
+            onLoadEnd={() => { updateViewerLocale(); setLoading(false); }}
+            onError={() => {
               setLoading(false);
-              setError(event.nativeEvent.description || "无法连接");
+              setError(localizedError("error.connect"));
             }}
             onHttpError={() => {
-              setError("无法访问");
+              setError(localizedError("error.forbidden"));
               setLoading(false);
             }}
             onShouldStartLoadWithRequest={(request) => {

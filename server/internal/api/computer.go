@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 )
 
 type desktopSource interface {
@@ -156,7 +156,7 @@ func (s *Server) desktopBackend() (desktopSource, error) {
 			return source, nil
 		}
 	}
-	return nil, errors.New("电脑暂不可用")
+	return nil, i18n.New("computer_unavailable")
 }
 func (s *Server) desktopSession(r *http.Request, sessionID string) (agent.RunScope, error) {
 	userID := currentUser(r).ID
@@ -235,7 +235,7 @@ func (s *Server) activateDesktop(ctx context.Context, scope agent.RunScope) erro
 }
 func (s *Server) computerControl(w http.ResponseWriter, r *http.Request) {
 	if !sameOrigin(r) {
-		writeError(w, http.StatusForbidden, errors.New("无法访问"))
+		writeError(w, http.StatusForbidden, i18n.New("forbidden"))
 		return
 	}
 	var req struct {
@@ -260,7 +260,7 @@ func (s *Server) computerControl(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
 	if err = s.AcquireDesktopControl(ctx, scope.UserID, scope.SessionID); err != nil {
-		writeError(w, http.StatusRequestTimeout, errors.New("等待电脑已取消"))
+		writeError(w, http.StatusRequestTimeout, i18n.New("computer_wait_cancelled"))
 		return
 	}
 	// Provision the desktop without selecting a session tab or starting a browser.
@@ -279,11 +279,11 @@ func (s *Server) computerControl(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) computerDesktop(w http.ResponseWriter, r *http.Request) {
 	if !sameOrigin(r) {
-		writeError(w, http.StatusForbidden, errors.New("无法访问"))
+		writeError(w, http.StatusForbidden, i18n.New("forbidden"))
 		return
 	}
 	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
-		writeError(w, http.StatusBadRequest, errors.New("需要 WebSocket 连接"))
+		writeError(w, http.StatusBadRequest, i18n.New("websocket_required"))
 		return
 	}
 	scope, err := s.desktopSession(r, r.URL.Query().Get("session_id"))
@@ -299,7 +299,7 @@ func (s *Server) computerDesktop(w http.ResponseWriter, r *http.Request) {
 	control := r.URL.Query().Get("control") == "1"
 	state := s.computerStateValue(r.Context(), scope.UserID, scope.SessionID)
 	if control && state["control_enabled"] != true {
-		writeError(w, http.StatusForbidden, errors.New("请先接管电脑"))
+		writeError(w, http.StatusForbidden, i18n.New("computer_takeover_required"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
@@ -333,17 +333,17 @@ func (s *Server) computerDesktop(w http.ResponseWriter, r *http.Request) {
 	}
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		if resp.StatusCode != http.StatusSwitchingProtocols {
-			return errors.New("远程桌面连接失败")
+			return i18n.New("computer_connection_failed")
 		}
 		{
 			upstream, ok := resp.Body.(io.ReadWriteCloser)
 			if !ok {
-				return errors.New("远程桌面连接不可用")
+				return i18n.New("computer_connection_unavailable")
 			}
 			key := desktopConnectionKey(scope.UserID, scope.SessionID)
 			if control && s.computerStateValue(r.Context(), scope.UserID, scope.SessionID)["control_enabled"] != true {
 				_ = upstream.Close()
-				return errors.New("电脑接管已结束")
+				return i18n.New("computer_takeover_ended")
 			}
 			conn := &desktopConnection{ReadWriteCloser: upstream}
 			conn.onClose = func() {
@@ -359,7 +359,7 @@ func (s *Server) computerDesktop(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
-		writeError(w, http.StatusBadGateway, errors.New("远程桌面连接失败"))
+		writeError(w, http.StatusBadGateway, i18n.New("computer_connection_failed"))
 	}
 	proxy.ServeHTTP(w, r)
 }

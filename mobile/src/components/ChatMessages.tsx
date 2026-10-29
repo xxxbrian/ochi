@@ -1,3 +1,5 @@
+import { errorForDisplay, localizedError, errorText, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -19,7 +21,7 @@ import {
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import * as Clipboard from "expo-clipboard";
 import type { Message, Snapshot, WaitingInput } from "../lib/types";
-import { api, isActiveStatus } from "../lib/api";
+import { api, isActiveStatus, userFacingRunError } from "../lib/api";
 import { publicReply, reconcileTerminalText, unrepresentedOutput } from "../lib/processTimeline";
 import { useTheme } from "../providers/AppProvider";
 import { LongPressMenu } from "../ui/LongPressMenu";
@@ -79,6 +81,7 @@ export const ChatMessages = memo(function ChatMessages({
   onEdit,
   bottomInset = 16,
 }: Props) {
+  useI18n();
   const { colors } = useTheme();
   const list = useRef<FlashListRef<Row>>(null);
   const atBottom = useRef(true);
@@ -222,8 +225,7 @@ export const ChatMessages = memo(function ChatMessages({
                 <ActivityIndicator color={colors.muted} />
               ) : (
                 <AppText muted size={12}>
-                  更早的消息
-                </AppText>
+                  {t("chat.earlierMessages")}</AppText>
               )}
             </Pressable>
           ) : null
@@ -252,7 +254,7 @@ export const ChatMessages = memo(function ChatMessages({
       />
       {showJump && (viewportHeight === 0 || viewportHeight - bottomInset >= 44) && (
         <Pressable
-          accessibilityLabel="回到最新消息"
+          accessibilityLabel={t("chat.latestMessages")}
           onPress={jumpToLatest}
           style={[
             styles.jump,
@@ -277,6 +279,7 @@ const UserBubble = memo(function UserBubble({
   message: Message;
   onEdit?: Props["onEdit"];
 }) {
+  useI18n();
   const { colors } = useTheme();
   return (
       <View style={styles.userRow}>
@@ -289,8 +292,8 @@ const UserBubble = memo(function UserBubble({
         >
           <ArtifactCards files={message.attachments} />
           <LongPressMenu label={message.content} items={[
-            { key: "copy", title: "复制", icon: Copy, onPress: () => void Clipboard.setStringAsync(message.content) },
-            ...(onEdit ? [{ key: "edit", title: "编辑消息", icon: Pencil, onPress: () => onEdit(message) }] : []),
+            { key: "copy", title: t("common.copy"), icon: Copy, onPress: () => void Clipboard.setStringAsync(message.content) },
+            ...(onEdit ? [{ key: "edit", title: t("chat.editMessage"), icon: Pencil, onPress: () => onEdit(message) }] : []),
           ]}>
             <View style={[styles.userBubble, { backgroundColor: colors.hover }]}>
               <AppText size={16}>{message.content}</AppText>
@@ -320,13 +323,14 @@ const AssistantBubble = memo(function AssistantBubble({
   readingTranscript?: boolean;
   onViewAnswer?: (offset: number) => void;
 }) {
+  useI18n();
   const { colors } = useTheme();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<Snapshot | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [recovery, setRecovery] = useState({ pending: false, error: "" });
+  const [recovery, setRecovery] = useState<{ pending: boolean; error: DisplayError }>({ pending: false, error: "" });
   const [recoveryAttempt, setRecoveryAttempt] = useState(0);
   const cachedSnapshot = useRef<Snapshot | null>(null);
   const owner = useRef(0);
@@ -340,10 +344,10 @@ const AssistantBubble = memo(function AssistantBubble({
   const current = saved && needsTerminal ? { ...saved, status: message.run_status!,
     output: message.run_status === "completed" ? message.content || saved.output : saved.output,
     timeline: message.run_status === "completed" ? reconcileTerminalText(saved, message.content) : saved.timeline,
-    error: message.run_error || saved.error,
+    error: message.run_error || saved.error, error_code: message.run_error_code || saved.error_code,
     created_at: message.run_created_at ?? saved.created_at, updated_at: message.run_updated_at ?? saved.updated_at,
     artifacts: message.attachments ?? saved.artifacts, waiting_input: undefined }
-    : saved && !saved.error && message.run_error ? { ...saved, error: message.run_error } : saved;
+    : saved && !saved.error && message.run_error ? { ...saved, error: message.run_error, error_code: message.run_error_code } : saved;
   const status = current?.status ?? message.run_status;
   const active = isActiveStatus(status);
   const persistedPartial = needsTerminal && (status === "failed" || status === "cancelled" || status === "interrupted") && Boolean(message.content.trim());
@@ -385,19 +389,19 @@ const AssistantBubble = memo(function AssistantBubble({
           new Promise<never>((_resolve, reject) => {
             timeout = setTimeout(() => {
               requestController.abort();
-              reject(new Error("处理记录同步超时"));
+              reject(localizedError("error.processSyncTimeout"));
             }, 10_000);
           }),
         ]);
         if (owner.current !== token) return;
         if (loaded.run_id !== runId || loaded.seq < (saved?.seq ?? 0) || isActiveStatus(loaded.status))
-          throw new Error("处理记录尚未同步");
+          throw localizedError("error.processNotSynced");
         setHistory(loaded);
         setRecovery({ pending: false, error: "" });
       } catch {
         if (owner.current !== token) return;
         if (attempt < 2) retryTimer = setTimeout(() => void recover(attempt + 1), attempt === 0 ? 500 : 1_500);
-        else setRecovery({ pending: false, error: "处理记录暂时无法同步" });
+        else setRecovery({ pending: false, error: localizedError("error.processSync") });
       } finally {
         if (timeout !== undefined) clearTimeout(timeout);
         timeout = undefined;
@@ -421,7 +425,7 @@ const AssistantBubble = memo(function AssistantBubble({
       const loaded = await api.run(runId);
       if (owner.current === token && loaded.run_id === runId) setHistory(loaded);
     } catch (reason) {
-      if (owner.current === token) setError(reason instanceof Error ? reason.message : "加载失败");
+      if (owner.current === token) setError(errorForDisplay(reason, "error.load"));
     } finally {
       if (owner.current === token) setHistoryLoading(false);
     }
@@ -433,7 +437,7 @@ const AssistantBubble = memo(function AssistantBubble({
   }
   function retry() {
     if (!onRetry) return;
-    void onRetry({ ...message, content }).catch((reason) => setError(reason instanceof Error ? reason.message : "重试失败"));
+    void onRetry({ ...message, content }).catch((reason) => setError(errorForDisplay(reason, "error.retry")));
   }
   return (
     <View style={styles.assistant}>
@@ -443,7 +447,7 @@ const AssistantBubble = memo(function AssistantBubble({
       ) : (
         <View>
           <Pressable onPress={() => void loadHistory()} style={{ minHeight: 34, flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 8 }}>
-            <AppText muted size={13}>{message.run_status === "completed" ? "已完成" : message.run_status === "cancelled" ? "已停止" : message.run_status === "failed" || message.run_status === "interrupted" ? "未完成" : "处理过程"}{message.step_count ? ` ${message.step_count} 步` : ""}</AppText>
+            <AppText muted size={13}>{message.run_status === "completed" ? t("status.completed") : message.run_status === "cancelled" ? t("status.stopped") : message.run_status === "failed" || message.run_status === "interrupted" ? t("status.incomplete") : t("process.history")}{message.step_count ? ` ${t("process.steps", { count: message.step_count })}` : ""}</AppText>
             <ProcessElapsed createdAt={message.run_created_at} updatedAt={message.run_updated_at} active={active} />
           </Pressable>
           {historyLoading && <ActivityIndicator color={colors.muted} />}
@@ -451,9 +455,9 @@ const AssistantBubble = memo(function AssistantBubble({
       ))}
       {needsTerminal && (recovery.pending || recovery.error) && (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <AppText muted size={12}>{recovery.pending ? "正在同步处理记录" : recovery.error}</AppText>
-          {!recovery.pending && <Pressable accessibilityRole="button" accessibilityLabel="重试同步处理记录" onPress={() => setRecoveryAttempt((attempt) => attempt + 1)} style={{ minHeight: 32, justifyContent: "center" }}>
-            <AppText size={12}>重试</AppText>
+          <AppText muted size={12}>{recovery.pending ? t("process.syncing") : errorText(recovery.error)}</AppText>
+          {!recovery.pending && <Pressable accessibilityRole="button" accessibilityLabel={t("process.retrySync")} onPress={() => setRecoveryAttempt((attempt) => attempt + 1)} style={{ minHeight: 32, justifyContent: "center" }}>
+            <AppText size={12}>{t("common.retry")}</AppText>
           </Pressable>}
         </View>
       )}
@@ -472,21 +476,21 @@ const AssistantBubble = memo(function AssistantBubble({
         <View style={styles.actions}>
           <ActionIcon
             icon={copied ? Check : Copy}
-            label="复制回复"
+            label={t("chat.copyReply")}
             size={17}
             style={styles.messageAction}
             onPress={() => void copy()}
           />
           <ActionIcon
             icon={Share2}
-            label="分享回复"
+            label={t("chat.shareReply")}
             size={17}
             style={styles.messageAction}
             onPress={() => void Share.share({ message: content })}
           />
           {onRetry && <ActionIcon
             icon={RotateCcw}
-            label="重新生成"
+            label={t("chat.regenerate")}
             size={17}
             style={styles.messageAction}
             onPress={retry}
@@ -497,17 +501,16 @@ const AssistantBubble = memo(function AssistantBubble({
         <View style={styles.failure}>
           <AppText size={14} style={{ color: colors.error }}>
             {files?.length
-              ? "任务未完成，已有文件仍可使用。"
-              : content.trim() ? "回复未完成，已生成的内容已保留。" : "未能完成回复。"}
+              ? t("error.runFilesAvailable")
+              : content.trim() ? t("error.replyPartial") : t("error.replyFailed")}
           </AppText>
           {onRetry && <Pressable onPress={retry}>
             <AppText size={14} weight="medium">
-              重试
-            </AppText>
+              {t("common.retry")}</AppText>
           </Pressable>}
         </View>
       )}
-      {!current && <ErrorNotice error={message.run_error} />}
+      {!current && <ErrorNotice error={message.run_error ? userFacingRunError(message.run_error, Boolean(files?.length), message.run_error_code) : undefined} />}
       <ErrorNotice error={error} />
     </View>
   );
@@ -520,10 +523,11 @@ export function WaitingCard({
   waiting: WaitingInput;
   onResume: (answer: string) => Promise<void>;
 }) {
+  useI18n();
   const { colors, fonts } = useTheme();
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   async function resume(value: string) {
     if (!value.trim() || busy) return;
     setBusy(true);
@@ -531,7 +535,7 @@ export function WaitingCard({
     try {
       await onResume(value);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "发送失败");
+      setError(errorForDisplay(reason, "error.send"));
     } finally {
       setBusy(false);
     }
@@ -546,30 +550,27 @@ export function WaitingCard({
       {waiting.kind === "computer_permission" && (
         <View style={styles.waitingHeading}>
           <ShieldCheck size={19} color={colors.text} />
-          <AppText weight="medium">使用电脑</AppText>
+          <AppText weight="medium">{t("permission.useComputer")}</AppText>
         </View>
       )}
       <AppText size={15}>{waiting.question}</AppText>
       {waiting.kind === "computer_permission" ? (
         <View style={styles.permissionActions}>
           <Button busy={busy} onPress={() => void resume("allow_once")}>
-            仅本次
-          </Button>
+            {t("permission.once")}</Button>
           <Button
             secondary
             disabled={busy}
             onPress={() => void resume("allow_session")}
           >
-            此对话允许
-          </Button>
+            {t("permission.session")}</Button>
           <Pressable
             disabled={busy}
             onPress={() => void resume("deny")}
             style={{ padding: 10 }}
           >
             <AppText muted size={14}>
-              不允许
-            </AppText>
+              {t("permission.deny")}</AppText>
           </Pressable>
         </View>
       ) : (
@@ -592,7 +593,7 @@ export function WaitingCard({
             <TextInput
               value={answer}
               onChangeText={setAnswer}
-              placeholder="输入回复"
+              placeholder={t("chat.enterReply")}
               placeholderTextColor={colors.subtle}
               style={{
                 flex: 1,
@@ -607,8 +608,7 @@ export function WaitingCard({
               busy={busy}
               onPress={() => void resume(answer)}
             >
-              继续
-            </Button>
+              {t("common.continue")}</Button>
           </View>
         </>
       )}

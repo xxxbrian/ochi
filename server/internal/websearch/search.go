@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/product"
 )
 
@@ -60,28 +61,28 @@ func DefaultBaseURL(provider string) string {
 
 func Validate(c Config) error {
 	if c.Provider != "exa" && c.Provider != "brave" && c.Provider != "searxng" {
-		return errors.New("请选择 Exa、Brave 或 SearXNG")
+		return i18n.New("search_provider_invalid")
 	}
 	if c.MaxResults < 1 || c.MaxResults > 20 {
-		return errors.New("搜索结果上限须为 1 至 20")
+		return i18n.New("search_result_limit_invalid")
 	}
 	if c.TimeoutSeconds < 3 || c.TimeoutSeconds > 60 {
-		return errors.New("搜索超时须为 3 至 60 秒")
+		return i18n.New("search_timeout_invalid")
 	}
 	if c.BaseURL != "" {
 		u, err := url.Parse(c.BaseURL)
 		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" || !validPort(u) || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-			return errors.New("搜索服务地址须为 HTTP(S) 地址，不能包含账号、查询参数或片段")
+			return i18n.New("search_url_invalid")
 		}
 	}
 	if c.Enabled && c.BaseURL == "" {
-		return errors.New("请填写搜索服务地址")
+		return i18n.New("search_url_required")
 	}
 	if c.Enabled && c.Provider != "searxng" && strings.TrimSpace(c.APIKey) == "" {
-		return errors.New("请配置搜索服务的 API 密钥")
+		return i18n.New("search_api_key_unconfigured")
 	}
 	if strings.ContainsAny(c.APIKey, "\r\n") || len(c.APIKey) > 4096 {
-		return errors.New("搜索 API 密钥无效")
+		return i18n.New("search_api_key_invalid")
 	}
 	return nil
 }
@@ -95,13 +96,13 @@ func Search(ctx context.Context, c Config, query string, limit int) (Response, e
 		return response, err
 	}
 	if !c.Enabled {
-		return response, errors.New("网页搜索尚未启用")
+		return response, i18n.New("search_disabled")
 	}
 	if query == "" || utf8.RuneCountInString(query) > 600 || len(strings.Fields(query)) > 75 {
-		return response, errors.New("搜索词须为 1 至 600 字符，且不超过 75 个词")
+		return response, i18n.New("search_query_invalid")
 	}
 	if limit < 0 {
-		return response, errors.New("搜索结果数量无效")
+		return response, i18n.New("search_result_count_invalid")
 	}
 	if limit == 0 || limit > c.MaxResults {
 		limit = c.MaxResults
@@ -128,7 +129,7 @@ func Search(ctx context.Context, c Config, query string, limit int) (Response, e
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, base+path+"?"+params.Encode(), nil)
 	}
 	if err != nil {
-		return response, errors.New("搜索服务地址无效")
+		return response, i18n.New("search_url_invalid")
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", product.UserAgent())
@@ -149,33 +150,33 @@ func Search(ctx context.Context, c Config, query string, limit int) (Response, e
 	if err != nil {
 		if ctx.Err() != nil {
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return response, errors.New("搜索响应超时，请重试")
+				return response, i18n.New("search_timeout")
 			}
 			return response, ctx.Err()
 		}
-		return response, errors.New("暂时无法连接搜索服务")
+		return response, i18n.New("search_connection_failed")
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		switch res.StatusCode {
 		case 401, 403:
-			return response, errors.New("搜索服务鉴权失败，请检查配置")
+			return response, i18n.New("search_authentication_failed")
 		case 402:
-			return response, errors.New("搜索服务额度不足")
+			return response, i18n.New("search_quota_exhausted")
 		case 429:
-			return response, errors.New("搜索服务请求过于频繁，请稍后重试")
+			return response, i18n.New("search_rate_limited")
 		default:
-			return response, fmt.Errorf("搜索服务暂时不可用（HTTP %d）", res.StatusCode)
+			return response, i18n.With("search_http_error", map[string]any{"status": res.StatusCode})
 		}
 	}
 	const maxBody = 2 << 20
 	body, err := io.ReadAll(io.LimitReader(res.Body, maxBody+1))
 	if err != nil || len(body) > maxBody {
-		return response, errors.New("搜索结果过大或未完整接收")
+		return response, i18n.New("search_response_too_large")
 	}
 	results, err := decode(c.Provider, body)
 	if err != nil {
-		return response, errors.New("搜索服务返回了无效的结果")
+		return response, i18n.New("search_response_invalid")
 	}
 	seen := make(map[string]bool)
 	for _, item := range results {

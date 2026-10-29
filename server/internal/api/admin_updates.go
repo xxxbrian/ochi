@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/selfupdate"
 )
 
@@ -19,11 +20,11 @@ func (s *Server) registerUpdateRoutes(mux *http.ServeMux) {
 func (s *Server) adminUpdates(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if s.updater == nil {
-		writeError(w, http.StatusServiceUnavailable, errors.New("更新管理器尚未初始化"))
+		writeError(w, http.StatusServiceUnavailable, i18n.New("update_uninitialized"))
 		return
 	}
 	if r.Method == http.MethodGet {
-		writeJSON(w, http.StatusOK, s.updater.State())
+		writeJSON(w, http.StatusOK, s.updater.State().Localized(w.Header().Get("Content-Language")))
 		return
 	}
 	var state selfupdate.State
@@ -41,7 +42,7 @@ func (s *Server) adminUpdates(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if request.Revision == "" {
-			writeError(w, http.StatusBadRequest, errors.New("请选择已检查的更新构建"))
+			writeError(w, http.StatusBadRequest, i18n.New("update_choose_build"))
 			return
 		}
 		state, err = s.updater.Apply(request.Revision)
@@ -58,7 +59,7 @@ func (s *Server) adminUpdates(w http.ResponseWriter, r *http.Request) {
 		writeError(w, code, err)
 		return
 	}
-	writeJSON(w, status, state)
+	writeJSON(w, status, state.Localized(w.Header().Get("Content-Language")))
 	if r.URL.Path == "/api/admin/updates/restart" {
 		if flusher, ok := w.(http.Flusher); ok {
 			flusher.Flush()

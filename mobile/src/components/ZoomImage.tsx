@@ -1,3 +1,5 @@
+import { localizedError, errorText, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Image, Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import {
@@ -27,11 +29,12 @@ export function ZoomImage({ file, imageRatio, transitionProgress, dragX, dragY, 
   dragY?: SharedValue<number>;
   onDismiss?: () => void;
 }) {
+  useI18n();
   const { fonts } = useTheme();
   const reducedMotion = useReducedMotion();
   const viewport = useWindowDimensions();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [ratio, setRatio] = useState(
     file.generation?.width && file.generation.height
@@ -238,7 +241,7 @@ export function ZoomImage({ file, imageRatio, transitionProgress, dragX, dragY, 
                 onLoadEnd={() => setLoading(false)}
                 onError={(event) => {
                   setLoading(false);
-                  setError("无法加载图片");
+                  setError(localizedError("error.imageLoad"));
                   console.warn(
                     "Ochi image preview load failed",
                     event.nativeEvent.error,
@@ -257,7 +260,7 @@ export function ZoomImage({ file, imageRatio, transitionProgress, dragX, dragY, 
         )}
         {error && (
           <View style={[StyleSheet.absoluteFill, { justifyContent: "center" }]}>
-            <Text accessibilityRole="alert" style={{ color: "#ff9999", fontFamily: fonts.regular, fontSize: 14, textAlign: "center" }}>{error}</Text>
+            <Text accessibilityRole="alert" style={{ color: "#ff9999", fontFamily: fonts.regular, fontSize: 14, textAlign: "center" }}>{errorText(error)}</Text>
           </View>
         )}
       </View>

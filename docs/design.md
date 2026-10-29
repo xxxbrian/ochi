@@ -17,6 +17,14 @@ Detailed implementation constraints live in the client `AGENTS.md` files.
 generates `tokens.css`; do not hand-edit that file. Native components reuse token
 values with platform-specific surface treatments, not Web CSS.
 
+The interface supports English, Simplified Chinese and Traditional Chinese.
+Language selection belongs in settings and is independent of chat language.
+Switching it updates existing labels, menus and process/error summaries without
+remounting inputs or closing the keyboard. Layouts must accommodate English
+labels and locale-formatted values; preserve the same compact hierarchy in all
+three languages. Native system prompts use localized resources. User/model
+content, custom titles and raw diagnostics retain their original language.
+
 ## Conversation
 
 The composer owns draft/editing state independently from the growing transcript.

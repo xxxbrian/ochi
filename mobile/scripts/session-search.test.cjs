@@ -1,3 +1,4 @@
+const { testI18n } = require('./helpers/i18n.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -57,6 +58,8 @@ function harness(platform = 'ios', drawer = false) {
       setTimeout: (fn, ms) => { const id = ++timerId; timers.set(id, { fn, ms }); return id; }, clearTimeout: (id) => timers.delete(id),
       requestAnimationFrame: (fn) => { const id = ++frameId; frames.set(id, fn); return id; }, cancelAnimationFrame: (id) => frames.delete(id),
       require(name) {
+        const translated = testI18n.importFor(name); if (translated) return translated;
+
         if (name === 'react') return hooks;
         if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'Fragment' };
         if (name === 'react-native') return {

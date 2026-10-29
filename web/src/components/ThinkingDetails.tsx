@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { lazy, memo, Suspense, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Lightbulb } from "lucide-react";
 import type { ReasoningPart } from "../lib/types";
@@ -7,6 +8,7 @@ import "./thinking.css";
 const MarkdownContent = lazy(() => import("./MarkdownContent"));
 
 export function OchiActivityMark({ working = true }: { working?: boolean }) {
+  useI18n();
   return (
     <span className={`ochi-activity-mark${working ? " is-working" : ""}`} aria-hidden="true">
       <span className="ochi-mark-face">
@@ -20,6 +22,7 @@ export function OchiActivityMark({ working = true }: { working?: boolean }) {
 }
 
 const ThinkingPart = memo(function ThinkingPart({ part, active }: { part: ReasoningPart; active: boolean }) {
+  useI18n();
   const content = useMemo(() => formatReasoningDisplay(part.text), [part.text]);
   const [open, setOpen] = useState(false);
   const [long, setLong] = useState(false);
@@ -45,7 +48,7 @@ const ThinkingPart = memo(function ThinkingPart({ part, active }: { part: Reason
         </Suspense>
       </div>
     </div>
-    {long || open ? <button className="thinking-part-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "收起思考" : "展开思考"}</button> : null}
+    {long || open ? <button className="thinking-part-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? t("process.collapseThinking") : t("process.expandThinking")}</button> : null}
   </div>;
 });
 
@@ -56,6 +59,7 @@ export const ThinkingContent = memo(function ThinkingContent({
   parts: ReasoningPart[];
   active?: boolean;
 }) {
+  useI18n();
   return (
     <div className="thinking-content">
       <span className="thinking-rail" aria-hidden="true"><Lightbulb size={14} /></span>

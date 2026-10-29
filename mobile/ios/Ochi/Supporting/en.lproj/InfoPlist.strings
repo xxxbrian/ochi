@@ -1,0 +1,4 @@
+NSCameraUsageDescription = "Take photos to add to a chat.";
+NSPhotoLibraryUsageDescription = "Choose photos to add to a chat.";
+NSLocalNetworkUsageDescription = "Connect to your Ochi server.";
+NSFaceIDUsageDescription = "Use Face ID to access your Ochi credentials.";

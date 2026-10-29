@@ -4,6 +4,8 @@ WORKDIR /src/web
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
+COPY shared/i18n/ /src/shared/i18n/
+COPY server/internal/i18n/messages.json /src/server/internal/i18n/messages.json
 RUN pnpm build
 
 FROM golang:1.27-alpine AS build

@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import type { ComputerPermissionAnswer, WaitingInput } from "../lib/types";
@@ -5,16 +6,16 @@ import "./execution.css";
 
 const computerChoices: {
   value: ComputerPermissionAnswer;
-  label: string;
+  labelKey: Parameters<typeof t>[0];
   className: string;
 }[] = [
-  { value: "allow_once", label: "仅本次", className: "primary-button" },
+  { value: "allow_once", labelKey: "permission.once", className: "primary-button" },
   {
     value: "allow_session",
-    label: "此对话允许",
+    labelKey: "permission.conversation",
     className: "secondary-button",
   },
-  { value: "deny", label: "不允许", className: "text-button" },
+  { value: "deny", labelKey: "permission.deny", className: "text-button" },
 ];
 
 export function WaitingInputCard({
@@ -26,6 +27,7 @@ export function WaitingInputCard({
   runId: string;
   onResume: (runId: string, answer: string) => Promise<void>;
 }) {
+  useI18n();
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -38,7 +40,7 @@ export function WaitingInputCard({
       await onResume(runId, value.trim());
       setAnswer("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "发送失败");
+      setError(reason instanceof Error ? reason.message : t("error.send"));
     } finally {
       setBusy(false);
     }
@@ -49,7 +51,7 @@ export function WaitingInputCard({
       <section className="permission-card" aria-busy={busy}>
         <div className="permission-heading">
           <ShieldCheck size={18} />
-          <h3>使用电脑</h3>
+          <h3>{t("permission.computer")}</h3>
         </div>
         <p>{waiting.question}</p>
         <div className="permission-actions">
@@ -61,7 +63,7 @@ export function WaitingInputCard({
               disabled={busy}
               onClick={() => void resume(choice.value)}
             >
-              {choice.label}
+              {t(choice.labelKey)}
             </button>
           ))}
         </div>
@@ -101,8 +103,8 @@ export function WaitingInputCard({
             if (event.key === "Enter" && !event.nativeEvent.isComposing)
               void resume();
           }}
-          placeholder="输入回复"
-          aria-label="回复"
+          placeholder={t("waiting.placeholder")}
+          aria-label={t("waiting.reply")}
           disabled={busy}
         />
         <button
@@ -110,7 +112,7 @@ export function WaitingInputCard({
           onClick={() => void resume()}
           disabled={!answer.trim() || busy}
         >
-          继续
+          {t("common.continue")}
         </button>
       </div>
       {error && (

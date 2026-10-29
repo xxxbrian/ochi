@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { memo, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -72,7 +73,7 @@ export const ArtifactCards = memo(function ArtifactCards({
               <Pressable
                 style={styles.fileOpen}
                 onPress={() => setSelected({ file })}
-                accessibilityLabel={`打开 ${file.name}`}
+                accessibilityLabel={t("file.openNamed", { name: file.name })}
               >
                 <Icon size={20} color={colors.muted} strokeWidth={1.7} />
                 <View style={{ flex: 1 }}>
@@ -91,7 +92,7 @@ export const ArtifactCards = memo(function ArtifactCards({
                 <ActionIcon
                   icon={X}
                   size={16}
-                  label={`移除 ${file.name}`}
+                  label={t("file.removeNamed", { name: file.name })}
                   onPress={() => onRemove(file.id)}
                 />
               )}
@@ -114,15 +115,16 @@ function ImageThumbnail({ file, hidden, onPress, onRemove }: {
   const [ratio, setRatio] = useState<number>();
   return (
     <View style={[styles.thumbnail, { backgroundColor: colors.surface }]}>
-      <Pressable ref={view} collapsable={false} accessibilityLabel={`查看 ${file.name}`} onPress={() => measureImageOrigin(view.current, 12, onPress, ratio)}>
+      <Pressable ref={view} collapsable={false} accessibilityLabel={t("file.viewNamed", { name: file.name })} onPress={() => measureImageOrigin(view.current, 12, onPress, ratio)}>
         <Image source={imageSource(file)} style={[styles.thumbnailImage, { opacity: hidden ? 0 : 1 }]} onLoad={(event) => { const { width, height } = event.nativeEvent.source; if (width > 0 && height > 0) setRatio(width / height); }} />
       </Pressable>
-      {onRemove && <ActionIcon icon={X} size={13} label={`移除 ${file.name}`} onPress={() => onRemove(file.id)} style={{ position: "absolute", top: 2, right: 2, width: 24, height: 24, backgroundColor: colors.surface }} />}
+      {onRemove && <ActionIcon icon={X} size={13} label={t("file.removeNamed", { name: file.name })} onPress={() => onRemove(file.id)} style={{ position: "absolute", top: 2, right: 2, width: 24, height: 24, backgroundColor: colors.surface }} />}
     </View>
   );
 }
 
 function ImageCard({ file, hidden, onPress }: { file: Artifact; hidden?: boolean; onPress: (origin?: ImageOrigin) => void }) {
+  useI18n();
   const { colors } = useTheme();
   const view = useRef<View>(null);
   const generation = file.generation;
@@ -146,7 +148,7 @@ function ImageCard({ file, hidden, onPress }: { file: Artifact; hidden?: boolean
     <Pressable
       ref={view}
       collapsable={false}
-      accessibilityLabel={generation?.prompt || `查看 ${file.name}`}
+      accessibilityLabel={generation?.prompt || t("file.viewNamed", { name: file.name })}
       onPress={() => measureImageOrigin(view.current, 16, onPress, ratio)}
       style={[styles.imageFrame, { backgroundColor: colors.surface }]}
     >
@@ -156,7 +158,7 @@ function ImageCard({ file, hidden, onPress }: { file: Artifact; hidden?: boolean
         onLoadEnd={() => setImageLoading(false)}
         onError={(event) => {
           setImageLoading(false);
-          setImageError("无法加载图片");
+          setImageError(t("error.imageLoad"));
           console.warn("Ochi image load failed", event.nativeEvent.error);
         }}
         style={{ width: "100%", aspectRatio: ratio, opacity: hidden ? 0 : 1 }}

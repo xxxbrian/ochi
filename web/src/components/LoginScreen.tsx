@@ -1,9 +1,11 @@
+import { t, useI18n } from "../lib/i18n";
 import { type FormEvent, useState } from "react";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import { api } from "../lib/api";
 import type { User } from "../lib/types";
 
 export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
+  useI18n();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -16,7 +18,7 @@ export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
     try {
       onLogin(await api.login(username.trim(), password));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "登录失败");
+      setError(reason instanceof Error ? reason.message : t("error.login"));
     } finally {
       setBusy(false);
     }
@@ -26,7 +28,7 @@ export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
       <form className="login-form" onSubmit={submit}>
         <h1>Ochi</h1>
         <label htmlFor="username" className="form-field">
-          <span>账号</span>
+          <span>{t("login.username")}</span>
           <input
             id="username"
             autoComplete="username"
@@ -36,7 +38,7 @@ export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
           />
         </label>
         <label htmlFor="password" className="form-field">
-          <span>密码</span>
+          <span>{t("login.password")}</span>
           <input
             id="password"
             type="password"
@@ -59,7 +61,7 @@ export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
             <LoaderCircle size={19} className="spin" />
           ) : (
             <>
-              <span>登录</span>
+              <span>{t("login.signIn")}</span>
               <ArrowRight size={18} />
             </>
           )}

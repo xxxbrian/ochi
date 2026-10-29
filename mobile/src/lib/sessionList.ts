@@ -1,9 +1,11 @@
+import { errorForDisplay, type DisplayError } from "./errors";
+import { t } from "./i18n";
 import type { Session, SessionPage } from './types';
 
 export type SessionListSnapshot = {
   page: SessionPage | null;
   refreshing: boolean;
-  error: string;
+  error: DisplayError;
 };
 
 export function createSessionListCache(load: (signal: AbortSignal) => Promise<SessionPage>) {
@@ -37,7 +39,7 @@ export function createSessionListCache(load: (signal: AbortSignal) => Promise<Se
       publish({ page: next, refreshing: false, error: '' });
       return next;
     }).catch((reason: unknown) => {
-      if (owner === generation) publish({ ...snapshot, refreshing: false, error: reason instanceof Error ? reason.message : '加载失败' });
+      if (owner === generation) publish({ ...snapshot, refreshing: false, error: errorForDisplay(reason, "error.load") });
       return null;
     }).finally(() => {
       if (owner === generation) pending = null;
@@ -107,11 +109,11 @@ export function appendSessionPage(current: DrawerSessionList, page: SessionPage)
 
 export function sessionActivity(session: Session): { label: string; spinning: boolean } | null {
   switch (session.run_status ?? session.latest_run?.status) {
-    case 'running': return { label: '正在运行', spinning: true };
-    case 'cancelling': return { label: '正在停止', spinning: true };
-    case 'waiting_user': return { label: '等待回复', spinning: false };
-    case 'waiting_resource': return { label: '等待资源', spinning: false };
-    case 'queued': return { label: '排队中', spinning: false };
-    default: return session.queued_count ? { label: `${session.queued_count} 条待处理`, spinning: false } : null;
+    case 'running': return { label: t("status.running"), spinning: true };
+    case 'cancelling': return { label: t("status.stopping"), spinning: true };
+    case 'waiting_user': return { label: t("status.waitingReply"), spinning: false };
+    case 'waiting_resource': return { label: t("status.waitingResource"), spinning: false };
+    case 'queued': return { label: t("status.queued"), spinning: false };
+    default: return session.queued_count ? { label: t("chat.queuedCount", { count: session.queued_count }), spinning: false } : null;
   }
 }

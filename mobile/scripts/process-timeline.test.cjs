@@ -1,3 +1,4 @@
+const { testI18n } = require('./helpers/i18n.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { createRequire } = require('node:module');
@@ -12,7 +13,9 @@ function load(file, imports = {}, tail = '', globals = {}) {
   const module = { exports: {} };
   vm.runInNewContext(output + tail, {
     module, exports: module.exports, URL, ...globals,
-    require(name) { if (name in imports) return imports[name]; throw new Error(`Unexpected import: ${name}`); },
+    require(name) {
+        const translated = testI18n.importFor(name); if (translated) return translated;
+ if (name in imports) return imports[name]; throw new Error(`Unexpected import: ${name}`); },
   }, { filename: file });
   return module.exports;
 }
@@ -383,11 +386,11 @@ test('native elapsed is an isolated clock that survives token updates and freeze
     clearInterval() { tick = undefined; stops++; },
   });
   const props = { createdAt: '2026-10-16T00:00:00Z', updatedAt: '2026-10-16T00:01:07Z', active: true };
-  assert.equal(ProcessElapsed(props).props.accessibilityLabel, '用时 1 分 07 秒');
+  assert.equal(ProcessElapsed(props).props.accessibilityLabel, '用时 1 分 7 秒');
   now += 2000; tick();
-  assert.equal(ProcessElapsed({ ...props, updatedAt: '2026-10-16T00:01:09Z' }).props.accessibilityLabel, '用时 1 分 09 秒');
+  assert.equal(ProcessElapsed({ ...props, updatedAt: '2026-10-16T00:01:09Z' }).props.accessibilityLabel, '用时 1 分 9 秒');
   assert.equal(starts, 1);
-  assert.equal(ProcessElapsed({ ...props, active: false }).props.accessibilityLabel, '用时 1 分 07 秒');
+  assert.equal(ProcessElapsed({ ...props, active: false }).props.accessibilityLabel, '用时 1 分 7 秒');
   assert.equal(stops, 1);
   assert.equal(tick, undefined);
 });

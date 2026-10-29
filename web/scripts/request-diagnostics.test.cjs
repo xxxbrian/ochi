@@ -4,6 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const ts = require('typescript');
+const { createI18nHarness } = require('./i18n-harness.cjs');
 
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
@@ -19,10 +20,16 @@ const walk = (node) => Array.isArray(node) ? node.flatMap(walk) : node && typeof
 const text = (node) => Array.isArray(node) ? node.map(text).join('') : node && typeof node === 'object' && 'type' in node ? text(node.props.children) : node == null || typeof node === 'boolean' ? '' : String(node);
 
 function evaluate(source, imports = {}, globals = {}, filename = 'fixture.tsx') {
+  const i18n = createI18nHarness();
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(output, { module, exports: module.exports, AbortController, Date, Error, JSON, Map, Promise, Set, ...globals,
-    require(name) { if (name in imports) return imports[name]; throw new Error(`Unexpected import: ${name}`); },
+    require(name) {
+      if (name in imports) return imports[name];
+      const locale = i18n.resolve(name, 'admin');
+      if (locale) return { ...locale, useAdminI18n: locale.useI18n, ...i18n.errors };
+      throw new Error(`Unexpected import: ${name}`);
+    },
   }, { filename });
   return module.exports;
 }

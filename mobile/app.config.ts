@@ -10,6 +10,11 @@ const config: ExpoConfig = {
   orientation: 'default',
   platforms: ['ios', 'android'],
   userInterfaceStyle: 'automatic',
+  locales: {
+    en: './locales/en.json',
+    'zh-Hans': './locales/zh-Hans.json',
+    'zh-Hant': './locales/zh-Hant.json',
+  },
   ios: {
     bundleIdentifier: 'co.bojin.ochi',
     buildNumber: '11',
@@ -32,9 +37,9 @@ const config: ExpoConfig = {
       ITSAppUsesNonExemptEncryption: false,
       // Self-hosted server addresses are supplied at runtime, including HTTP origins.
       NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
-      NSLocalNetworkUsageDescription: `连接你的 ${brand.displayName} 服务。`,
-      NSCameraUsageDescription: '拍摄照片并添加到对话。',
-      NSPhotoLibraryUsageDescription: '选择照片并添加到对话。',
+      NSLocalNetworkUsageDescription: `Connect to your ${brand.displayName} server.`,
+      NSCameraUsageDescription: 'Take photos to add to a chat.',
+      NSPhotoLibraryUsageDescription: 'Choose photos to add to a chat.',
     },
   },
   android: {
@@ -51,7 +56,11 @@ const config: ExpoConfig = {
     'expo-font',
     'expo-status-bar',
     'expo-splash-screen',
-    ['expo-image-picker', { cameraPermission: '拍摄照片并添加到对话。', photosPermission: '选择照片并添加到对话。', microphonePermission: false }],
+    ['expo-localization', {
+      supportedLocales: ['en', 'zh-Hans', 'zh-Hant'],
+      allowDynamicLocaleChangesAndroid: true,
+    }],
+    ['expo-image-picker', { cameraPermission: 'Take photos to add to a chat.', photosPermission: 'Choose photos to add to a chat.', microphonePermission: false }],
     ['expo-build-properties', { ios: { enableSceneSupport: true }, android: { usesCleartextTraffic: true } }],
     './plugins/withLocalReleaseSigning.cjs',
   ],

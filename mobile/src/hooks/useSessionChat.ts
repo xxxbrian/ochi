@@ -1,3 +1,5 @@
+import { errorForDisplay, localizedError, type DisplayError } from "../lib/errors";
+import { t } from "../lib/i18n";
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { api, isActiveStatus } from '../lib/api';
@@ -84,7 +86,7 @@ export function useSessionChat(sessionId?: string, focused = true) {
   const [posting, setPosting] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasOlder, setHasOlder] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<DisplayError>("");
   const runRef = useRef<Snapshot | null>(null);
   const followRef = useRef<(snapshot: Snapshot) => void>(() => undefined);
   const historyRef = useRef(messages);
@@ -163,7 +165,7 @@ export function useSessionChat(sessionId?: string, focused = true) {
   }, [refresh]);
   const { snapshot: rawRun, reconnecting: rawReconnecting, follow: followRun, clear } = useRunStream(onTerminal, () => {
     if (streamScope.current === selected.current && runRef.current?.session_id === selected.current.id) {
-      setError('请重新登录');
+      setError(localizedError("error.signInAgain"));
       void api.me().catch(() => undefined);
     }
   }, focused);
@@ -202,7 +204,7 @@ export function useSessionChat(sessionId?: string, focused = true) {
     if (!scope.id) { setLoading(false); return; }
     setLoading(true);
     if (!focusedRef.current || AppState.currentState !== 'active') return;
-    void refresh().catch((reason) => { if (isCurrent(scope, token)) setError(reason instanceof Error ? reason.message : '加载失败'); })
+    void refresh().catch((reason) => { if (isCurrent(scope, token)) setError(errorForDisplay(reason, "error.load")); })
       .finally(() => { if (isCurrent(scope, token)) setLoading(false); });
   }, [sessionId, scope, clear, refresh, isCurrent]);
 
@@ -237,7 +239,7 @@ export function useSessionChat(sessionId?: string, focused = true) {
     const update = (full: boolean) => {
       if (AppState.currentState !== 'active' || !focusedRef.current || !isCurrent(scope, token)) return;
       void synchronize(full).catch((reason) => {
-        if (isCurrent(scope, token) && !synced.current) setError(reason instanceof Error ? reason.message : '加载失败');
+        if (isCurrent(scope, token) && !synced.current) setError(errorForDisplay(reason, "error.load"));
       }).finally(() => { if (isCurrent(scope, token)) setLoading(false); });
     };
     if (adopted.current?.scope !== scope) update(true);
@@ -272,7 +274,7 @@ export function useSessionChat(sessionId?: string, focused = true) {
 
   const send = useCallback(async (content: string, options: RunOptions & { attachments?: Artifact[] } = {}) => {
     const currentId = scope.id;
-    if (!currentId || !isCurrent(scope)) throw new Error('请先创建对话');
+    if (!currentId || !isCurrent(scope)) throw localizedError("error.createChat");
     const token = generation.current;
     const revisedRun = options.retry_run_id ?? (options.edit_message_id
       ? historyRef.current.find((message) => message.id === options.edit_message_id)?.run_id : undefined);
@@ -306,7 +308,7 @@ export function useSessionChat(sessionId?: string, focused = true) {
       // The caller's catch handler must not display an old request's error on New.
       if (!isCurrent(scope, token)) return;
       setMessages((current) => current.filter((message) => message.id !== optimistic.id));
-      setError(reason instanceof Error ? reason.message : '发送失败');
+      setError(errorForDisplay(reason, "error.send"));
       throw reason;
     } finally {
       if (sendingScope.current === scope) sendingScope.current = null;
@@ -342,7 +344,7 @@ export function useSessionChat(sessionId?: string, focused = true) {
   }, [scope, follow, refresh, isCurrent]);
   const updateSession = useCallback(async (patch: SessionPatch) => {
     const currentId = scope.id;
-    if (!currentId || !isCurrent(scope)) throw new Error('对话不存在');
+    if (!currentId || !isCurrent(scope)) throw localizedError("error.chatMissing");
     const token = generation.current;
     syncRevision.current += 1;
     try {

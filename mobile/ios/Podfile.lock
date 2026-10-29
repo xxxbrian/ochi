@@ -202,6 +202,8 @@ PODS:
     - ExpoModulesCore
   - ExpoLinking (57.0.12):
     - ExpoModulesCore
+  - ExpoLocalization (57.0.2):
+    - ExpoModulesCore
   - ExpoLogBox (57.0.4):
     - React-Core
   - ExpoModulesCore (57.0.21):
@@ -2613,6 +2615,7 @@ DEPENDENCIES:
   - "ExpoImagePicker (from `../node_modules/.pnpm/expo-image-picker@57.0.20_expo@57.0.27/node_modules/expo-image-picker/ios`)"
   - "ExpoKeepAwake (from `../node_modules/.pnpm/expo-keep-awake@57.0.2_expo@57.0.27_react@19.2.3/node_modules/expo-keep-awake/ios`)"
   - "ExpoLinking (from `../node_modules/.pnpm/expo-linking@57.0.12_expo@57.0.27_react-native@0.86.3_@babel+core@7.29.7_supports-color_62dec04de36a7c6ec881d0e06ed17e26/node_modules/expo-linking/ios`)"
+  - "ExpoLocalization (from `../node_modules/.pnpm/expo-localization@57.0.2_expo@57.0.27_react@19.2.3/node_modules/expo-localization/ios`)"
   - "ExpoLogBox (from `../node_modules/.pnpm/@expo+log-box@57.0.4_@expo+dom-webview@57.0.1_expo@57.0.27_react-native@0.86.3_@babel+c_708b0819500bd3e2b6f2822ffa9c2059/node_modules/@expo/log-box`)"
   - "ExpoModulesCore (from `../node_modules/.pnpm/expo-modules-core@57.0.21_react-native-worklets@0.10.1_@babel+core@7.29.7_supports-colo_4573c36d87431b14b7b50bf0105b88bb/node_modules/expo-modules-core/ExpoModulesCore.podspec`)"
   - "ExpoModulesJSI (from `../node_modules/.pnpm/expo-modules-jsi@57.1.1_react-native@0.86.3_@babel+core@7.29.7_supports-color@8.1.1__@r_7f7bf77856fc9ea43ed498d021e2c796/node_modules/expo-modules-jsi/apple`)"
@@ -2756,6 +2759,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/.pnpm/expo-keep-awake@57.0.2_expo@57.0.27_react@19.2.3/node_modules/expo-keep-awake/ios"
   ExpoLinking:
     :path: "../node_modules/.pnpm/expo-linking@57.0.12_expo@57.0.27_react-native@0.86.3_@babel+core@7.29.7_supports-color_62dec04de36a7c6ec881d0e06ed17e26/node_modules/expo-linking/ios"
+  ExpoLocalization:
+    :path: "../node_modules/.pnpm/expo-localization@57.0.2_expo@57.0.27_react@19.2.3/node_modules/expo-localization/ios"
   ExpoLogBox:
     :path: "../node_modules/.pnpm/@expo+log-box@57.0.4_@expo+dom-webview@57.0.1_expo@57.0.27_react-native@0.86.3_@babel+c_708b0819500bd3e2b6f2822ffa9c2059/node_modules/@expo/log-box"
   ExpoModulesCore:
@@ -2979,6 +2984,7 @@ SPEC CHECKSUMS:
   ExpoImagePicker: 661e13a7616fbcea630cfb9409b7483094978e02
   ExpoKeepAwake: 72af0b3be3615e59bc819d26061ff4e06b155ee0
   ExpoLinking: d6e69c2972e62a9c439e021d0ece176d301d0574
+  ExpoLocalization: f204d4ca963bfcea932068a978247878f664f5a4
   ExpoLogBox: 80957303325cd4439137765c90a87d7f22aaf2ff
   ExpoModulesCore: 1acb4a22da46f0296e233ff048ff6533e47184f8
   ExpoModulesJSI: 383849017851b1ebacbd78cfaa32b18b6152585e

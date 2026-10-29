@@ -3,8 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/storage"
 )
 
@@ -25,7 +25,7 @@ func (p adminSettingsPatch) applyDebugMode() error {
 	case "false":
 		p.Settings.DebugMode = false
 	default:
-		return errors.New("debug_mode must be a boolean")
+		return i18n.New("debug_mode_invalid")
 	}
 	return nil
 }

@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { memo, useEffect, useState } from "react";
 import { formatProcessElapsed, processElapsedMilliseconds } from "../../../web/src/lib/processTiming";
 import { AppText } from "./ScreenChrome";
@@ -7,6 +8,7 @@ export const ProcessElapsed = memo(function ProcessElapsed({ createdAt, updatedA
   updatedAt?: string;
   active?: boolean;
 }) {
+  useI18n();
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     if (!active || !Number.isFinite(Date.parse(createdAt ?? ""))) return;
@@ -17,5 +19,5 @@ export const ProcessElapsed = memo(function ProcessElapsed({ createdAt, updatedA
   const elapsed = processElapsedMilliseconds(createdAt, updatedAt, active, now);
   if (elapsed === null) return null;
   const label = formatProcessElapsed(elapsed);
-  return <AppText muted size={12} accessibilityLabel={`用时 ${label}`} style={{ fontVariant: ["tabular-nums"] }}>· {label}</AppText>;
+  return <AppText muted size={12} accessibilityLabel={t("process.elapsed", { duration: label })} style={{ fontVariant: ["tabular-nums"] }}>· {label}</AppText>;
 });

@@ -1,3 +1,4 @@
+import { t, useI18n, setLanguage, getLanguage, type LanguagePreference } from "./lib/i18n";
 import {
   lazy,
   Suspense,
@@ -86,6 +87,7 @@ function olderSession(next: Session, current: Session) {
 }
 
 export default function App() {
+  useI18n();
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -132,6 +134,9 @@ export default function App() {
   const modelPreferenceWrites = useRef(Promise.resolve());
   const modelPreferenceRevision = useRef(0);
   const modelPreferenceOwner = useRef<object | null>(null);
+  const languagePreferenceWrites = useRef(Promise.resolve());
+  const languagePreferenceRevision = useRef(0);
+  const confirmedLanguageRef = useRef<LanguagePreference>(getLanguage());
   const selectionGeneration = useRef(0);
   userRef.current = user;
   modelsRef.current = models;
@@ -210,7 +215,7 @@ export default function App() {
           followRef.current(session.latest_run);
       } catch (reason) {
         if (token === selectionGeneration.current)
-          setError(errorText(reason, "暂时无法加载"));
+          setError(errorText(reason, t("error.loadTemporary")));
       }
     },
     [replaceSessions, updateSelectedSession],
@@ -315,7 +320,7 @@ export default function App() {
         if (session.latest_run) follow(session.latest_run);
       } catch (reason) {
         if (token === selectionGeneration.current)
-          setError(errorText(reason, "加载失败"));
+          setError(errorText(reason, t("error.load")));
       } finally {
         if (token === selectionGeneration.current) setLoading(false);
       }
@@ -340,7 +345,7 @@ export default function App() {
             reason.status === 401
           )
         )
-          setError("暂时无法连接");
+          setError(t("error.connect"));
       })
       .finally(() => {
         if (!cancelled) setAuthChecked(true);
@@ -354,6 +359,8 @@ export default function App() {
     const preferenceOwner = {};
     modelPreferenceOwner.current = preferenceOwner;
     modelPreferenceWrites.current = Promise.resolve();
+    languagePreferenceWrites.current = Promise.resolve();
+    languagePreferenceRevision.current = 0;
     preferredModelRef.current = "";
     confirmedModelRef.current = "";
     railGeneration.current += 1;
@@ -371,6 +378,10 @@ export default function App() {
         setModels(available ?? []);
         setProjects(allProjects ?? []);
         replaceSessions(list, true);
+        if (languagePreferenceRevision.current === 0) {
+          confirmedLanguageRef.current = preferences.language;
+          setLanguage(preferences.language);
+        }
         setComputerDefault(preferences.computer_default);
         setDraftComputerEnabled(preferences.computer_default);
         preferredModelRef.current = preferences.preferred_model_id;
@@ -395,7 +406,7 @@ export default function App() {
       })
       .catch((reason: unknown) => {
         if (!cancelled) {
-          setError(errorText(reason, "暂时无法加载"));
+          setError(errorText(reason, t("error.loadTemporary")));
           setLoading(false);
         }
       });
@@ -413,6 +424,25 @@ export default function App() {
       if (modelPreferenceOwner.current === preferenceOwner) modelPreferenceOwner.current = null;
     };
   }, [user, selectSession, navigate, replaceSessions]);
+  const changeLanguage = useCallback(async (next: LanguagePreference) => {
+    const owner = modelPreferenceOwner.current;
+    if (!owner) return;
+    const revision = ++languagePreferenceRevision.current;
+    setLanguage(next);
+    const write = languagePreferenceWrites.current.then(async () => {
+      if (modelPreferenceOwner.current !== owner) return;
+      try {
+        const preferences = await api.updatePreferences({ language: next });
+        if (modelPreferenceOwner.current === owner) confirmedLanguageRef.current = preferences.language;
+      } catch (reason) {
+        if (modelPreferenceOwner.current !== owner) return;
+        if (languagePreferenceRevision.current === revision) setLanguage(confirmedLanguageRef.current);
+        throw reason;
+      }
+    });
+    languagePreferenceWrites.current = write.catch(() => undefined);
+    await write;
+  }, []);
   useEffect(() => {
     setDrawerOpen(false);
     if (!user || loading) return;
@@ -622,7 +652,7 @@ export default function App() {
           setMessages((current) =>
             current.filter((item) => item.id !== optimistic.id),
           );
-          setError(errorText(reason, "发送失败"));
+          setError(errorText(reason, t("error.send")));
           // The Project composer unmounts on navigation. Keep its failed input
           // in the newly created conversation rather than silently losing it.
           if (projectId && selectedRef.current) {
@@ -670,7 +700,7 @@ export default function App() {
         if (!isActiveStatus(result.status)) void terminal(result);
       }
     } catch (reason) {
-      setError(errorText(reason, "停止失败"));
+      setError(errorText(reason, t("error.stop")));
     }
   }, [follow, terminal]);
   const logout = useCallback(async () => {
@@ -680,7 +710,7 @@ export default function App() {
       expired();
       navigate("/", true);
     } catch (reason) {
-      setError(errorText(reason, "退出失败"));
+      setError(errorText(reason, t("error.logout")));
     }
   }, [clear, expired, navigate]);
   const changeModel = useCallback(
@@ -712,7 +742,7 @@ export default function App() {
       } catch (reason) {
         if (modelPreferenceOwner.current !== owner) return;
         if (modelPreferenceRevision.current === revision) preferredModelRef.current = confirmedModelRef.current;
-        setError(errorText(reason, "记住模型失败"));
+        setError(errorText(reason, t("error.rememberModel")));
       }
     },
     [models, effort, route.kind],
@@ -723,7 +753,7 @@ export default function App() {
         await api.updateSession(selectedRef.current, { effort: value });
       setEffort(value);
     } catch (reason) {
-      setError(errorText(reason, "切换失败"));
+      setError(errorText(reason, t("error.switch")));
     }
   }, [route.kind]);
   const changeComputer = useCallback(
@@ -782,7 +812,7 @@ export default function App() {
         }
       } catch (reason) {
         if (userRef.current?.id === actor)
-          setError(errorText(reason, "保存失败"));
+          setError(errorText(reason, t("error.save")));
       } finally {
         setComputerUpdating(false);
       }
@@ -840,7 +870,7 @@ export default function App() {
         current.map((item) => (item.id === id ? next : item)),
       );
     } catch (reason) {
-      setError(errorText(reason, "保存失败"));
+      setError(errorText(reason, t("error.save")));
     }
   }
   async function deleteSession(id: string) {
@@ -849,7 +879,7 @@ export default function App() {
       setSessions((current) => current.filter((item) => item.id !== id));
       if (selectedId === id) newConversation();
     } catch (reason) {
-      setError(errorText(reason, "删除失败"));
+      setError(errorText(reason, t("error.delete")));
     }
   }
   async function loadOlder() {
@@ -862,7 +892,7 @@ export default function App() {
       setMessages((current) => [...(older ?? []), ...current]);
       setOlderAvailable((older?.length ?? 0) >= 100);
     } catch (reason) {
-      setError(errorText(reason, "加载失败"));
+      setError(errorText(reason, t("error.load")));
     } finally {
       setOlderLoading(false);
     }
@@ -881,7 +911,7 @@ export default function App() {
       });
       setSessionCursor(page.next_cursor);
     } catch (reason) {
-      if (token === railGeneration.current) setError(errorText(reason, "加载失败"));
+      if (token === railGeneration.current) setError(errorText(reason, t("error.load")));
     } finally {
       if (token === railGeneration.current) setSessionsLoadingMore(false);
     }
@@ -896,7 +926,7 @@ export default function App() {
         setEffort(chosen?.default_effort ?? "");
       }
     } catch (reason) {
-      setError(errorText(reason, "加载失败"));
+      setError(errorText(reason, t("error.load")));
     }
   }
   async function revise() {
@@ -929,7 +959,7 @@ export default function App() {
       follow(result);
       if (!isActiveStatus(result.status)) void terminal(result);
     } catch (reason) {
-      setError(errorText(reason, "重新运行失败"));
+      setError(errorText(reason, t("error.rerun")));
     } finally {
       if (token === selectionGeneration.current) setPosting(false);
     }
@@ -955,7 +985,7 @@ export default function App() {
     try {
       setProjects(await api.projects());
     } catch (reason) {
-      setError(errorText(reason, "加载失败"));
+      setError(errorText(reason, t("error.load")));
     }
   }
   if (route.kind === "admin" && user.role === "admin")
@@ -981,27 +1011,27 @@ export default function App() {
   const busy = posting || isActiveStatus(snapshot?.status);
   const empty = messages.length === 0 && !snapshot && !loading;
   const statusText = reconnecting
-    ? "正在重连"
+    ? t("status.reconnecting")
     : snapshot?.status === "waiting_user"
       ? snapshot.waiting_input?.kind === "computer_permission"
-        ? "等待授权"
-        : "等待回复"
+        ? t("status.awaitingPermission")
+        : t("status.awaitingReply")
       : snapshot?.status === "queued"
-        ? "排队中"
+        ? t("status.queued")
         : snapshot?.status === "waiting_resource"
-          ? "等待工作区"
+          ? t("status.awaitingWorkspace")
           : snapshot?.status === "cancelling"
-            ? "正在停止"
+            ? t("status.stopping")
             : busy
-              ? "正在处理"
+              ? t("status.processing")
               : snapshot?.status === "completed"
-                ? "已完成"
+                ? t("status.completed")
                 : snapshot?.status === "failed"
-                  ? "未完成"
+                  ? t("status.failed")
               : snapshot?.status === "cancelled"
-                ? "已停止"
+                ? t("status.stopped")
                 : snapshot?.status === "interrupted"
-                  ? "已中断"
+                  ? t("status.interrupted")
                   : "";
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
@@ -1117,7 +1147,7 @@ export default function App() {
                 </button>
               )}
               {selected?.project_id && <ChevronRight className="chat-crumb-chevron" size={13} />}
-              {!empty && <h1>{selected?.title || "新对话"}</h1>}
+              {!empty && <h1>{selected?.title || t("chat.newConversation")}</h1>}
             </div>
             <div className="header-actions">
               <span className={`status-text ${snapshot?.status === "completed" ? "status-completed" : ""}`} role="status" aria-live="polite">
@@ -1126,7 +1156,7 @@ export default function App() {
               </span>
               <button
                 className="icon-button mobile-new-chat"
-                aria-label="新对话"
+                aria-label={t("chat.newConversation")}
                 onClick={newConversation}
               >
                 <SquarePen size={19} />
@@ -1135,7 +1165,7 @@ export default function App() {
           </header>
           {loading ? (
             <div className="chat-loading">
-              <LoaderCircle className="spin" size={21} aria-label="加载中" />
+              <LoaderCircle className="spin" size={21} aria-label={t("status.loading")} />
             </div>
           ) : (
             <MessageList
@@ -1155,7 +1185,7 @@ export default function App() {
               <button
                 className="icon-button"
                 onClick={() => setError("")}
-                aria-label="关闭"
+                aria-label={t("common.close")}
               >
                 <X size={16} />
               </button>
@@ -1171,7 +1201,7 @@ export default function App() {
                   const pending = await api.queue(selectedId);
                   if (selectedRef.current === selectedId) setQueue(pending);
                 } catch (reason) {
-                  setError(errorText(reason, "取消失败"));
+                  setError(errorText(reason, t("error.cancel")));
                 }
               }}
               onEdit={async (id, message) => {
@@ -1216,6 +1246,7 @@ export default function App() {
       {settingsOpen && (
         <Suspense fallback={null}>
           <UserSettings
+            onLanguage={changeLanguage}
             projects={projects}
             onNavigate={navigate}
             onClose={() => setSettingsOpen(false)}
@@ -1229,7 +1260,7 @@ export default function App() {
       )}
       {revision && (
         <Modal
-          title={revision.kind === "edit" ? "编辑消息" : "重新生成？"}
+          title={revision.kind === "edit" ? t("chat.editMessage") : t("chat.regenerateConfirm")}
           onClose={() => setRevision(null)}
           size={revision.kind === "edit" ? "form" : "small"}
           footer={
@@ -1239,7 +1270,7 @@ export default function App() {
                 onClick={() => setRevision(null)}
                 disabled={posting}
               >
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 className="primary-button"
@@ -1251,7 +1282,7 @@ export default function App() {
                 {posting ? (
                   <LoaderCircle className="spin" size={16} />
                 ) : (
-                  "重新运行"
+                  t("chat.rerun")
                 )}
               </button>
             </>
@@ -1263,14 +1294,14 @@ export default function App() {
               rows={5}
               value={revisionText}
               onChange={(event) => setRevisionText(event.target.value)}
-              aria-label="消息内容"
+              aria-label={t("chat.messageContent")}
             />
           )}
           {messages.some(
             (message) =>
               message.run_id === revision.message.run_id &&
               (message.step_count ?? 0) > 0,
-          ) && <p className="revision-warning">重新运行可能再次执行操作。</p>}
+          ) && <p className="revision-warning">{t("chat.rerunWarning")}</p>}
         </Modal>
       )}
     </div>

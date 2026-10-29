@@ -1,0 +1,4 @@
+NSCameraUsageDescription = "拍攝照片並新增至對話。";
+NSPhotoLibraryUsageDescription = "選擇照片並新增至對話。";
+NSLocalNetworkUsageDescription = "連線至你的 Ochi 服務。";
+NSFaceIDUsageDescription = "使用 Face ID 存取你的 Ochi 登入憑證。";

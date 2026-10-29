@@ -8,8 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		02CC2858C3D011F1A2D1A356 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C88E1523AB2B7B420C102B75 /* PrivacyInfo.xcprivacy */; };
+		03928C1C53304FF89BD70DC4 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 1FB78FF388834BCAB8724892 /* InfoPlist.strings */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		1EDC538571544A779F0D25E7 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 201BF05A663A48F889CC5A8C /* InfoPlist.strings */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
+		55B83E9E26594C2DA313189B /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5D78E741011E406E841BF52F /* InfoPlist.strings */; };
 		825141E2158FD06271F2D6FE /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97551BC7BA7B35AB4949B9A3 /* ExpoModulesProvider.swift */; };
 		B735280D80C861A7024DB560 /* libPods-Ochi.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 50CC37223D4030E9EE0B05B4 /* libPods-Ochi.a */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
@@ -20,7 +23,10 @@
 		13B07F961A680F5B00A75B9A /* Ochi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ochi.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Ochi/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Ochi/Info.plist; sourceTree = "<group>"; };
+		1FB78FF388834BCAB8724892 /* InfoPlist.strings */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "zh-Hant.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		201BF05A663A48F889CC5A8C /* InfoPlist.strings */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		50CC37223D4030E9EE0B05B4 /* libPods-Ochi.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Ochi.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		5D78E741011E406E841BF52F /* InfoPlist.strings */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		64D6733D58A5520BF6D12D62 /* Pods-Ochi.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Ochi.debug.xcconfig"; path = "Target Support Files/Pods-Ochi/Pods-Ochi.debug.xcconfig"; sourceTree = "<group>"; };
 		97551BC7BA7B35AB4949B9A3 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Ochi/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Ochi/SplashScreen.storyboard; sourceTree = "<group>"; };
@@ -66,6 +72,15 @@
 				C88E1523AB2B7B420C102B75 /* PrivacyInfo.xcprivacy */,
 			);
 			name = Ochi;
+			sourceTree = "<group>";
+		};
+		1B01379C651843FD8DF1BB6B /* zh-Hant.lproj */ = {
+			isa = PBXGroup;
+			children = (
+				1FB78FF388834BCAB8724892 /* InfoPlist.strings */,
+			);
+			name = "zh-Hant.lproj";
+			path = "";
 			sourceTree = "<group>";
 		};
 		1FB23FA34E06DFE6F57A02F6 /* ExpoModulesProviders */ = {
@@ -123,10 +138,31 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		A939D9EFBE8F4C50A240C8A9 /* en.lproj */ = {
+			isa = PBXGroup;
+			children = (
+				5D78E741011E406E841BF52F /* InfoPlist.strings */,
+			);
+			name = en.lproj;
+			path = "";
+			sourceTree = "<group>";
+		};
+		AC952B2D815D444AAD6584EA /* zh-Hans.lproj */ = {
+			isa = PBXGroup;
+			children = (
+				201BF05A663A48F889CC5A8C /* InfoPlist.strings */,
+			);
+			name = "zh-Hans.lproj";
+			path = "";
+			sourceTree = "<group>";
+		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
 			isa = PBXGroup;
 			children = (
 				BB2F792C24A3F905000567C9 /* Expo.plist */,
+				A939D9EFBE8F4C50A240C8A9 /* en.lproj */,
+				AC952B2D815D444AAD6584EA /* zh-Hans.lproj */,
+				1B01379C651843FD8DF1BB6B /* zh-Hant.lproj */,
 			);
 			name = Supporting;
 			path = Ochi/Supporting;
@@ -178,6 +214,8 @@
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
+				"zh-Hant",
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
@@ -198,6 +236,9 @@
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
 				02CC2858C3D011F1A2D1A356 /* PrivacyInfo.xcprivacy in Resources */,
+				55B83E9E26594C2DA313189B /* InfoPlist.strings in Resources */,
+				1EDC538571544A779F0D25E7 /* InfoPlist.strings in Resources */,
+				03928C1C53304FF89BD70DC4 /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -285,6 +326,7 @@
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/EXConstants.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/EXConstants/ExpoConstants_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem_privacy.bundle",
+				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoLocalization/ExpoLocalization_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/ExpoSystemUI/ExpoSystemUI_privacy.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/RNSVG/RNSVGFilters.bundle",
 				"${PODS_CONFIGURATION_BUILD_DIR}/React-Core/React-Core_privacy.bundle",
@@ -300,6 +342,7 @@
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EXConstants.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoConstants_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoFileSystem_privacy.bundle",
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoLocalization_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoSystemUI_privacy.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/RNSVGFilters.bundle",
 				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/React-Core_privacy.bundle",

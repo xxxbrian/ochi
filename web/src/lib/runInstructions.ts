@@ -1,13 +1,21 @@
+import { processT as t } from "../../../shared/i18n/process";
+import { translateError } from "../../../shared/i18n/errors";
+import type { MessageParams } from "../../../shared/i18n";
 import type { ApiError, RunInstruction, RunStatus } from "./types";
 
 export type InstructionReceipt = RunInstruction & { run_id: string };
 export type InstructionAcceptance = { id: string; content: string };
+export type InstructionIssue = {
+  key: "instruction.finished" | "instruction.notSent" | "instruction.uncertain" | "instruction.tooLong" | "instruction.syncError";
+  code?: string;
+  params?: MessageParams;
+};
 export type InstructionState = {
   owner: string;
   items: InstructionReceipt[];
   submitting: boolean;
-  error: string;
-  syncError: string;
+  error: InstructionIssue | null;
+  syncError: InstructionIssue | null;
   retry: boolean;
   accepted?: InstructionAcceptance;
 };
@@ -23,11 +31,15 @@ export function canSupplementRun(status?: RunStatus) {
 }
 
 export function instructionStatusLabel(status: RunInstruction["status"]) {
-  return { pending: "已接收", applied: "已应用", queued: "已排队", not_applied: "未应用" }[status];
+  return { pending: t("instruction.received"), applied: t("instruction.applied"), queued: t("instruction.queued"), not_applied: t("instruction.notApplied") }[status];
+}
+
+export function instructionIssueText(issue: InstructionIssue | null): string {
+  return issue ? translateError(issue.code, issue.params) ?? t(issue.key) : "";
 }
 
 export const emptyInstructionState: InstructionState = {
-  owner: "", items: [], submitting: false, error: "", syncError: "", retry: false,
+  owner: "", items: [], submitting: false, error: null, syncError: null, retry: false,
 };
 
 // This store has no React/platform dependencies. Only real receipts enter its list.
@@ -72,7 +84,7 @@ export function createRunInstructionsStore(transport: Transport) {
     receiptVersions.set(value.id, ++receiptRevision);
     commit({
       items: [...state.items.filter((prior) => prior.id !== value.id), item].slice(-64),
-      accepted: { id: value.id, content: attempt.content }, retry: Boolean(uncertain), error: "",
+      accepted: { id: value.id, content: attempt.content }, retry: Boolean(uncertain), error: null,
     });
   }
   async function bounded<T>(call: (signal: AbortSignal) => Promise<T>) {
@@ -84,7 +96,7 @@ export function createRunInstructionsStore(transport: Transport) {
       return await Promise.race([
         call(controller.signal),
         new Promise<never>((_resolve, reject) => {
-          onAbort = () => reject(new Error("暂时无法确认"));
+          onAbort = () => reject(new Error("Instruction acknowledgement timed out"));
           controller.signal.addEventListener("abort", onAbort, { once: true });
           timeout = setTimeout(() => controller.abort(), 8000);
         }),
@@ -137,13 +149,13 @@ export function createRunInstructionsStore(transport: Transport) {
       failedReads = failed ? failedReads + 1 : 0;
       const unresolved = selectedRuns.some((run) => !canSupplementRun(run.status) && run.status !== "cancelling" &&
         run.terminalReads >= 3 && items.some((item) => item.run_id === run.id && item.status === "pending"));
-      commit({ items, syncError: unresolved || (failed && items.length > 0) ? "补充状态暂时无法同步" : "" });
+      commit({ items, syncError: unresolved || (failed && items.length > 0) ? { key: "instruction.syncError" } : null });
       if (uncertain) { const found = receipt(uncertain); if (found) accepted(uncertain, found); }
     } catch {
       if (state.owner !== owner || !enabled || loading !== flight) return;
       failedReads += 1;
       for (const run of selectedRuns) if (!canSupplementRun(run.status) && run.status !== "cancelling") run.terminalReads += 1;
-      if (state.items.length) commit({ syncError: "补充状态暂时无法同步" });
+      if (state.items.length) commit({ syncError: { key: "instruction.syncError" } });
     } finally {
       if (loading === flight) {
         loading = undefined;
@@ -155,7 +167,7 @@ export function createRunInstructionsStore(transport: Transport) {
   async function post(attempt: Attempt): Promise<boolean> {
     if (!owns(attempt) || sending) return false;
     sending = attempt;
-    commit({ submitting: true, error: "" });
+    commit({ submitting: true, error: null });
     try {
       // Replaying this POST is safe only because both attempts use the exact key/body.
       for (let index = 0; index < 2; index += 1) {
@@ -172,12 +184,14 @@ export function createRunInstructionsStore(transport: Transport) {
           const status = (reason as ApiError)?.status;
           if (status && status < 500 && status !== 429) {
             uncertain = undefined;
-            commit({ retry: false, error: status === 409 ? "任务已结束或补充未被接收" : reason instanceof Error ? reason.message : "补充未发送" });
+            const error = reason as ApiError;
+            commit({ retry: false, error: status === 409 ? { key: "instruction.finished" } :
+              { key: "instruction.notSent", code: error.code, params: error.params } });
             return false;
           }
           if (index === 1) {
             uncertain = attempt;
-            commit({ retry: true, error: "补充要求暂时无法确认" });
+            commit({ retry: true, error: { key: "instruction.uncertain" } });
             return false;
           }
         }
@@ -232,7 +246,7 @@ export function createRunInstructionsStore(transport: Transport) {
     refresh,
     async send(owner: string, content: string) {
       if (owner !== state.owner || !enabled || !currentRun || !canSupplementRun(currentRun.status) || uncertain || !content.trim()) return false;
-      if (new TextEncoder().encode(content).length > 32000) { commit({ error: "补充要求太长" }); return false; }
+      if (new TextEncoder().encode(content).length > 32000) { commit({ error: { key: "instruction.tooLong" } }); return false; }
       const clientKey = `ochi-${Date.now().toString(36)}-${(++keySequence).toString(36)}-${Math.random().toString(36).slice(2)}`;
       return post({ owner, runId: currentRun.id, content, clientKey });
     },

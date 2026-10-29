@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"ochi/server/internal/i18n"
 )
 
 var (
-	ErrMemoryChanged = errors.New("memory settings or content changed; stale derived work was skipped")
-	ErrMemoryDeleted = errors.New("this memory was explicitly forgotten")
-	ErrMemorySource  = errors.New("memory source is unavailable or no longer authoritative")
+	ErrMemoryChanged = i18n.New("memory_changed")
+	ErrMemoryDeleted = i18n.New("memory_deleted")
+	ErrMemorySource  = i18n.New("memory_source_unavailable")
 )
 
 func memoryContentHash(content string) string {
@@ -50,7 +52,7 @@ func validateMemoryProvenance(m *Memory) error {
 			m.ObservedAt = time.Now().UTC()
 		}
 	default:
-		return errors.New("invalid memory source")
+		return i18n.New("memory_source_invalid")
 	}
 	return nil
 }

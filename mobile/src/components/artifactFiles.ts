@@ -1,3 +1,5 @@
+import { LocalizedError, localizedError } from "../lib/errors";
+import { formatNumber, type MessageKey } from "../lib/i18n";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import BlobUtil from "react-native-blob-util";
@@ -6,10 +8,10 @@ import type { Artifact } from "../lib/types";
 
 export function fileSize(bytes: number) {
   return bytes < 1024
-    ? `${bytes} B`
+    ? `${formatNumber(bytes)} B`
     : bytes < 1048576
-      ? `${(bytes / 1024).toFixed(1)} KB`
-      : `${(bytes / 1048576).toFixed(1)} MB`;
+      ? `${formatNumber(bytes / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KB`
+      : `${formatNumber(bytes / 1048576, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }
 
 export function fileType(file: Artifact) {
@@ -29,10 +31,12 @@ export function fileType(file: Artifact) {
 
 export type LocalArtifact = { uri: string; dispose: () => Promise<void> };
 let downloadSequence = 0;
-class ArtifactFileError extends Error {}
+class ArtifactFileError extends LocalizedError {
+  constructor(key: MessageKey) { super({ key }); }
+}
 
 async function artifactDestination(file: Artifact): Promise<LocalArtifact> {
-  if (!FileSystem.cacheDirectory) throw new ArtifactFileError("无法保存文件");
+  if (!FileSystem.cacheDirectory) throw new ArtifactFileError("error.saveFile");
   const directory = `${FileSystem.cacheDirectory}ochi-artifact-${Date.now()}-${++downloadSequence}`;
   const safe = file.name.replace(/[<>:"/\\|?*\u0000-\u001f\uD800-\uDFFF]/gu, "-").trim();
   const extension = safe.match(/\.[a-z0-9]{1,10}$/i)?.[0] ?? "";
@@ -50,9 +54,9 @@ async function artifactDestination(file: Artifact): Promise<LocalArtifact> {
 function artifactURL(value: string, base?: string) {
   let url: URL;
   try { url = new URL(value, base); }
-  catch { throw new ArtifactFileError("文件地址无效"); }
+  catch { throw new ArtifactFileError("error.fileURL"); }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
-    throw new ArtifactFileError("文件地址无效");
+    throw new ArtifactFileError("error.fileURL");
   return url;
 }
 
@@ -61,10 +65,14 @@ export async function downloadArtifact(file: Artifact, signal?: AbortSignal): Pr
   const original = artifactURL(fileURL(file));
   const server = getAPIBaseURL();
   const headers = resourceHeaders(file);
-  const credentials = JSON.stringify(headers);
+  const credential = () => {
+    const current = resourceHeaders(file);
+    return "Authorization" in current ? current.Authorization : undefined;
+  };
+  const credentials = credential();
   const checkActive = () => {
-    if (signal?.aborted || getAPIBaseURL() !== server || JSON.stringify(resourceHeaders(file)) !== credentials)
-      throw new ArtifactFileError("文件请求已取消");
+    if (signal?.aborted || getAPIBaseURL() !== server || credential() !== credentials)
+      throw new ArtifactFileError("error.fileCancelled");
   };
   checkActive();
   const local = await artifactDestination(file);
@@ -84,28 +92,28 @@ export async function downloadArtifact(file: Artifact, signal?: AbortSignal): Pr
       const info = response.info();
       if ([301, 302, 303, 307, 308].includes(info.status)) {
         const location = Object.entries(info.headers).find(([name]) => name.toLowerCase() === "location")?.[1];
-        if (!location || redirects === 5) throw new ArtifactFileError("无法下载文件，请检查文件地址");
+        if (!location || redirects === 5) throw new ArtifactFileError("error.fileAddressDownload");
         const next = artifactURL(String(location), url.href);
-        if (url.protocol === "https:" && next.protocol !== "https:") throw new ArtifactFileError("文件地址不支持安全连接");
+        if (url.protocol === "https:" && next.protocol !== "https:") throw new ArtifactFileError("error.fileInsecure");
         url = next;
         continue;
       }
-      if (info.status < 200 || info.status >= 300) throw new ArtifactFileError("无法下载文件，请重试");
+      if (info.status < 200 || info.status >= 300) throw new ArtifactFileError("error.fileDownload");
       return local;
     }
-    throw new ArtifactFileError("无法下载文件，请重试");
+    throw new ArtifactFileError("error.fileDownload");
   } catch (reason) {
     await local.dispose().catch(() => undefined);
-    if (signal?.aborted) throw new ArtifactFileError("文件请求已取消");
+    if (signal?.aborted) throw new ArtifactFileError("error.fileCancelled");
     // Native transport errors can contain private URLs; keep those out of the UI.
-    throw reason instanceof ArtifactFileError ? reason : new ArtifactFileError("无法下载文件，请重试");
+    throw reason instanceof ArtifactFileError ? reason : new ArtifactFileError("error.fileDownload");
   } finally {
     signal?.removeEventListener("abort", cancel);
   }
 }
 
 export async function shareArtifact(file: Artifact, localURI?: string) {
-  if (!(await Sharing.isAvailableAsync())) throw new Error("当前设备无法分享文件");
+  if (!(await Sharing.isAvailableAsync())) throw localizedError("error.shareUnavailable");
   const local = localURI ? await artifactDestination(file) : await downloadArtifact(file);
   try {
     if (localURI) await FileSystem.copyAsync({ from: localURI, to: local.uri });
@@ -113,6 +121,6 @@ export async function shareArtifact(file: Artifact, localURI?: string) {
     // The receiving app can read this immutable cache file after the chooser closes.
   } catch (reason) {
     await local.dispose().catch(() => undefined);
-    throw reason instanceof ArtifactFileError ? reason : new ArtifactFileError("无法分享文件，请重试");
+    throw reason instanceof ArtifactFileError ? reason : new ArtifactFileError("error.share");
   }
 }

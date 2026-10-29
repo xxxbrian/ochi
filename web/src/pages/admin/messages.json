@@ -1,0 +1,2337 @@
+{
+  "name": {
+    "en": "Name",
+    "zh-CN": "名称",
+    "zh-TW": "名稱"
+  },
+  "value": {
+    "en": "Value",
+    "zh-CN": "值",
+    "zh-TW": "值"
+  },
+  "keepExistingValue": {
+    "en": "Keep existing value",
+    "zh-CN": "保留现有值",
+    "zh-TW": "保留現有值"
+  },
+  "deleteConfigEntry": {
+    "en": "Delete setting",
+    "zh-CN": "删除配置项",
+    "zh-TW": "刪除配置項"
+  },
+  "addEntry": {
+    "en": "Add entry",
+    "zh-CN": "添加一项",
+    "zh-TW": "新增一項"
+  },
+  "loadFailed": {
+    "en": "Could not load",
+    "zh-CN": "加载失败",
+    "zh-TW": "載入失敗"
+  },
+  "readFailed": {
+    "en": "Could not read",
+    "zh-CN": "读取失败",
+    "zh-TW": "讀取失敗"
+  },
+  "saved": {
+    "en": "Saved",
+    "zh-CN": "已保存",
+    "zh-TW": "已儲存"
+  },
+  "saveFailed": {
+    "en": "Could not save",
+    "zh-CN": "保存失败",
+    "zh-TW": "儲存失敗"
+  },
+  "uploadFailed": {
+    "en": "Could not upload",
+    "zh-CN": "上传失败",
+    "zh-TW": "上傳失敗"
+  },
+  "validationFailed": {
+    "en": "Validation failed",
+    "zh-CN": "检查失败",
+    "zh-TW": "檢查失敗"
+  },
+  "validationPassed": {
+    "en": "Validation passed",
+    "zh-CN": "检查通过",
+    "zh-TW": "檢查通過"
+  },
+  "updated": {
+    "en": "Updated",
+    "zh-CN": "已更新",
+    "zh-TW": "已更新"
+  },
+  "updateFailed": {
+    "en": "Could not update",
+    "zh-CN": "更新失败",
+    "zh-TW": "更新失敗"
+  },
+  "skillComponents": {
+    "en": "Skill components",
+    "zh-CN": "Skill 组件",
+    "zh-TW": "Skill 元件"
+  },
+  "installSkill": {
+    "en": "Install Skill",
+    "zh-CN": "安装 Skill",
+    "zh-TW": "安裝 Skill"
+  },
+  "archive": {
+    "en": "Archive",
+    "zh-CN": "压缩包",
+    "zh-TW": "壓縮包"
+  },
+  "skillActions": {
+    "en": "Skill actions",
+    "zh-CN": "Skill 操作",
+    "zh-TW": "Skill 操作"
+  },
+  "details": {
+    "en": "Details",
+    "zh-CN": "详情",
+    "zh-TW": "詳情"
+  },
+  "validate": {
+    "en": "Validate",
+    "zh-CN": "检查",
+    "zh-TW": "檢查"
+  },
+  "installDependencies": {
+    "en": "Install dependencies",
+    "zh-CN": "安装依赖",
+    "zh-TW": "安裝依賴"
+  },
+  "update": {
+    "en": "Update",
+    "zh-CN": "更新",
+    "zh-TW": "更新"
+  },
+  "delete": {
+    "en": "Delete",
+    "zh-CN": "删除",
+    "zh-TW": "刪除"
+  },
+  "noSkills": {
+    "en": "No Skills yet",
+    "zh-CN": "暂无 Skills",
+    "zh-TW": "暫無 Skills"
+  },
+  "skillDetails": {
+    "en": "Skill details",
+    "zh-CN": "Skill 详情",
+    "zh-TW": "Skill 詳情"
+  },
+  "cancel": {
+    "en": "Cancel",
+    "zh-CN": "取消",
+    "zh-TW": "取消"
+  },
+  "save": {
+    "en": "Save",
+    "zh-CN": "保存",
+    "zh-TW": "儲存"
+  },
+  "inlineSource": {
+    "en": "Write directly",
+    "zh-CN": "直接编写",
+    "zh-TW": "直接編寫"
+  },
+  "repositoryURL": {
+    "en": "Repository URL",
+    "zh-CN": "仓库地址",
+    "zh-TW": "倉庫地址"
+  },
+  "branchOrVersion": {
+    "en": "Branch / version",
+    "zh-CN": "分支 / 版本",
+    "zh-TW": "分支 / 版本"
+  },
+  "repositoryDirectory": {
+    "en": "Repository directory",
+    "zh-CN": "仓库目录",
+    "zh-TW": "倉庫目錄"
+  },
+  "chooseArchive": {
+    "en": "Choose archive",
+    "zh-CN": "选择压缩包",
+    "zh-TW": "選擇壓縮包"
+  },
+  "files": {
+    "en": "Files",
+    "zh-CN": "文件",
+    "zh-TW": "檔案"
+  },
+  "enable": {
+    "en": "Enable",
+    "zh-CN": "启用",
+    "zh-TW": "啟用"
+  },
+  "execute": {
+    "en": "Run",
+    "zh-CN": "执行",
+    "zh-TW": "執行"
+  },
+  "installationComplete": {
+    "en": "Installation complete",
+    "zh-CN": "安装完成",
+    "zh-TW": "安裝完成"
+  },
+  "command": {
+    "en": "Command",
+    "zh-CN": "命令",
+    "zh-TW": "命令"
+  },
+  "deleteSkillQuestion": {
+    "en": "Delete Skill?",
+    "zh-CN": "删除 Skill？",
+    "zh-TW": "刪除 Skill？"
+  },
+  "connectionFailed": {
+    "en": "Connection failed",
+    "zh-CN": "连接失败",
+    "zh-TW": "連線失敗"
+  },
+  "noMCPConfig": {
+    "en": "No MCP configuration found",
+    "zh-CN": "未找到 MCP 配置",
+    "zh-TW": "未找到 MCP 配置"
+  },
+  "invalidJSON": {
+    "en": "Invalid JSON",
+    "zh-CN": "JSON 格式不正确",
+    "zh-TW": "JSON 格式不正確"
+  },
+  "importFailed": {
+    "en": "Could not import",
+    "zh-CN": "导入失败",
+    "zh-TW": "匯入失敗"
+  },
+  "mcpComponents": {
+    "en": "MCP components",
+    "zh-CN": "MCP 组件",
+    "zh-TW": "MCP 元件"
+  },
+  "importJSON": {
+    "en": "Import JSON",
+    "zh-CN": "导入 JSON",
+    "zh-TW": "匯入 JSON"
+  },
+  "addMCP": {
+    "en": "Add MCP",
+    "zh-CN": "添加 MCP",
+    "zh-TW": "新增 MCP"
+  },
+  "mcpActions": {
+    "en": "MCP actions",
+    "zh-CN": "MCP 操作",
+    "zh-TW": "MCP 操作"
+  },
+  "edit": {
+    "en": "Edit",
+    "zh-CN": "编辑",
+    "zh-TW": "編輯"
+  },
+  "testConnection": {
+    "en": "Test connection",
+    "zh-CN": "测试连接",
+    "zh-TW": "測試連線"
+  },
+  "tools": {
+    "en": "Tools",
+    "zh-CN": "工具",
+    "zh-TW": "工具"
+  },
+  "noMCP": {
+    "en": "No MCP servers yet",
+    "zh-CN": "暂无 MCP",
+    "zh-TW": "暫無 MCP"
+  },
+  "editMCP": {
+    "en": "Edit MCP",
+    "zh-CN": "编辑 MCP",
+    "zh-TW": "編輯 MCP"
+  },
+  "transport": {
+    "en": "Transport",
+    "zh-CN": "连接方式",
+    "zh-TW": "連線方式"
+  },
+  "requestHeaders": {
+    "en": "Request headers",
+    "zh-CN": "请求头",
+    "zh-TW": "請求標頭"
+  },
+  "arguments": {
+    "en": "Arguments",
+    "zh-CN": "参数",
+    "zh-TW": "參數"
+  },
+  "deleteArgument": {
+    "en": "Delete argument",
+    "zh-CN": "删除参数",
+    "zh-TW": "刪除參數"
+  },
+  "addArgument": {
+    "en": "Add argument",
+    "zh-CN": "添加参数",
+    "zh-TW": "新增參數"
+  },
+  "advancedSettings": {
+    "en": "Advanced settings",
+    "zh-CN": "高级设置",
+    "zh-TW": "高階設定"
+  },
+  "workingDirectory": {
+    "en": "Working directory",
+    "zh-CN": "工作目录",
+    "zh-TW": "工作目錄"
+  },
+  "environmentVariables": {
+    "en": "Environment variables",
+    "zh-CN": "环境变量",
+    "zh-TW": "環境變數"
+  },
+  "importMCPJSON": {
+    "en": "Import MCP JSON",
+    "zh-CN": "导入 MCP JSON",
+    "zh-TW": "匯入 MCP JSON"
+  },
+  "import": {
+    "en": "Import",
+    "zh-CN": "导入",
+    "zh-TW": "匯入"
+  },
+  "noTools": {
+    "en": "No tools",
+    "zh-CN": "暂无工具",
+    "zh-TW": "暫無工具"
+  },
+  "deleteMCPQuestion": {
+    "en": "Delete MCP?",
+    "zh-CN": "删除 MCP？",
+    "zh-TW": "刪除 MCP？"
+  },
+  "plugins": {
+    "en": "Plugins",
+    "zh-CN": "插件",
+    "zh-TW": "外掛"
+  },
+  "pluginManagement": {
+    "en": "Plugin management",
+    "zh-CN": "插件管理",
+    "zh-TW": "外掛管理"
+  },
+  "chooseComponent": {
+    "en": "Select at least one component",
+    "zh-CN": "请至少选择一个组件",
+    "zh-TW": "請至少選擇一個元件"
+  },
+  "componentLimit": {
+    "en": "Select up to 64 components per plugin",
+    "zh-CN": "每个插件最多选择 64 个组件",
+    "zh-TW": "每個外掛最多選擇 64 個元件"
+  },
+  "descriptionTooLong": {
+    "en": "Shorten the description and try again",
+    "zh-CN": "描述过长，请精简后重试",
+    "zh-TW": "描述過長，請精簡後重試"
+  },
+  "deleteFailed": {
+    "en": "Could not delete",
+    "zh-CN": "删除失败",
+    "zh-TW": "刪除失敗"
+  },
+  "refreshPlugins": {
+    "en": "Refresh plugins",
+    "zh-CN": "刷新插件",
+    "zh-TW": "重新整理外掛"
+  },
+  "addPlugin": {
+    "en": "Add plugin",
+    "zh-CN": "添加插件",
+    "zh-TW": "新增外掛"
+  },
+  "retry": {
+    "en": "Retry",
+    "zh-CN": "重试",
+    "zh-TW": "重試"
+  },
+  "loadingPlugins": {
+    "en": "Loading plugins",
+    "zh-CN": "加载插件",
+    "zh-TW": "載入外掛"
+  },
+  "components": {
+    "en": "Components",
+    "zh-CN": "组件",
+    "zh-TW": "元件"
+  },
+  "enabledByDefault": {
+    "en": "Enabled by default",
+    "zh-CN": "默认开启",
+    "zh-TW": "預設開啟"
+  },
+  "available": {
+    "en": "Available",
+    "zh-CN": "可用",
+    "zh-TW": "可用"
+  },
+  "mandatoryPluginHint": {
+    "en": "Users cannot disable plugins enabled by default",
+    "zh-CN": "默认开启的插件，用户不可关闭",
+    "zh-TW": "預設開啟的外掛，使用者不可關閉"
+  },
+  "saving": {
+    "en": "Saving",
+    "zh-CN": "保存中",
+    "zh-TW": "儲存中"
+  },
+  "editPlugin": {
+    "en": "Edit plugin",
+    "zh-CN": "编辑插件",
+    "zh-TW": "編輯外掛"
+  },
+  "deletePlugin": {
+    "en": "Delete plugin",
+    "zh-CN": "删除插件",
+    "zh-TW": "刪除外掛"
+  },
+  "noPlugins": {
+    "en": "No plugins yet",
+    "zh-CN": "暂无插件",
+    "zh-TW": "暫無外掛"
+  },
+  "identifier": {
+    "en": "Identifier",
+    "zh-CN": "标识",
+    "zh-TW": "標識"
+  },
+  "identifierHint": {
+    "en": "Lowercase letters, numbers, - or _; cannot be changed after creation",
+    "zh-CN": "小写字母、数字、- 或 _，创建后不可修改",
+    "zh-TW": "小寫字母、數字、- 或 _，建立後不可修改"
+  },
+  "description": {
+    "en": "Description",
+    "zh-CN": "描述",
+    "zh-TW": "描述"
+  },
+  "publishToUsers": {
+    "en": "Available to users",
+    "zh-CN": "向用户提供",
+    "zh-TW": "向使用者提供"
+  },
+  "mandatoryPlugin": {
+    "en": "Enabled by default (users cannot disable)",
+    "zh-CN": "默认开启（用户不可关闭）",
+    "zh-TW": "預設開啟（使用者不可關閉）"
+  },
+  "deletePluginQuestion": {
+    "en": "Delete plugin?",
+    "zh-CN": "删除插件？",
+    "zh-TW": "刪除外掛？"
+  },
+  "usedBy": {
+    "en": "Used by",
+    "zh-CN": "已用于",
+    "zh-TW": "已用於"
+  },
+  "disabled": {
+    "en": "Disabled",
+    "zh-CN": "已停用",
+    "zh-TW": "已停用"
+  },
+  "componentRemoved": {
+    "en": "Component removed",
+    "zh-CN": "组件已移除",
+    "zh-TW": "元件已移除"
+  },
+  "noComponents": {
+    "en": "No components yet",
+    "zh-CN": "暂无组件",
+    "zh-TW": "暫無元件"
+  },
+  "modelOrderSaved": {
+    "en": "Model order and default saved",
+    "zh-CN": "模型顺序和默认模型已保存",
+    "zh-TW": "模型順序和預設模型已儲存"
+  },
+  "invalidParameterMapping": {
+    "en": "Invalid parameter mapping",
+    "zh-CN": "参数映射格式不正确",
+    "zh-TW": "參數對應格式不正確"
+  },
+  "testFailed": {
+    "en": "Test failed",
+    "zh-CN": "测试失败",
+    "zh-TW": "測試失敗"
+  },
+  "syncFailed": {
+    "en": "Could not sync",
+    "zh-CN": "同步失败",
+    "zh-TW": "同步失敗"
+  },
+  "matchFailed": {
+    "en": "Could not match",
+    "zh-CN": "匹配失败",
+    "zh-TW": "匹配失敗"
+  },
+  "modelNotInCatalog": {
+    "en": "Model not found in catalog",
+    "zh-CN": "目录中未找到此模型",
+    "zh-TW": "目錄中未找到此模型"
+  },
+  "notListed": {
+    "en": "Not listed",
+    "zh-CN": "未收录",
+    "zh-TW": "未收錄"
+  },
+  "catalogUnavailable": {
+    "en": "Catalog temporarily unavailable",
+    "zh-CN": "目录暂不可用",
+    "zh-TW": "目錄暫不可用"
+  },
+  "catalogLoadFailed": {
+    "en": "Could not load catalog",
+    "zh-CN": "目录加载失败",
+    "zh-TW": "目錄載入失敗"
+  },
+  "modelProviders": {
+    "en": "Model providers",
+    "zh-CN": "模型服务",
+    "zh-TW": "模型服務"
+  },
+  "orderAndDefault": {
+    "en": "Order and default model",
+    "zh-CN": "顺序与默认模型",
+    "zh-TW": "順序與預設模型"
+  },
+  "addProvider": {
+    "en": "Add provider",
+    "zh-CN": "添加 Provider",
+    "zh-TW": "新增 Provider"
+  },
+  "modelOrderHint": {
+    "en": "This order applies across providers. New users start with the default model; existing users keep their selection.",
+    "zh-CN": "所有服务共用此顺序。新用户使用默认模型，已选过模型的用户保留自己的选择。",
+    "zh-TW": "所有服務共用此順序。新使用者使用預設模型，已選過模型的使用者保留自己的選擇。"
+  },
+  "default": {
+    "en": "Default",
+    "zh-CN": "默认",
+    "zh-TW": "預設"
+  },
+  "moveToTop": {
+    "en": "Move to top",
+    "zh-CN": "置顶",
+    "zh-TW": "置頂"
+  },
+  "moveUp": {
+    "en": "Move up",
+    "zh-CN": "上移",
+    "zh-TW": "上移"
+  },
+  "moveDown": {
+    "en": "Move down",
+    "zh-CN": "下移",
+    "zh-TW": "下移"
+  },
+  "noEnabledChatModels": {
+    "en": "No enabled chat models",
+    "zh-CN": "暂无已启用的对话模型",
+    "zh-TW": "暫無已啟用的對話模型"
+  },
+  "noProviders": {
+    "en": "No providers yet",
+    "zh-CN": "暂无服务",
+    "zh-TW": "暫無服務"
+  },
+  "editProvider": {
+    "en": "Edit provider",
+    "zh-CN": "编辑服务",
+    "zh-TW": "編輯服務"
+  },
+  "settings": {
+    "en": "Settings",
+    "zh-CN": "设置",
+    "zh-TW": "設定"
+  },
+  "testProviderConnection": {
+    "en": "Test provider connection",
+    "zh-CN": "测试服务连接",
+    "zh-TW": "測試服務連線"
+  },
+  "providerActions": {
+    "en": "Provider actions",
+    "zh-CN": "服务操作",
+    "zh-TW": "服務操作"
+  },
+  "deleteProvider": {
+    "en": "Delete provider",
+    "zh-CN": "删除服务",
+    "zh-TW": "刪除服務"
+  },
+  "enabled": {
+    "en": "Enabled",
+    "zh-CN": "已启用",
+    "zh-TW": "已啟用"
+  },
+  "keyConfigured": {
+    "en": "Key configured",
+    "zh-CN": "Key 已配置",
+    "zh-TW": "已設定金鑰"
+  },
+  "noKey": {
+    "en": "No key",
+    "zh-CN": "无 Key",
+    "zh-TW": "無金鑰"
+  },
+  "searchModels": {
+    "en": "Search models",
+    "zh-CN": "搜索模型",
+    "zh-TW": "搜尋模型"
+  },
+  "sync": {
+    "en": "Sync",
+    "zh-CN": "同步",
+    "zh-TW": "同步"
+  },
+  "updateModelMetadata": {
+    "en": "Update model metadata",
+    "zh-CN": "更新模型元数据",
+    "zh-TW": "更新模型中繼資料"
+  },
+  "updateMetadata": {
+    "en": "Update metadata",
+    "zh-CN": "更新元数据",
+    "zh-TW": "更新中繼資料"
+  },
+  "customModel": {
+    "en": "Custom model",
+    "zh-CN": "自定义模型",
+    "zh-TW": "自訂模型"
+  },
+  "remoteUnavailable": {
+    "en": "Unavailable remotely",
+    "zh-CN": "远端不可用",
+    "zh-TW": "遠端不可用"
+  },
+  "imageGeneration": {
+    "en": "Image generation",
+    "zh-CN": "图像生成",
+    "zh-TW": "影像生成"
+  },
+  "imageUnderstanding": {
+    "en": "Image understanding",
+    "zh-CN": "图像理解",
+    "zh-TW": "影像理解"
+  },
+  "toolCalling": {
+    "en": "Tool calling",
+    "zh-CN": "工具调用",
+    "zh-TW": "工具呼叫"
+  },
+  "reasoning": {
+    "en": "Reasoning",
+    "zh-CN": "思考",
+    "zh-TW": "思考"
+  },
+  "modelActions": {
+    "en": "Model actions",
+    "zh-CN": "模型操作",
+    "zh-TW": "模型操作"
+  },
+  "editCapabilities": {
+    "en": "Edit capabilities",
+    "zh-CN": "编辑能力",
+    "zh-TW": "編輯能力"
+  },
+  "browseCatalog": {
+    "en": "Browse catalog",
+    "zh-CN": "参考目录",
+    "zh-TW": "參考目錄"
+  },
+  "autoMatched": {
+    "en": "Matched automatically",
+    "zh-CN": "已自动匹配",
+    "zh-TW": "已自動匹配"
+  },
+  "autoMatch": {
+    "en": "Match automatically",
+    "zh-CN": "自动匹配",
+    "zh-TW": "自動匹配"
+  },
+  "testModel": {
+    "en": "Test model",
+    "zh-CN": "测试模型",
+    "zh-TW": "測試模型"
+  },
+  "noModels": {
+    "en": "No models yet",
+    "zh-CN": "暂无模型",
+    "zh-TW": "暫無模型"
+  },
+  "editProviderDialog": {
+    "en": "Edit provider",
+    "zh-CN": "编辑 Provider",
+    "zh-TW": "編輯 Provider"
+  },
+  "protocol": {
+    "en": "Protocol",
+    "zh-CN": "协议",
+    "zh-TW": "協議"
+  },
+  "providerProtocol": {
+    "en": "Provider protocol",
+    "zh-CN": "Provider 协议",
+    "zh-TW": "Provider 協議"
+  },
+  "keepCurrentKey": {
+    "en": "Keep current key",
+    "zh-CN": "保留当前密钥",
+    "zh-TW": "保留當前金鑰"
+  },
+  "setNewKey": {
+    "en": "Set new key",
+    "zh-CN": "设置新密钥",
+    "zh-TW": "設定新金鑰"
+  },
+  "deleteKey": {
+    "en": "Delete key",
+    "zh-CN": "删除密钥",
+    "zh-TW": "刪除金鑰"
+  },
+  "newKey": {
+    "en": "New key",
+    "zh-CN": "新密钥",
+    "zh-TW": "新金鑰"
+  },
+  "timeoutSeconds": {
+    "en": "Timeout (seconds)",
+    "zh-CN": "超时（秒）",
+    "zh-TW": "逾時（秒）"
+  },
+  "catalogProviderID": {
+    "en": "Catalog provider ID",
+    "zh-CN": "目录 Provider ID",
+    "zh-TW": "目錄 Provider ID"
+  },
+  "discoverRemoteModels": {
+    "en": "Discover remote models",
+    "zh-CN": "发现远端模型",
+    "zh-TW": "發現遠端模型"
+  },
+  "allowWithoutKey": {
+    "en": "Allow without a key",
+    "zh-CN": "允许无密钥",
+    "zh-TW": "允許無金鑰"
+  },
+  "modelCapabilities": {
+    "en": "Model capabilities",
+    "zh-CN": "模型能力",
+    "zh-TW": "模型能力"
+  },
+  "modelConfigSections": {
+    "en": "Model configuration sections",
+    "zh-CN": "模型配置分类",
+    "zh-TW": "模型配置分類"
+  },
+  "general": {
+    "en": "General",
+    "zh-CN": "基础",
+    "zh-TW": "基礎"
+  },
+  "image": {
+    "en": "Images",
+    "zh-CN": "生图",
+    "zh-TW": "生圖"
+  },
+  "metadata": {
+    "en": "Metadata",
+    "zh-CN": "元数据",
+    "zh-TW": "中繼資料"
+  },
+  "matching": {
+    "en": "Matching",
+    "zh-CN": "匹配中",
+    "zh-TW": "匹配中"
+  },
+  "notMatched": {
+    "en": "Not matched",
+    "zh-CN": "未匹配",
+    "zh-TW": "未匹配"
+  },
+  "manualOverrides": {
+    "en": "Manual overrides",
+    "zh-CN": "手动覆盖",
+    "zh-TW": "手動覆蓋"
+  },
+  "displayName": {
+    "en": "Display name",
+    "zh-CN": "显示名称",
+    "zh-TW": "顯示名稱"
+  },
+  "modelID": {
+    "en": "Model ID",
+    "zh-CN": "模型 ID",
+    "zh-TW": "模型 ID"
+  },
+  "type": {
+    "en": "Type",
+    "zh-CN": "类型",
+    "zh-TW": "型別"
+  },
+  "chatModel": {
+    "en": "Chat model",
+    "zh-CN": "聊天模型",
+    "zh-TW": "聊天模型"
+  },
+  "imageModel": {
+    "en": "Image model",
+    "zh-CN": "生图模型",
+    "zh-TW": "生圖模型"
+  },
+  "contextWindow": {
+    "en": "Context window",
+    "zh-CN": "上下文长度",
+    "zh-TW": "上下文長度"
+  },
+  "maxOutputCapability": {
+    "en": "Maximum output capability (0 = unknown)",
+    "zh-CN": "输出能力上限（0 = 未知）",
+    "zh-TW": "輸出能力上限（0 = 未知）"
+  },
+  "maxOutputHint": {
+    "en": "The model's maximum output tokens, including reasoning and the answer. Used for capability checks and auxiliary task budgets, not a chat generation limit; ordinary chat leaves the allowance to the provider.",
+    "zh-CN": "模型支持的最大输出 tokens，包含思考与正文。用于能力校验和辅助任务预算，不是聊天生成限额；常规聊天不发送输出额度，由服务商决定。",
+    "zh-TW": "模型支援的最大輸出 tokens，包含思考與正文。用於能力校驗和輔助任務預算，不是聊天生成限額；常規聊天不傳送輸出額度，由服務商決定。"
+  },
+  "toolCallingUnknown": {
+    "en": "Tool calling · Unconfirmed",
+    "zh-CN": "工具调用 · 未确认",
+    "zh-TW": "工具呼叫 · 未確認"
+  },
+  "visionUnknown": {
+    "en": "Image understanding · Unconfirmed",
+    "zh-CN": "图像理解 · 未确认",
+    "zh-TW": "影像理解 · 未確認"
+  },
+  "structuredOutput": {
+    "en": "Structured output",
+    "zh-CN": "结构化输出",
+    "zh-TW": "結構化輸出"
+  },
+  "structuredOutputUnknown": {
+    "en": "Structured output · Unconfirmed",
+    "zh-CN": "结构化输出 · 未确认",
+    "zh-TW": "結構化輸出 · 未確認"
+  },
+  "defaultModel": {
+    "en": "Default model",
+    "zh-CN": "默认模型",
+    "zh-TW": "預設模型"
+  },
+  "size": {
+    "en": "Size",
+    "zh-CN": "尺寸",
+    "zh-TW": "尺寸"
+  },
+  "providerDefault": {
+    "en": "Provider default",
+    "zh-CN": "服务默认",
+    "zh-TW": "服務預設"
+  },
+  "quality": {
+    "en": "Quality",
+    "zh-CN": "质量",
+    "zh-TW": "品質"
+  },
+  "outputFormat": {
+    "en": "Output format",
+    "zh-CN": "输出格式",
+    "zh-TW": "輸出格式"
+  },
+  "background": {
+    "en": "Background",
+    "zh-CN": "背景",
+    "zh-TW": "背景"
+  },
+  "automatic": {
+    "en": "Automatic",
+    "zh-CN": "自动",
+    "zh-TW": "自動"
+  },
+  "opaque": {
+    "en": "Opaque",
+    "zh-CN": "不透明",
+    "zh-TW": "不透明"
+  },
+  "transparent": {
+    "en": "Transparent",
+    "zh-CN": "透明",
+    "zh-TW": "透明"
+  },
+  "referenceImageEditing": {
+    "en": "Reference image editing",
+    "zh-CN": "支持参考图编辑",
+    "zh-TW": "支援參考圖編輯"
+  },
+  "reasoningMode": {
+    "en": "Reasoning mode",
+    "zh-CN": "思考方式",
+    "zh-TW": "思考方式"
+  },
+  "reasoningParameter": {
+    "en": "Reasoning parameter",
+    "zh-CN": "思考参数",
+    "zh-TW": "思考參數"
+  },
+  "supportedLevels": {
+    "en": "Supported levels",
+    "zh-CN": "支持档位",
+    "zh-TW": "支援檔位"
+  },
+  "defaultLevel": {
+    "en": "Default level",
+    "zh-CN": "默认档位",
+    "zh-TW": "預設檔位"
+  },
+  "parameterMapping": {
+    "en": "Parameter mapping",
+    "zh-CN": "参数映射",
+    "zh-TW": "參數對應"
+  },
+  "testPassed": {
+    "en": "Test passed",
+    "zh-CN": "测试通过",
+    "zh-TW": "測試通過"
+  },
+  "modelCatalog": {
+    "en": "Model catalog",
+    "zh-CN": "参考模型目录",
+    "zh-TW": "參考模型目錄"
+  },
+  "catalogProvider": {
+    "en": "Catalog provider",
+    "zh-CN": "目录 Provider",
+    "zh-TW": "目錄 Provider"
+  },
+  "chooseProvider": {
+    "en": "Choose provider",
+    "zh-CN": "选择 Provider",
+    "zh-TW": "選擇 Provider"
+  },
+  "catalogApplied": {
+    "en": "Catalog applied",
+    "zh-CN": "目录已应用",
+    "zh-TW": "目錄已應用"
+  },
+  "deleteConfigQuestion": {
+    "en": "Delete configuration?",
+    "zh-CN": "删除配置？",
+    "zh-TW": "刪除配置？"
+  },
+  "noResponse": {
+    "en": "No response received",
+    "zh-CN": "未收到响应",
+    "zh-TW": "未收到回應"
+  },
+  "requestID": {
+    "en": "Request ID",
+    "zh-CN": "请求 ID",
+    "zh-TW": "請求 ID"
+  },
+  "upstreamRequestID": {
+    "en": "Upstream request ID",
+    "zh-CN": "上游请求 ID",
+    "zh-TW": "上游請求 ID"
+  },
+  "purposeRoundAttempt": {
+    "en": "Purpose / round / attempt",
+    "zh-CN": "用途 / 轮次 / 尝试",
+    "zh-TW": "用途 / 輪次 / 嘗試"
+  },
+  "model": {
+    "en": "Model",
+    "zh-CN": "模型",
+    "zh-TW": "模型"
+  },
+  "request": {
+    "en": "Request",
+    "zh-CN": "请求",
+    "zh-TW": "請求"
+  },
+  "response": {
+    "en": "Response",
+    "zh-CN": "响应",
+    "zh-TW": "回應"
+  },
+  "streaming": {
+    "en": "Streaming",
+    "zh-CN": "流式",
+    "zh-TW": "流式"
+  },
+  "yes": {
+    "en": "Yes",
+    "zh-CN": "是",
+    "zh-TW": "是"
+  },
+  "no": {
+    "en": "No",
+    "zh-CN": "否",
+    "zh-TW": "否"
+  },
+  "start": {
+    "en": "Start",
+    "zh-CN": "开始",
+    "zh-TW": "開始"
+  },
+  "firstByte": {
+    "en": "First byte",
+    "zh-CN": "首字节",
+    "zh-TW": "首位元組"
+  },
+  "firstToken": {
+    "en": "First token",
+    "zh-CN": "首 Token",
+    "zh-TW": "首 Token"
+  },
+  "lastData": {
+    "en": "Last data",
+    "zh-CN": "最后数据",
+    "zh-TW": "最後資料"
+  },
+  "end": {
+    "en": "End",
+    "zh-CN": "结束",
+    "zh-TW": "結束"
+  },
+  "totalDuration": {
+    "en": "Total duration",
+    "zh-CN": "总耗时",
+    "zh-TW": "總耗時"
+  },
+  "responseStatus": {
+    "en": "Response status",
+    "zh-CN": "响应状态",
+    "zh-TW": "回應狀態"
+  },
+  "endMarker": {
+    "en": "End marker",
+    "zh-CN": "结束标记",
+    "zh-TW": "結束標記"
+  },
+  "requestResponseBytes": {
+    "en": "Request / response bytes",
+    "zh-CN": "请求 / 响应字节",
+    "zh-TW": "請求 / 回應位元組"
+  },
+  "capturedResponseBytes": {
+    "en": "Captured response bytes",
+    "zh-CN": "捕获响应字节",
+    "zh-TW": "捕獲回應位元組"
+  },
+  "truncation": {
+    "en": "Truncation",
+    "zh-CN": "截断",
+    "zh-TW": "截斷"
+  },
+  "redaction": {
+    "en": "Redaction",
+    "zh-CN": "脱敏",
+    "zh-TW": "遮蔽敏感資訊"
+  },
+  "inputOutputTokens": {
+    "en": "Input / output tokens",
+    "zh-CN": "输入 / 输出 Tokens",
+    "zh-TW": "輸入 / 輸出 Tokens"
+  },
+  "totalTokens": {
+    "en": "Total tokens",
+    "zh-CN": "总 Tokens",
+    "zh-TW": "總 Tokens"
+  },
+  "cachedTokens": {
+    "en": "Cached tokens",
+    "zh-CN": "缓存 Tokens",
+    "zh-TW": "快取 Tokens"
+  },
+  "reasoningTokens": {
+    "en": "Reasoning tokens",
+    "zh-CN": "推理 Tokens",
+    "zh-TW": "推理 Tokens"
+  },
+  "runID": {
+    "en": "Run ID",
+    "zh-CN": "运行 ID",
+    "zh-TW": "執行 ID"
+  },
+  "sessionID": {
+    "en": "Conversation ID",
+    "zh-CN": "对话 ID",
+    "zh-TW": "對話 ID"
+  },
+  "providerID": {
+    "en": "Provider ID",
+    "zh-CN": "服务 ID",
+    "zh-TW": "服務 ID"
+  },
+  "errorClass": {
+    "en": "Error category",
+    "zh-CN": "错误分类",
+    "zh-TW": "錯誤分類"
+  },
+  "error": {
+    "en": "Error",
+    "zh-CN": "错误",
+    "zh-TW": "錯誤"
+  },
+  "readError": {
+    "en": "Read error",
+    "zh-CN": "读取错误",
+    "zh-TW": "讀取錯誤"
+  },
+  "upstreamErrorCode": {
+    "en": "Upstream error code",
+    "zh-CN": "上游错误码",
+    "zh-TW": "上游錯誤碼"
+  },
+  "upstreamErrorType": {
+    "en": "Upstream error type",
+    "zh-CN": "上游错误类型",
+    "zh-TW": "上游錯誤型別"
+  },
+  "upstreamError": {
+    "en": "Upstream error",
+    "zh-CN": "上游错误",
+    "zh-TW": "上游錯誤"
+  },
+  "none": {
+    "en": "None",
+    "zh-CN": "无",
+    "zh-TW": "無"
+  },
+  "noCapturedBody": {
+    "en": "No body captured",
+    "zh-CN": "无捕获正文",
+    "zh-TW": "無捕獲正文"
+  },
+  "copyFailed": {
+    "en": "Could not copy. Check your browser's clipboard permission.",
+    "zh-CN": "复制失败，请检查浏览器剪贴板权限",
+    "zh-TW": "複製失敗，請檢查瀏覽器剪貼簿權限"
+  },
+  "requestDetails": {
+    "en": "Request details",
+    "zh-CN": "请求详情",
+    "zh-TW": "請求詳情"
+  },
+  "copied": {
+    "en": "Copied",
+    "zh-CN": "已复制",
+    "zh-TW": "已複製"
+  },
+  "copyJSON": {
+    "en": "Copy JSON",
+    "zh-CN": "复制 JSON",
+    "zh-TW": "複製 JSON"
+  },
+  "captureTruncatedHint": {
+    "en": "This record reached the capture limit; the original content may be incomplete.",
+    "zh-CN": "此记录已达到捕获上限，原文可能不完整。",
+    "zh-TW": "此記錄已達到捕獲上限，原文可能不完整。"
+  },
+  "rawSSEData": {
+    "en": "Raw SSE data",
+    "zh-CN": "原始 SSE 数据",
+    "zh-TW": "原始 SSE 資料"
+  },
+  "noCapturedStream": {
+    "en": "No stream data captured",
+    "zh-CN": "无捕获流数据",
+    "zh-TW": "無捕獲流資料"
+  },
+  "requestsCleared": {
+    "en": "Request records cleared",
+    "zh-CN": "请求记录已清除",
+    "zh-TW": "請求記錄已清除"
+  },
+  "clearFailed": {
+    "en": "Could not clear",
+    "zh-CN": "清除失败",
+    "zh-TW": "清除失敗"
+  },
+  "refreshRequests": {
+    "en": "Refresh request records",
+    "zh-CN": "刷新请求记录",
+    "zh-TW": "重新整理請求記錄"
+  },
+  "clearRecords": {
+    "en": "Clear records",
+    "zh-CN": "清除记录",
+    "zh-TW": "清除記錄"
+  },
+  "loadingRequests": {
+    "en": "Loading request records",
+    "zh-CN": "加载请求记录",
+    "zh-TW": "載入請求記錄"
+  },
+  "nonStreaming": {
+    "en": "Non-streaming",
+    "zh-CN": "非流式",
+    "zh-TW": "非流式"
+  },
+  "truncated": {
+    "en": "Truncated",
+    "zh-CN": "已截断",
+    "zh-TW": "已截斷"
+  },
+  "redacted": {
+    "en": "Redacted",
+    "zh-CN": "已脱敏",
+    "zh-TW": "已遮蔽敏感資訊"
+  },
+  "loadingRequestDetails": {
+    "en": "Loading request details",
+    "zh-CN": "加载请求详情",
+    "zh-TW": "載入請求詳情"
+  },
+  "noRequests": {
+    "en": "No request records yet",
+    "zh-CN": "暂无请求记录",
+    "zh-TW": "暫無請求記錄"
+  },
+  "enableDebugHint": {
+    "en": "Enable Debug mode in system settings to record new model requests here.",
+    "zh-CN": "在系统设置中开启 Debug 模式后，新的模型请求会记录在这里。",
+    "zh-TW": "在系統設定中開啟 Debug 模式後，新的模型請求會記錄在這裡。"
+  },
+  "previousRequestsPage": {
+    "en": "Previous request records",
+    "zh-CN": "上一页请求记录",
+    "zh-TW": "上一頁請求記錄"
+  },
+  "nextRequestsPage": {
+    "en": "Next request records",
+    "zh-CN": "下一页请求记录",
+    "zh-TW": "下一頁請求記錄"
+  },
+  "clearRunRequestsQuestion": {
+    "en": "Clear this run's request records?",
+    "zh-CN": "清除本次运行的请求记录？",
+    "zh-TW": "清除本次執行的請求記錄？"
+  },
+  "clearAllRequestsQuestion": {
+    "en": "Clear all request records?",
+    "zh-CN": "清除所有请求记录？",
+    "zh-TW": "清除所有請求記錄？"
+  },
+  "clear": {
+    "en": "Clear",
+    "zh-CN": "清除",
+    "zh-TW": "清除"
+  },
+  "clearRequestsHint": {
+    "en": "Only diagnostic logs are deleted. Conversations, run records and Debug mode are unaffected. This cannot be undone.",
+    "zh-CN": "只删除诊断日志，不影响对话、运行记录或 Debug 模式。此操作无法撤销。",
+    "zh-TW": "只刪除診斷日誌，不影響對話、執行記錄或 Debug 模式。此操作無法撤銷。"
+  },
+  "requestDiagnostics": {
+    "en": "Request diagnostics",
+    "zh-CN": "请求诊断",
+    "zh-TW": "請求診斷"
+  },
+  "webSearch": {
+    "en": "Web search",
+    "zh-CN": "网页搜索",
+    "zh-TW": "網頁搜尋"
+  },
+  "enableWebSearch": {
+    "en": "Enable web search",
+    "zh-CN": "启用网页搜索",
+    "zh-TW": "啟用網頁搜尋"
+  },
+  "searchProvider": {
+    "en": "Search provider",
+    "zh-CN": "搜索服务",
+    "zh-TW": "搜尋服務"
+  },
+  "serviceURL": {
+    "en": "Service URL",
+    "zh-CN": "服务地址",
+    "zh-TW": "服務地址"
+  },
+  "optionalAPIKey": {
+    "en": "API key (optional)",
+    "zh-CN": "API 密钥（可选）",
+    "zh-TW": "API 金鑰（可選）"
+  },
+  "apiKey": {
+    "en": "API key",
+    "zh-CN": "API 密钥",
+    "zh-TW": "API 金鑰"
+  },
+  "configuredKeepBlank": {
+    "en": "Configured · Leave blank to keep",
+    "zh-CN": "已配置 · 留空保留",
+    "zh-TW": "已配置 · 留空保留"
+  },
+  "enterKey": {
+    "en": "Enter key",
+    "zh-CN": "输入密钥",
+    "zh-TW": "輸入金鑰"
+  },
+  "clearSavedKey": {
+    "en": "Clear saved key",
+    "zh-CN": "清除已保存密钥",
+    "zh-TW": "清除已儲存金鑰"
+  },
+  "clearKeyAfterSave": {
+    "en": "Key will be cleared on save",
+    "zh-CN": "保存后清除密钥",
+    "zh-TW": "儲存後清除金鑰"
+  },
+  "maxResults": {
+    "en": "Result limit",
+    "zh-CN": "结果上限",
+    "zh-TW": "結果上限"
+  },
+  "documentation": {
+    "en": "Documentation",
+    "zh-CN": "文档",
+    "zh-TW": "文件"
+  },
+  "testSearch": {
+    "en": "Test search",
+    "zh-CN": "测试搜索",
+    "zh-TW": "測試搜尋"
+  },
+  "testSearchQuery": {
+    "en": "Test search query",
+    "zh-CN": "测试搜索词",
+    "zh-TW": "測試搜尋詞"
+  },
+  "enterSearchQuery": {
+    "en": "Enter search query",
+    "zh-CN": "输入搜索词",
+    "zh-TW": "輸入搜尋詞"
+  },
+  "test": {
+    "en": "Test",
+    "zh-CN": "测试",
+    "zh-TW": "測試"
+  },
+  "noResults": {
+    "en": "No results found",
+    "zh-CN": "未找到结果",
+    "zh-TW": "未找到結果"
+  },
+  "users": {
+    "en": "Users",
+    "zh-CN": "用户",
+    "zh-TW": "使用者"
+  },
+  "addUser": {
+    "en": "Add user",
+    "zh-CN": "添加用户",
+    "zh-TW": "新增使用者"
+  },
+  "administrator": {
+    "en": "Administrator",
+    "zh-CN": "管理员",
+    "zh-TW": "管理員"
+  },
+  "editUser": {
+    "en": "Edit user",
+    "zh-CN": "编辑用户",
+    "zh-TW": "編輯使用者"
+  },
+  "deleteUser": {
+    "en": "Delete user",
+    "zh-CN": "删除用户",
+    "zh-TW": "刪除使用者"
+  },
+  "account": {
+    "en": "Account",
+    "zh-CN": "账号",
+    "zh-TW": "帳號"
+  },
+  "newPassword": {
+    "en": "New password",
+    "zh-CN": "新密码",
+    "zh-TW": "新密碼"
+  },
+  "password": {
+    "en": "Password",
+    "zh-CN": "密码",
+    "zh-TW": "密碼"
+  },
+  "role": {
+    "en": "Role",
+    "zh-CN": "角色",
+    "zh-TW": "角色"
+  },
+  "deleteUserQuestion": {
+    "en": "Delete user?",
+    "zh-CN": "删除用户？",
+    "zh-TW": "刪除使用者？"
+  },
+  "debugEnabled": {
+    "en": "Debug mode enabled",
+    "zh-CN": "Debug 模式已开启",
+    "zh-TW": "Debug 模式已開啟"
+  },
+  "debugDisabled": {
+    "en": "Debug mode disabled",
+    "zh-CN": "Debug 模式已关闭",
+    "zh-TW": "Debug 模式已關閉"
+  },
+  "system": {
+    "en": "System",
+    "zh-CN": "系统",
+    "zh-TW": "系統"
+  },
+  "auxiliaryModels": {
+    "en": "Auxiliary models",
+    "zh-CN": "辅助模型",
+    "zh-TW": "輔助模型"
+  },
+  "contextCompaction": {
+    "en": "Context compaction",
+    "zh-CN": "上下文压缩",
+    "zh-TW": "上下文壓縮"
+  },
+  "useMainModel": {
+    "en": "Use main model",
+    "zh-CN": "使用主模型",
+    "zh-TW": "使用主模型"
+  },
+  "memoryExtraction": {
+    "en": "Memory extraction",
+    "zh-CN": "记忆提炼",
+    "zh-TW": "記憶提煉"
+  },
+  "conversationTitles": {
+    "en": "Conversation titles",
+    "zh-CN": "对话标题",
+    "zh-TW": "對話標題"
+  },
+  "firstEnabledImageModel": {
+    "en": "First enabled image model",
+    "zh-CN": "首个已启用的生图模型",
+    "zh-TW": "首個已啟用的生圖模型"
+  },
+  "memoryEmbeddings": {
+    "en": "Memory embeddings",
+    "zh-CN": "记忆向量化",
+    "zh-TW": "記憶向量化"
+  },
+  "localBGESmall": {
+    "en": "Local BGE small",
+    "zh-CN": "本地 BGE small",
+    "zh-TW": "本地 BGE small"
+  },
+  "additionalInstructions": {
+    "en": "Additional instructions",
+    "zh-CN": "补充指令",
+    "zh-TW": "補充指令"
+  },
+  "optional": {
+    "en": "Optional",
+    "zh-CN": "可选",
+    "zh-TW": "可選"
+  },
+  "maxToolRounds": {
+    "en": "Tool round limit",
+    "zh-CN": "工具轮次上限",
+    "zh-TW": "工具輪次上限"
+  },
+  "diagnostics": {
+    "en": "Diagnostics",
+    "zh-CN": "诊断",
+    "zh-TW": "診斷"
+  },
+  "debugMode": {
+    "en": "Debug mode",
+    "zh-CN": "Debug 模式",
+    "zh-TW": "Debug 模式"
+  },
+  "debugModeHint": {
+    "en": "Record model requests, original responses and stream data, including conversations and tools, visible only to administrators. Credentials are redacted; records expire after 7 days.",
+    "zh-CN": "开启后记录模型请求、响应原文及流数据，包含对话及工具内容，仅管理员可见。凭据脱敏，限量保存 7 天。",
+    "zh-TW": "開啟後記錄模型請求、回應原文及流資料，包含對話及工具內容，僅管理員可見。憑據遮蔽敏感資訊，限量儲存 7 天。"
+  },
+  "savingEllipsis": {
+    "en": "Saving…",
+    "zh-CN": "正在保存…",
+    "zh-TW": "正在儲存…"
+  },
+  "debugImmediateHint": {
+    "en": "Applies to new upstream requests immediately, with no restart.",
+    "zh-CN": "切换后立即对新的上游请求生效，无需重启。",
+    "zh-TW": "切換後立即對新的上游請求生效，無需重新啟動。"
+  },
+  "debugHistoryHint": {
+    "en": "Turning this off keeps existing records. View or clear them in Request diagnostics or run details.",
+    "zh-CN": "关闭不会清除已有记录。可在“请求诊断”或运行详情中查看或清除。",
+    "zh-TW": "關閉不會清除已有記錄。可在“請求診斷”或執行詳情中檢視或清除。"
+  },
+  "operationFailed": {
+    "en": "Operation failed",
+    "zh-CN": "操作失败",
+    "zh-TW": "操作失敗"
+  },
+  "workspaces": {
+    "en": "Workspaces",
+    "zh-CN": "工作区",
+    "zh-TW": "工作區"
+  },
+  "refresh": {
+    "en": "Refresh",
+    "zh-CN": "刷新",
+    "zh-TW": "重新整理"
+  },
+  "running": {
+    "en": "Running",
+    "zh-CN": "运行中",
+    "zh-TW": "執行中"
+  },
+  "notStarted": {
+    "en": "Not started",
+    "zh-CN": "未启动",
+    "zh-TW": "未啟動"
+  },
+  "stop": {
+    "en": "Stop",
+    "zh-CN": "停止",
+    "zh-TW": "停止"
+  },
+  "startAction": {
+    "en": "Start",
+    "zh-CN": "启动",
+    "zh-TW": "啟動"
+  },
+  "rebuild": {
+    "en": "Rebuild",
+    "zh-CN": "重建",
+    "zh-TW": "重建"
+  },
+  "noWorkspaces": {
+    "en": "No workspaces yet",
+    "zh-CN": "暂无工作区",
+    "zh-TW": "暫無工作區"
+  },
+  "rebuildWorkspaceQuestion": {
+    "en": "Rebuild workspace?",
+    "zh-CN": "重建工作区？",
+    "zh-TW": "重建工作區？"
+  },
+  "returnedData": {
+    "en": "Returned data",
+    "zh-CN": "返回数据",
+    "zh-TW": "返回資料"
+  },
+  "allStatuses": {
+    "en": "All statuses",
+    "zh-CN": "所有状态",
+    "zh-TW": "所有狀態"
+  },
+  "today": {
+    "en": "Today",
+    "zh-CN": "今天",
+    "zh-TW": "今天"
+  },
+  "last7Days": {
+    "en": "Last 7 days",
+    "zh-CN": "最近 7 天",
+    "zh-TW": "最近 7 天"
+  },
+  "last30Days": {
+    "en": "Last 30 days",
+    "zh-CN": "最近 30 天",
+    "zh-TW": "最近 30 天"
+  },
+  "last90Days": {
+    "en": "Last 90 days",
+    "zh-CN": "最近 90 天",
+    "zh-TW": "最近 90 天"
+  },
+  "runRecords": {
+    "en": "Run records",
+    "zh-CN": "运行记录",
+    "zh-TW": "執行記錄"
+  },
+  "statisticsRange": {
+    "en": "Statistics range",
+    "zh-CN": "统计范围",
+    "zh-TW": "統計範圍"
+  },
+  "refreshRuns": {
+    "en": "Refresh run records",
+    "zh-CN": "刷新运行记录",
+    "zh-TW": "重新整理執行記錄"
+  },
+  "runView": {
+    "en": "Run records view",
+    "zh-CN": "运行记录视图",
+    "zh-TW": "執行記錄檢視"
+  },
+  "records": {
+    "en": "Records",
+    "zh-CN": "记录",
+    "zh-TW": "記錄"
+  },
+  "overview": {
+    "en": "Overview",
+    "zh-CN": "概览",
+    "zh-TW": "概覽"
+  },
+  "runs": {
+    "en": "Runs",
+    "zh-CN": "运行",
+    "zh-TW": "執行"
+  },
+  "issues": {
+    "en": "Issues",
+    "zh-CN": "异常",
+    "zh-TW": "異常"
+  },
+  "inputTokens": {
+    "en": "Input tokens",
+    "zh-CN": "输入 Tokens",
+    "zh-TW": "輸入 Tokens"
+  },
+  "outputTokens": {
+    "en": "Output tokens",
+    "zh-CN": "输出 Tokens",
+    "zh-TW": "輸出 Tokens"
+  },
+  "averageDuration": {
+    "en": "Average duration",
+    "zh-CN": "平均总耗时",
+    "zh-TW": "平均總耗時"
+  },
+  "searchRuns": {
+    "en": "Search run records",
+    "zh-CN": "搜索运行记录",
+    "zh-TW": "搜尋執行記錄"
+  },
+  "searchRunsPlaceholder": {
+    "en": "Search tasks, models or users",
+    "zh-CN": "搜索任务、模型、用户",
+    "zh-TW": "搜尋任務、模型、使用者"
+  },
+  "runStatus": {
+    "en": "Run status",
+    "zh-CN": "运行状态",
+    "zh-TW": "執行狀態"
+  },
+  "filterModel": {
+    "en": "Filter by model",
+    "zh-CN": "筛选模型",
+    "zh-TW": "篩選模型"
+  },
+  "allModels": {
+    "en": "All models",
+    "zh-CN": "所有模型",
+    "zh-TW": "所有模型"
+  },
+  "filterUser": {
+    "en": "Filter by user",
+    "zh-CN": "筛选用户",
+    "zh-TW": "篩選使用者"
+  },
+  "allUsers": {
+    "en": "All users",
+    "zh-CN": "所有用户",
+    "zh-TW": "所有使用者"
+  },
+  "taskUser": {
+    "en": "Task / user",
+    "zh-CN": "任务 / 用户",
+    "zh-TW": "任務 / 使用者"
+  },
+  "status": {
+    "en": "Status",
+    "zh-CN": "状态",
+    "zh-TW": "狀態"
+  },
+  "duration": {
+    "en": "Duration",
+    "zh-CN": "耗时",
+    "zh-TW": "耗時"
+  },
+  "toolCallsSuffix": {
+    "en": "tool calls",
+    "zh-CN": "次工具",
+    "zh-TW": "次工具"
+  },
+  "runDetails": {
+    "en": "Run details",
+    "zh-CN": "运行详情",
+    "zh-TW": "執行詳情"
+  },
+  "noRecords": {
+    "en": "No records yet",
+    "zh-CN": "暂无记录",
+    "zh-TW": "暫無記錄"
+  },
+  "previousRunsPage": {
+    "en": "Previous run records",
+    "zh-CN": "上一页运行记录",
+    "zh-TW": "上一頁執行記錄"
+  },
+  "nextRunsPage": {
+    "en": "Next run records",
+    "zh-CN": "下一页运行记录",
+    "zh-TW": "下一頁執行記錄"
+  },
+  "modelProvider": {
+    "en": "Model / provider",
+    "zh-CN": "模型 / 服务",
+    "zh-TW": "模型 / 服務"
+  },
+  "cache": {
+    "en": "Cache",
+    "zh-CN": "缓存",
+    "zh-TW": "快取"
+  },
+  "openConversation": {
+    "en": "Open conversation",
+    "zh-CN": "打开对话",
+    "zh-TW": "開啟對話"
+  },
+  "content": {
+    "en": "Content",
+    "zh-CN": "内容",
+    "zh-TW": "內容"
+  },
+  "data": {
+    "en": "Data",
+    "zh-CN": "数据",
+    "zh-TW": "資料"
+  },
+  "noToolCalls": {
+    "en": "No tool calls",
+    "zh-CN": "无工具调用",
+    "zh-TW": "無工具呼叫"
+  },
+  "provider": {
+    "en": "Provider",
+    "zh-CN": "服务",
+    "zh-TW": "服務"
+  },
+  "userID": {
+    "en": "User ID",
+    "zh-CN": "用户 ID",
+    "zh-TW": "使用者 ID"
+  },
+  "resource": {
+    "en": "Resource",
+    "zh-CN": "资源",
+    "zh-TW": "資源"
+  },
+  "version": {
+    "en": "Version",
+    "zh-CN": "版本",
+    "zh-TW": "版本"
+  },
+  "archivedVersion": {
+    "en": "Archived version",
+    "zh-CN": "历史版本",
+    "zh-TW": "歷史版本"
+  },
+  "restartIncomplete": {
+    "en": "Restart did not finish. Check the service status and try again.",
+    "zh-CN": "重启未完成，请检查服务状态后重试。",
+    "zh-TW": "重新啟動未完成，請檢查服務狀態後重試。"
+  },
+  "restartUnconfirmedHint": {
+    "en": "The target build has not been confirmed. Check container logs or keep checking status. Do not restart the service again.",
+    "zh-CN": "仍未确认目标构建已启动，请检查容器日志，或继续检查状态。不要重复重启服务。",
+    "zh-TW": "仍未確認目標建置版本已啟動，請檢查容器日誌，或繼續檢查狀態。不要重複重新啟動服務。"
+  },
+  "adminLoginRequired": {
+    "en": "Sign in again with an administrator account",
+    "zh-CN": "请重新登录管理员账号",
+    "zh-TW": "請重新登入管理員帳號"
+  },
+  "updateStatusTimeout": {
+    "en": "Checking update status timed out. Try again.",
+    "zh-CN": "获取更新状态超时，请重试。",
+    "zh-TW": "獲取更新狀態逾時，請重試。"
+  },
+  "updateStatusFailed": {
+    "en": "Could not check update status",
+    "zh-CN": "无法获取更新状态",
+    "zh-TW": "無法獲取更新狀態"
+  },
+  "operationTimeout": {
+    "en": "The operation timed out. Try again.",
+    "zh-CN": "操作超时，请重试。",
+    "zh-TW": "操作逾時，請重試。"
+  },
+  "operationFailedRetry": {
+    "en": "Operation failed. Try again.",
+    "zh-CN": "操作失败，请重试",
+    "zh-TW": "操作失敗，請重試"
+  },
+  "localBuild": {
+    "en": "Local build",
+    "zh-CN": "本地构建",
+    "zh-TW": "本地建置版本"
+  },
+  "developmentBuild": {
+    "en": "Development build",
+    "zh-CN": "开发构建",
+    "zh-TW": "開發建置版本"
+  },
+  "waitingForRestart": {
+    "en": "Waiting for tasks to finish and the service to restart",
+    "zh-CN": "正在等待任务完成并重启",
+    "zh-TW": "正在等待任務完成並重新啟動"
+  },
+  "downloadingUpdate": {
+    "en": "Downloading update",
+    "zh-CN": "正在下载更新",
+    "zh-TW": "正在下載更新"
+  },
+  "preparingDownload": {
+    "en": "Preparing download",
+    "zh-CN": "正在准备下载",
+    "zh-TW": "正在準備下載"
+  },
+  "restoringBackup": {
+    "en": "Restoring backup",
+    "zh-CN": "正在恢复备份",
+    "zh-TW": "正在恢復備份"
+  },
+  "readyToRestart": {
+    "en": "Ready to restart",
+    "zh-CN": "已准备就绪，等待重启",
+    "zh-TW": "已準備就緒，等待重新啟動"
+  },
+  "checkingUpdates": {
+    "en": "Checking for updates",
+    "zh-CN": "正在检查更新",
+    "zh-TW": "正在檢查更新"
+  },
+  "updateConfirmed": {
+    "en": "Updated successfully; the target build is running",
+    "zh-CN": "更新成功，已运行目标构建",
+    "zh-TW": "更新成功，已執行目標建置版本"
+  },
+  "updateIncomplete": {
+    "en": "Update did not finish",
+    "zh-CN": "更新未完成",
+    "zh-TW": "更新未完成"
+  },
+  "manualUpgradeRequired": {
+    "en": "This build requires a manual upgrade",
+    "zh-CN": "此构建需要手动升级",
+    "zh-TW": "此建置版本需要手動升級"
+  },
+  "updateAvailable": {
+    "en": "Update available",
+    "zh-CN": "发现可用更新",
+    "zh-TW": "發現可用更新"
+  },
+  "upToDate": {
+    "en": "Already on the latest build",
+    "zh-CN": "已是最新构建",
+    "zh-TW": "已是最新建置版本"
+  },
+  "notChecked": {
+    "en": "Updates not checked yet",
+    "zh-CN": "尚未检查更新",
+    "zh-TW": "尚未檢查更新"
+  },
+  "softwareUpdate": {
+    "en": "Software update",
+    "zh-CN": "软件更新",
+    "zh-TW": "軟體更新"
+  },
+  "checkUpdates": {
+    "en": "Check for updates",
+    "zh-CN": "检查更新",
+    "zh-TW": "檢查更新"
+  },
+  "loadingBuild": {
+    "en": "Loading build information",
+    "zh-CN": "正在获取构建信息",
+    "zh-TW": "正在獲取建置版本資訊"
+  },
+  "builtAt": {
+    "en": "Built on {date}",
+    "zh-CN": "构建于 {date}",
+    "zh-TW": "建置於 {date}"
+  },
+  "runAfterRestart": {
+    "en": "Run after restart",
+    "zh-CN": "重启后运行",
+    "zh-TW": "重新啟動後執行"
+  },
+  "latestBuild": {
+    "en": "Latest build",
+    "zh-CN": "最新构建",
+    "zh-TW": "最新建置版本"
+  },
+  "restartNotConfirmed": {
+    "en": "Restart not yet confirmed",
+    "zh-CN": "尚未确认重启完成",
+    "zh-TW": "尚未確認重新啟動完成"
+  },
+  "downloadProgress": {
+    "en": "Update download progress",
+    "zh-CN": "更新下载进度",
+    "zh-TW": "更新下載進度"
+  },
+  "downloadedSuffix": {
+    "en": " downloaded",
+    "zh-CN": " 已下载",
+    "zh-TW": " 已下載"
+  },
+  "restartProgressHint": {
+    "en": "Wait up to 10 minutes for active tasks to finish, then restart. A brief disconnection is expected. The target build is being verified; you can leave this page.",
+    "zh-CN": "先等待进行中的任务完成，最多等待 10 分钟，再重启服务。短暂断开连接是正常现象；正在核对目标构建，可离开此页。",
+    "zh-TW": "先等待進行中的任務完成，最多等待 10 分鐘，再重新啟動服務。短暫斷開連線是正常現象；正在核對目標建置版本，可離開此頁。"
+  },
+  "waitingForConnection": {
+    "en": "Connection lost; waiting for the target build to start…",
+    "zh-CN": "服务连接已断开，正在等待目标构建启动…",
+    "zh-TW": "服務連線已斷開，正在等待目標建置版本啟動…"
+  },
+  "reconnectingProgress": {
+    "en": "Progress temporarily unavailable; reconnecting…",
+    "zh-CN": "暂时无法获取进度，正在重新连接…",
+    "zh-TW": "暫時無法獲取進度，正在重新連線…"
+  },
+  "onlineUpdateUnsupported": {
+    "en": "This environment does not support online updates. Use a release build.",
+    "zh-CN": "此环境不支持在线更新，请使用发布构建。",
+    "zh-TW": "此環境不支援線上更新，請使用發行建置版本。"
+  },
+  "keepChecking": {
+    "en": "Keep checking",
+    "zh-CN": "继续检查",
+    "zh-TW": "繼續檢查"
+  },
+  "checkAgain": {
+    "en": "Check again",
+    "zh-CN": "重新检查",
+    "zh-TW": "重新檢查"
+  },
+  "downloadUpdate": {
+    "en": "Download update",
+    "zh-CN": "下载更新",
+    "zh-TW": "下載更新"
+  },
+  "restartAndApply": {
+    "en": "Restart and apply",
+    "zh-CN": "重启并应用",
+    "zh-TW": "重新啟動並應用"
+  },
+  "refreshPage": {
+    "en": "Refresh page",
+    "zh-CN": "刷新页面",
+    "zh-TW": "重新整理頁面"
+  },
+  "restoreBackup": {
+    "en": "Restore backup",
+    "zh-CN": "恢复备份",
+    "zh-TW": "恢復備份"
+  },
+  "lastChecked": {
+    "en": "Last checked {date}",
+    "zh-CN": "上次检查 {date}",
+    "zh-TW": "上次檢查 {date}"
+  },
+  "updateScopeHint": {
+    "en": "Updates only Ochi's Web app and server, not the database or Computer workspace. Recreating the container restores the version bundled in its image.",
+    "zh-CN": "仅更新 Ochi 前后端，不更新数据库或 Computer 工作区。重建容器会恢复镜像自带的程序版本。",
+    "zh-TW": "僅更新 Ochi 前後端，不更新資料庫或 Computer 工作區。重建容器會恢復映像自帶的程式版本。"
+  },
+  "applyUpdateQuestion": {
+    "en": "Restart and apply update?",
+    "zh-CN": "重启并应用更新？",
+    "zh-TW": "重新啟動並應用更新？"
+  },
+  "restoreBackupQuestion": {
+    "en": "Restore backup application?",
+    "zh-CN": "恢复备份程序？",
+    "zh-TW": "恢復備份程式？"
+  },
+  "confirmRestart": {
+    "en": "Confirm restart",
+    "zh-CN": "确认重启",
+    "zh-TW": "確認重新啟動"
+  },
+  "targetBuild": {
+    "en": "target build",
+    "zh-CN": "目标构建",
+    "zh-TW": "目標建置版本"
+  },
+  "restartWarning": {
+    "en": "Will run {build}. The service waits up to 10 minutes for active tasks to finish; tasks still running after that will be interrupted. A brief disconnection occurs during restart.",
+    "zh-CN": "将运行 {build}。服务会先等待进行中的任务完成，最多等待 10 分钟；超时仍未完成的任务会中断。重启时会短暂断开连接。",
+    "zh-TW": "將執行 {build}。服務會先等待進行中的任務完成，最多等待 10 分鐘；逾時仍未完成的任務會中斷。重新啟動時會短暫中斷連線。"
+  },
+  "backupBuild": {
+    "en": "backup build",
+    "zh-CN": "备份构建",
+    "zh-TW": "備份建置版本"
+  },
+  "restoreWarning": {
+    "en": "Will restore {build}; a separate restart confirmation is required to apply it. This does not restore the database or user files.",
+    "zh-CN": "将恢复 {build}，之后仍需确认重启才会生效。此操作不恢复数据库或用户文件。",
+    "zh-TW": "將還原 {build}，之後仍需確認重新啟動才會生效。此操作不還原資料庫或使用者檔案。"
+  },
+  "backToChat": {
+    "en": "Back to chat",
+    "zh-CN": "返回聊天",
+    "zh-TW": "返回聊天"
+  },
+  "adminConsole": {
+    "en": "Administration",
+    "zh-CN": "管理后台",
+    "zh-TW": "管理後台"
+  },
+  "adminNavigation": {
+    "en": "Administration navigation",
+    "zh-CN": "后台导航",
+    "zh-TW": "後台導航"
+  },
+  "enableNamed": {
+    "en": "Enable {name}",
+    "zh-CN": "启用 {name}",
+    "zh-TW": "啟用 {name}"
+  },
+  "installDependenciesNamed": {
+    "en": "Install dependencies · {name}",
+    "zh-CN": "安装依赖 · {name}",
+    "zh-TW": "安裝依賴 · {name}"
+  },
+  "connectedTools": {
+    "en": "Connected · Tools: {count}",
+    "zh-CN": "已连接 · 工具：{count}",
+    "zh-TW": "已連線 · 工具：{count}"
+  },
+  "toolsCount": {
+    "en": "Tools: {count}",
+    "zh-CN": "工具：{count}",
+    "zh-TW": "工具：{count}"
+  },
+  "argumentNumber": {
+    "en": "Argument {number}",
+    "zh-CN": "参数 {number}",
+    "zh-TW": "參數 {number}"
+  },
+  "namedTools": {
+    "en": "{name} · Tools",
+    "zh-CN": "{name} · 工具",
+    "zh-TW": "{name} · 工具"
+  },
+  "pluginComponentsCount": {
+    "en": "Skills: {skills} · MCP: {mcp}",
+    "zh-CN": "Skill：{skills} · MCP：{mcp}",
+    "zh-TW": "Skill：{skills} · MCP：{mcp}"
+  },
+  "mandatoryNamed": {
+    "en": "Enable {name} by default",
+    "zh-CN": "默认开启 {name}",
+    "zh-TW": "預設開啟 {name}"
+  },
+  "publishNamed": {
+    "en": "Make {name} available to users",
+    "zh-CN": "向用户提供 {name}",
+    "zh-TW": "向使用者提供 {name}"
+  },
+  "editNamed": {
+    "en": "Edit {name}",
+    "zh-CN": "编辑 {name}",
+    "zh-TW": "編輯 {name}"
+  },
+  "deleteNamed": {
+    "en": "Delete {name}",
+    "zh-CN": "删除 {name}",
+    "zh-TW": "刪除 {name}"
+  },
+  "pluginDeleteDescription": {
+    "en": "Users will no longer be able to use “{name}” after it is deleted.",
+    "zh-CN": "删除「{name}」后，用户将无法再使用此插件。",
+    "zh-TW": "刪除「{name}」後，使用者將無法再使用此外掛。"
+  },
+  "savedWithError": {
+    "en": "Saved · {error}",
+    "zh-CN": "已保存 · {error}",
+    "zh-TW": "已儲存 · {error}"
+  },
+  "modelsSaved": {
+    "en": "Saved · Models: {count}",
+    "zh-CN": "已保存 · 模型：{count}",
+    "zh-TW": "已儲存 · 模型：{count}"
+  },
+  "connectionSucceeded": {
+    "en": "Connected successfully",
+    "zh-CN": "连接成功",
+    "zh-TW": "連線成功"
+  },
+  "connectionModelCount": {
+    "en": "Connected successfully · Models: {count}",
+    "zh-CN": "连接成功 · 模型：{count}",
+    "zh-TW": "連線成功 · 模型：{count}"
+  },
+  "modelAvailable": {
+    "en": "Model available",
+    "zh-CN": "模型可用",
+    "zh-TW": "模型可用"
+  },
+  "modelAvailableWithParams": {
+    "en": "Model available · Parameters accepted",
+    "zh-CN": "模型可用 · 参数已接受",
+    "zh-TW": "模型可用 · 參數已接受"
+  },
+  "syncResult": {
+    "en": "Synced · New models: {count}",
+    "zh-CN": "已同步 · 新增：{count}",
+    "zh-TW": "已同步 · 新增：{count}"
+  },
+  "syncResultUnavailable": {
+    "en": "Synced · New models: {count} · Unavailable: {unavailable}",
+    "zh-CN": "已同步 · 新增：{count} · 不可用：{unavailable}",
+    "zh-TW": "已同步 · 新增：{count} · 不可用：{unavailable}"
+  },
+  "modelMatches": {
+    "en": "Models matched: {count}",
+    "zh-CN": "已匹配模型：{count}",
+    "zh-TW": "已匹配模型：{count}"
+  },
+  "modelMatchStatus": {
+    "en": "Models matched: {count} · Not listed: {unmatched}",
+    "zh-CN": "已匹配模型：{count} · 未收录：{unmatched}",
+    "zh-TW": "已匹配模型：{count} · 未收錄：{unmatched}"
+  },
+  "defaultModelNamed": {
+    "en": "Default model: {name}",
+    "zh-CN": "默认模型：{name}",
+    "zh-TW": "預設模型：{name}"
+  },
+  "moveToTopNamed": {
+    "en": "Move {name} to top",
+    "zh-CN": "置顶 {name}",
+    "zh-TW": "置頂 {name}"
+  },
+  "moveUpNamed": {
+    "en": "Move {name} up",
+    "zh-CN": "上移 {name}",
+    "zh-TW": "上移 {name}"
+  },
+  "moveDownNamed": {
+    "en": "Move {name} down",
+    "zh-CN": "下移 {name}",
+    "zh-TW": "下移 {name}"
+  },
+  "truncationSummary": {
+    "en": "Request: {request} · Response: {response}",
+    "zh-CN": "请求：{request} · 响应：{response}",
+    "zh-TW": "請求：{request} · 回應：{response}"
+  },
+  "rawSSECount": {
+    "en": "Raw SSE ({count})",
+    "zh-CN": "原始 SSE（{count}）",
+    "zh-TW": "原始 SSE（{count}）"
+  },
+  "lineNumber": {
+    "en": "Line {number}",
+    "zh-CN": "第 {number} 行",
+    "zh-TW": "第 {number} 行"
+  },
+  "roundNumber": {
+    "en": "Round {number}",
+    "zh-CN": "轮次 {number}",
+    "zh-TW": "輪次 {number}"
+  },
+  "requestAttempt": {
+    "en": "Attempt {number}",
+    "zh-CN": "第 {number} 次",
+    "zh-TW": "第 {number} 次"
+  },
+  "requestsRetention": {
+    "en": "Retained for {days} days · Up to {global} globally · Up to {run} per run",
+    "zh-CN": "保留 {days} 天 · 全局最多 {global} 条 · 每次运行最多 {run} 条",
+    "zh-TW": "保留 {days} 天 · 全域最多 {global} 條 · 每次執行最多 {run} 條"
+  },
+  "runRequestsRetention": {
+    "en": "Retained for {days} days · This run · Up to {run} per run",
+    "zh-CN": "保留 {days} 天 · 本次运行 · 每次运行最多 {run} 条",
+    "zh-TW": "保留 {days} 天 · 本次執行 · 每次執行最多 {run} 條"
+  },
+  "searchResults": {
+    "en": "Search results: {count}",
+    "zh-CN": "搜索结果：{count}",
+    "zh-TW": "搜尋結果：{count}"
+  },
+  "editUserNamed": {
+    "en": "Edit user {name}",
+    "zh-CN": "编辑用户 {name}",
+    "zh-TW": "編輯使用者 {name}"
+  },
+  "deleteUserNamed": {
+    "en": "Delete user {name}",
+    "zh-CN": "删除用户 {name}",
+    "zh-TW": "刪除使用者 {name}"
+  },
+  "runsCompletedActive": {
+    "en": "Completed: {completed} · Active: {active}",
+    "zh-CN": "完成：{completed} · 进行中：{active}",
+    "zh-TW": "完成：{completed} · 進行中：{active}"
+  },
+  "runsFailedInterrupted": {
+    "en": "Failed: {failed} · Interrupted: {interrupted}",
+    "zh-CN": "失败：{failed} · 中断：{interrupted}",
+    "zh-TW": "失敗：{failed} · 中斷：{interrupted}"
+  },
+  "usageCount": {
+    "en": "Runs reporting usage: {count}",
+    "zh-CN": "有用量记录：{count}",
+    "zh-TW": "有用量記錄：{count}"
+  },
+  "totalTokensCount": {
+    "en": "Total: {count}",
+    "zh-CN": "总量：{count}",
+    "zh-TW": "總量：{count}"
+  },
+  "cancelledCount": {
+    "en": "Stopped: {count}",
+    "zh-CN": "已停止：{count}",
+    "zh-TW": "已停止：{count}"
+  },
+  "usageSummary": {
+    "en": "Input: {input} · Output: {output} · Cached: {cached}",
+    "zh-CN": "输入：{input} · 输出：{output} · 缓存：{cached}",
+    "zh-TW": "輸入：{input} · 輸出：{output} · 快取：{cached}"
+  },
+  "viewRunNamed": {
+    "en": "View run {name}",
+    "zh-CN": "查看运行 {name}",
+    "zh-TW": "檢視執行 {name}"
+  },
+  "recordsRange": {
+    "en": "Total: {total} · {start}–{end}",
+    "zh-CN": "共 {total} 条 · {start}–{end}",
+    "zh-TW": "共 {total} 條 · {start}–{end}"
+  },
+  "inputOutputSummary": {
+    "en": "Input: {input} · Output: {output}",
+    "zh-CN": "输入：{input} · 输出：{output}",
+    "zh-TW": "輸入：{input} · 輸出：{output}"
+  },
+  "toolCount": {
+    "en": "Tools ({count})",
+    "zh-CN": "工具（{count}）",
+    "zh-TW": "工具（{count}）"
+  },
+  "enabledModelCount": {
+    "en": "Enabled: {count}",
+    "zh-CN": "已启用：{count}",
+    "zh-TW": "已啟用：{count}"
+  },
+  "contextCount": {
+    "en": "Context: {count}k",
+    "zh-CN": "上下文：{count}k",
+    "zh-TW": "上下文：{count}k"
+  },
+  "userRole": {
+    "en": "User",
+    "zh-CN": "用户",
+    "zh-TW": "使用者"
+  },
+  "httpHeaders": {
+    "en": "Headers",
+    "zh-CN": "请求头",
+    "zh-TW": "標頭"
+  },
+  "httpBody": {
+    "en": "Body",
+    "zh-CN": "正文",
+    "zh-TW": "正文"
+  },
+  "finishReason": {
+    "en": "Finish reason",
+    "zh-CN": "完成原因",
+    "zh-TW": "完成原因"
+  },
+  "newChat": {
+    "en": "New chat",
+    "zh-CN": "新对话",
+    "zh-TW": "新對話"
+  },
+  "embeddingModel": {
+    "en": "Embedding model",
+    "zh-CN": "向量模型",
+    "zh-TW": "向量模型"
+  },
+  "reasoningNone": {
+    "en": "Disabled",
+    "zh-CN": "不启用",
+    "zh-TW": "不啟用"
+  },
+  "reasoningEffort": {
+    "en": "Effort levels",
+    "zh-CN": "思考程度",
+    "zh-TW": "思考程度"
+  },
+  "reasoningToggle": {
+    "en": "On / off",
+    "zh-CN": "开关",
+    "zh-TW": "開關"
+  },
+  "reasoningBudget": {
+    "en": "Token budget",
+    "zh-CN": "Token 预算",
+    "zh-TW": "Token 預算"
+  },
+  "reasoningAlways": {
+    "en": "Always enabled",
+    "zh-CN": "始终启用",
+    "zh-TW": "一律啟用"
+  },
+  "budgetMinimum": {
+    "en": "Minimum budget",
+    "zh-CN": "最小预算",
+    "zh-TW": "最小預算"
+  },
+  "budgetMaximum": {
+    "en": "Maximum budget",
+    "zh-CN": "最大预算",
+    "zh-TW": "最大預算"
+  },
+  "budgetDefault": {
+    "en": "Default budget",
+    "zh-CN": "默认预算",
+    "zh-TW": "預設預算"
+  },
+  "sourceCustom": {
+    "en": "Custom",
+    "zh-CN": "自定义",
+    "zh-TW": "自訂"
+  },
+  "sourceRemote": {
+    "en": "Provider",
+    "zh-CN": "服务商",
+    "zh-TW": "服務商"
+  },
+  "sourceCatalog": {
+    "en": "Catalog",
+    "zh-CN": "模型目录",
+    "zh-TW": "模型目錄"
+  },
+  "unknown": {
+    "en": "Unknown",
+    "zh-CN": "未知",
+    "zh-TW": "未知"
+  }
+}

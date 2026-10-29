@@ -2,11 +2,12 @@ package storage
 
 import (
 	"context"
-	"errors"
+
+	"ochi/server/internal/i18n"
 )
 
-var ErrModelSelection = errors.New("请选择可用的模型")
-var ErrModelOrderChanged = errors.New("模型列表已变化，请重新打开排序")
+var ErrModelSelection = i18n.New("model_selection_invalid")
+var ErrModelOrderChanged = i18n.New("model_order_changed")
 
 func validateModelOrder(current, ordered []string, defaultID string) error {
 	if len(current) != len(ordered) {

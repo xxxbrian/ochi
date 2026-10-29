@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import {
   ChevronRight,
   CircleAlert,
@@ -21,6 +22,7 @@ import "./execution.css";
 
 const MarkdownContent = lazy(() => import("./MarkdownContent"));
 function FileOutput({ content, path }: { content: string; path: string }) {
+  useI18n();
   const extension = path.split(".").pop()?.toLowerCase() ?? "";
   const language =
     (
@@ -88,6 +90,7 @@ function StructuredOutput({
   filePath?: string;
   needsUser: boolean;
 }) {
+  useI18n();
   const items =
     result.files ??
     result.entries ??
@@ -102,8 +105,8 @@ function StructuredOutput({
   const lists = items !== undefined
     ? [{ label: "", items }]
     : [
-        { label: "窗口", items: result.windows },
-        { label: "界面元素", items: result.elements },
+        { label: t("process.window"), items: result.windows },
+        { label: t("process.element"), items: result.elements },
       ];
   const body =
     textArg(result, [
@@ -169,7 +172,7 @@ function StructuredOutput({
   );
   return (
     <div className="structured-output">
-      {needsUser && <div className="browser-handoff">需要在电脑中完成验证；完成后回复以继续。</div>}
+      {needsUser && <div className="browser-handoff">{t("process.verification")}</div>}
       {(url || title) && (
         <div className="browser-result">
           <Globe2 size={16} />
@@ -253,22 +256,22 @@ function StructuredOutput({
               <dt>
                 {(
                   {
-                    path: "文件",
-                    bytes_written: "写入大小",
-                    type: "类型",
-                    tab_id: "标签页",
-                    active: "当前页面",
-                    exit_code: "退出状态",
-                    truncated: "部分输出",
-                    cwd: "目录",
-                    duration_ms: "耗时",
-                    stdout_path: "完整输出",
-                    stderr_path: "错误输出",
-                    mime_type: "格式",
-                    size: "大小",
-                    pages: "页数",
-                    selected: "当前页面",
-                    bytes: "大小",
+                    path: t("file.title"),
+                    bytes_written: t("file.writeSize"),
+                    type: t("common.type"),
+                    tab_id: t("browser.tabs"),
+                    active: t("browser.currentPage"),
+                    exit_code: t("process.exitStatus"),
+                    truncated: t("process.partialOutput"),
+                    cwd: t("file.directory"),
+                    duration_ms: t("process.duration"),
+                    stdout_path: t("process.fullOutput"),
+                    stderr_path: t("process.stderr"),
+                    mime_type: t("file.format"),
+                    size: t("file.size"),
+                    pages: t("file.pages"),
+                    selected: t("browser.currentPage"),
+                    bytes: t("file.size"),
                   } as Record<string, string>
                 )[key] ?? key}
               </dt>
@@ -282,6 +285,7 @@ function StructuredOutput({
 }
 
 export const StepCard = memo(function StepCard({ step, expanded, onExpandedChange }: { step: Step; expanded?: boolean; onExpandedChange?: (id: string, expanded: boolean) => void }) {
+  useI18n();
   const [localOpen, setOpen] = useState(false);
   const open = expanded ?? localOpen;
   const [technicalOpen, setTechnicalOpen] = useState(false);
@@ -334,7 +338,7 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
     <article className={`process-step process-step-${info.kind}`}>
       <span
         className={`step-indicator ${failed ? "failed" : step.status}`}
-        aria-label={needsUser ? "等待人工验证" : step.status === "running" ? "进行中" : failed ? "未完成" : "已完成"}
+        aria-label={needsUser ? t("process.awaitingVerification") : step.status === "running" ? t("status.inProgress") : failed ? t("status.failed") : t("status.completed")}
       >
         {step.status === "running" ? (
           <LoaderCircle size={14} className="spin" />
@@ -358,10 +362,10 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
               </span>
             )}
             {typeof exitCode === "number" && exitCode !== 0 && (
-              <span className="step-exit bad">退出 {exitCode}</span>
+              <span className="step-exit bad">{t("process.exit")} {exitCode}</span>
             )}
-            {search && <span className="search-summary-sites"><SearchSiteIcons results={search.results} /><span>{search.results.length} 个结果</span></span>}
-            {needsUser && <span className="step-exit">等待人工验证</span>}
+            {search && <span className="search-summary-sites"><SearchSiteIcons results={search.results} /><span>{t("process.results", { count: search.results.length })}</span></span>}
+            {needsUser && <span className="step-exit">{t("process.awaitingVerification")}</span>}
           </span>
           <ChevronRight size={14} className="step-chevron" />
         </button>
@@ -370,13 +374,13 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
             {step.screenshot && (
               <button
                 className="step-image-button"
-                aria-label="查看操作截图"
+                aria-label={t("process.viewScreenshot")}
                 onClick={() => setImageOpen(true)}
               >
                 <img
                   className="step-screenshot"
                   src={step.screenshot}
-                  alt="操作结果"
+                  alt={t("process.result")}
                   loading="lazy"
                 />
               </button>
@@ -385,7 +389,7 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
               typeof args?.content === "string" && (
                 <div className="step-output file-write-preview">
                   <div className="output-label">
-                    {args.append ? "新增内容" : "文件内容"}
+                    {args.append ? t("process.addedContent") : t("file.content")}
                   </div>
                   <FileOutput
                     content={args.content}
@@ -396,7 +400,7 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
             {info.kind === "terminal" && (command || stdout || stderr) && (
               <div className="step-output">
                 <div className="output-label">
-                  {command ? "$ " + command : "输出"}
+                  {command ? "$ " + command : t("process.output")}
                 </div>
                 {stdout && <pre>{stdout.slice(0, 32000)}</pre>}
                 {stderr && (
@@ -429,7 +433,7 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
                 className="technical-details"
                 onToggle={(event) => setTechnicalOpen(event.currentTarget.open)}
               >
-                <summary>技术详情</summary>
+                <summary>{t("process.technicalDetails")}</summary>
                 {technicalOpen && (
                   <pre>
                     {JSON.stringify(
@@ -446,7 +450,7 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
       </div>
       {imageOpen && step.screenshot && (
         <Modal
-          title="操作截图"
+          title={t("process.screenshot")}
           onClose={() => setImageOpen(false)}
           wide
           fullscreen
@@ -454,7 +458,7 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
           <img
             className="process-image-full"
             src={step.screenshot}
-            alt="操作结果"
+            alt={t("process.result")}
           />
         </Modal>
       )}
@@ -463,6 +467,7 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
 });
 
 export const StepList = memo(function StepList({ steps, expansion, onExpandedChange }: { steps: Step[]; expansion?: Record<string, boolean>; onExpandedChange?: (id: string, expanded: boolean) => void }) {
+  useI18n();
   return (
     <div className="process-list">
       {steps.map((step) => (

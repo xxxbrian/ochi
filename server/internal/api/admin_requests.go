@@ -1,9 +1,10 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
+
+	"ochi/server/internal/i18n"
 )
 
 func parseAdminRequestPage(r *http.Request) (limit, offset int, err error) {
@@ -11,13 +12,13 @@ func parseAdminRequestPage(r *http.Request) (limit, offset int, err error) {
 	if value := r.URL.Query().Get("limit"); value != "" {
 		limit, err = strconv.Atoi(value)
 		if err != nil || limit < 1 || limit > 100 {
-			return 0, 0, errors.New("limit must be between 1 and 100")
+			return 0, 0, i18n.New("invalid_page_limit")
 		}
 	}
 	if value := r.URL.Query().Get("offset"); value != "" {
 		offset, err = strconv.Atoi(value)
 		if err != nil || offset < 0 {
-			return 0, 0, errors.New("offset must be a non-negative integer")
+			return 0, 0, i18n.New("invalid_page_offset")
 		}
 	}
 	return limit, offset, nil

@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"regexp"
 	"strings"
 	"time"
+
+	"ochi/server/internal/i18n"
 )
 
-var ErrSessionCursor = errors.New("invalid session cursor")
+var ErrSessionCursor = i18n.New("invalid_pagination")
 var sessionUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type SessionListItem struct {

@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { useEffect, useRef } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useTheme } from "../providers/AppProvider";
@@ -17,6 +18,7 @@ function TimeColumn({
   label: string;
   onChange: (value: string) => void;
 }) {
+  useI18n();
   const list = useRef<ScrollView>(null);
   const center = () =>
     list.current?.scrollTo({ y: Number(value) * rowHeight, animated: false });
@@ -73,6 +75,7 @@ export function ScheduleTimePicker({
   value: string;
   onChange: (value: string) => void;
 }) {
+  useI18n();
   const { colors } = useTheme();
   const [hour = "09", minute = "00"] = value.split(":");
   return (
@@ -84,13 +87,13 @@ export function ScheduleTimePicker({
       <TimeColumn
         value={hour}
         count={24}
-        label="时"
+        label={t("schedule.hour")}
         onChange={(part) => onChange(`${part}:${minute}`)}
       />
       <TimeColumn
         value={minute}
         count={60}
-        label="分"
+        label={t("schedule.minute")}
         onChange={(part) => onChange(`${hour}:${part}`)}
       />
     </View>

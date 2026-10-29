@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/storage"
 )
 
@@ -37,11 +38,11 @@ func (s *Server) auxiliaryModelKind(ctx context.Context, id, kind string) (*agen
 	}
 	m, err := s.store.Model(ctx, id)
 	if err != nil || !m.Available || m.Kind != kind {
-		return nil, errors.New("辅助模型不可用")
+		return nil, i18n.New("auxiliary_model_invalid")
 	}
 	p, err := s.store.Provider(ctx, m.ProviderID)
 	if err != nil || !p.Enabled {
-		return nil, errors.New("辅助模型服务未启用")
+		return nil, i18n.New("provider_disabled")
 	}
 	config := agent.AuxiliaryConfig(*s.modelConfig(ctx, m, p, m.DefaultEffort, storage.Settings{}))
 	return &config, nil

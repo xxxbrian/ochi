@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,7 +10,9 @@ import (
 	_ "time/tzdata"
 
 	"github.com/jackc/pgx/v5"
+
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/runtime"
 )
 
@@ -36,6 +37,7 @@ type Schedule struct {
 	LastRunAt        *time.Time `json:"last_run_at,omitempty"`
 	LastRunID        string     `json:"last_run_id,omitempty"`
 	LastError        string     `json:"last_error,omitempty"`
+	LastErrorCode    string     `json:"last_error_code,omitempty"`
 	LastStatus       string     `json:"last_status,omitempty"`
 	ExecutionCount   int        `json:"execution_count"`
 	CreatedAt        time.Time  `json:"created_at"`
@@ -43,12 +45,12 @@ type Schedule struct {
 	ExecutionSkipped bool       `json:"-"`
 }
 
-const scheduleColumns = `id::text,user_id,session_id::text,name,prompt,interval_minutes,enabled,next_run_at,last_run_at,COALESCE(last_run_id::text,''),last_error,created_at,recurrence,timezone,time_of_day,weekdays,once_at,COALESCE(project_id::text,''),COALESCE(model_id::text,''),effort,context_mode,COALESCE((SELECT COALESCE(r.status,e.status) FROM schedule_executions e LEFT JOIN runs r ON r.id=e.run_id WHERE e.schedule_id=schedules.id ORDER BY e.started_at DESC LIMIT 1),''),(SELECT count(*) FROM schedule_executions WHERE schedule_id=schedules.id)`
+const scheduleColumns = `id::text,user_id,session_id::text,name,prompt,interval_minutes,enabled,next_run_at,last_run_at,COALESCE(last_run_id::text,''),last_error,last_error_code,created_at,recurrence,timezone,time_of_day,weekdays,once_at,COALESCE(project_id::text,''),COALESCE(model_id::text,''),effort,context_mode,COALESCE((SELECT COALESCE(r.status,e.status) FROM schedule_executions e LEFT JOIN runs r ON r.id=e.run_id WHERE e.schedule_id=schedules.id ORDER BY e.started_at DESC LIMIT 1),''),(SELECT count(*) FROM schedule_executions WHERE schedule_id=schedules.id)`
 
 func scanSchedule(row pgx.Row) (Schedule, error) {
 	var v Schedule
 	var days []byte
-	err := row.Scan(&v.ID, &v.UserID, &v.SessionID, &v.Name, &v.Prompt, &v.IntervalMinutes, &v.Enabled, &v.NextRunAt, &v.LastRunAt, &v.LastRunID, &v.LastError, &v.CreatedAt, &v.Recurrence, &v.Timezone, &v.TimeOfDay, &days, &v.OnceAt, &v.ProjectID, &v.ModelID, &v.Effort, &v.ContextMode, &v.LastStatus, &v.ExecutionCount)
+	err := row.Scan(&v.ID, &v.UserID, &v.SessionID, &v.Name, &v.Prompt, &v.IntervalMinutes, &v.Enabled, &v.NextRunAt, &v.LastRunAt, &v.LastRunID, &v.LastError, &v.LastErrorCode, &v.CreatedAt, &v.Recurrence, &v.Timezone, &v.TimeOfDay, &days, &v.OnceAt, &v.ProjectID, &v.ModelID, &v.Effort, &v.ContextMode, &v.LastStatus, &v.ExecutionCount)
 	if err == nil {
 		err = json.Unmarshal(days, &v.Weekdays)
 	}
@@ -72,39 +74,39 @@ func NormalizeSchedule(v *Schedule) error {
 		v.IntervalMinutes = 60
 	}
 	if v.Name == "" || v.Prompt == "" || len(v.Prompt) > 20000 || len([]rune(v.Name)) > 120 {
-		return errors.New("请填写任务名称和指令")
+		return i18n.New("schedule_fields_required")
 	}
 	if _, err := time.LoadLocation(v.Timezone); err != nil {
-		return errors.New("无效的时区")
+		return i18n.New("timezone_invalid")
 	}
 	if v.ContextMode != "independent" && v.ContextMode != "session" {
-		return errors.New("无效的任务上下文")
+		return i18n.New("schedule_context_invalid")
 	}
 	switch v.Recurrence {
 	case "interval":
 		if v.IntervalMinutes < 1 || v.IntervalMinutes > 525600 {
-			return errors.New("间隔应为 1 到 525600 分钟")
+			return i18n.New("schedule_interval_invalid")
 		}
 	case "once":
 		if v.OnceAt == nil {
-			return errors.New("请选择执行时间")
+			return i18n.New("schedule_time_required")
 		}
 	case "daily", "weekly":
 		if _, err := time.Parse("15:04", v.TimeOfDay); err != nil {
-			return errors.New("时间应为 HH:MM")
+			return i18n.New("schedule_time_invalid")
 		}
 		if v.Recurrence == "weekly" {
 			if len(v.Weekdays) == 0 {
-				return errors.New("请选择星期")
+				return i18n.New("schedule_weekdays_required")
 			}
 			for _, day := range v.Weekdays {
 				if day < 1 || day > 7 {
-					return errors.New("星期应为 1 到 7")
+					return i18n.New("schedule_weekday_invalid")
 				}
 			}
 		}
 	default:
-		return errors.New("无效的重复方式")
+		return i18n.New("schedule_recurrence_invalid")
 	}
 	if v.Weekdays == nil {
 		v.Weekdays = []int{1, 2, 3, 4, 5, 6, 7}
@@ -151,7 +153,7 @@ func NextScheduleTime(v Schedule, after time.Time) (time.Time, error) {
 		}
 		return candidate.UTC(), nil
 	}
-	return time.Time{}, errors.New("无法计算下一次执行时间")
+	return time.Time{}, i18n.New("schedule_next_run_failed")
 }
 func (s *Store) Schedules(ctx context.Context, userID string) ([]Schedule, error) {
 	rows, err := s.db.Query(ctx, `SELECT `+scheduleColumns+` FROM schedules WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`, userID)
@@ -190,7 +192,7 @@ func (s *Store) SaveSchedule(ctx context.Context, userID string, v Schedule) (Sc
 			return v, err
 		}
 		if v.Recurrence == "once" && v.Enabled && !next.After(time.Now()) {
-			return v, errors.New("请选择将来的执行时间")
+			return v, i18n.New("schedule_future_required")
 		}
 		v.NextRunAt = next
 	}
@@ -262,11 +264,11 @@ func (s *Store) ClaimDueSchedules(ctx context.Context) ([]Schedule, error) {
 		if err = tx.QueryRow(ctx, scheduleActiveExecution, v.ID).Scan(&active); err != nil {
 			return nil, err
 		}
-		status, message := "queued", ""
+		status, message, code := "queued", "", ""
 		if active {
-			status, message = "skipped", "前一次执行仍在进行"
+			status, message, code = "skipped", i18n.New("schedule_previous_running").Error(), "schedule_previous_running"
 		}
-		if err = tx.QueryRow(ctx, `INSERT INTO schedule_executions(schedule_id,status,error,finished_at) VALUES($1,$2,$3,CASE WHEN $2='skipped' THEN now() ELSE NULL END) RETURNING id::text`, v.ID, status, message).Scan(&out[index].ExecutionID); err != nil {
+		if err = tx.QueryRow(ctx, `INSERT INTO schedule_executions(schedule_id,status,error,error_code,finished_at) VALUES($1,$2,$3,$4,CASE WHEN $2='skipped' THEN now() ELSE NULL END) RETURNING id::text`, v.ID, status, message, code).Scan(&out[index].ExecutionID); err != nil {
 			return nil, err
 		}
 		out[index].ExecutionSkipped = active
@@ -279,7 +281,7 @@ const scheduleActiveExecution = `SELECT EXISTS(SELECT 1 FROM schedule_executions
 // Recover reservations that never acquired a run. Never replay a task whose
 // external side effects are unknown; its missed execution remains in history.
 func (s *Store) RecoverScheduleExecutions(ctx context.Context) error {
-	_, err := s.db.Exec(ctx, `UPDATE schedule_executions SET status='interrupted',error='服务停止于任务启动前',finished_at=now() WHERE run_id IS NULL AND status IN ('queued','running','waiting_resource','waiting_user','cancelling')`)
+	_, err := s.db.Exec(ctx, `UPDATE schedule_executions SET status='interrupted',error=$1,error_code='schedule_start_interrupted',finished_at=now() WHERE run_id IS NULL AND status IN ('queued','running','waiting_resource','waiting_user','cancelling')`, i18n.Text(i18n.English, "schedule_start_interrupted", nil))
 	return err
 }
 
@@ -290,6 +292,7 @@ type ScheduleExecution struct {
 	SessionID  string             `json:"session_id,omitempty"`
 	Status     string             `json:"status"`
 	Error      string             `json:"error,omitempty"`
+	ErrorCode  string             `json:"error_code,omitempty"`
 	Output     string             `json:"output"`
 	Artifacts  []agent.Attachment `json:"artifacts"`
 	StartedAt  time.Time          `json:"started_at"`
@@ -313,17 +316,21 @@ func (s *Store) BeginScheduleExecution(ctx context.Context, userID, id string) (
 		return "", false, err
 	}
 	var executionID string
-	status, message := "queued", ""
+	status, message, code := "queued", "", ""
 	if active {
-		status, message = "skipped", "前一次执行仍在进行"
+		status, message, code = "skipped", i18n.New("schedule_previous_running").Error(), "schedule_previous_running"
 	}
-	err = tx.QueryRow(ctx, `INSERT INTO schedule_executions(schedule_id,status,error,finished_at) VALUES($1,$2,$3,CASE WHEN $2='skipped' THEN now() ELSE NULL END) RETURNING id::text`, id, status, message).Scan(&executionID)
+	err = tx.QueryRow(ctx, `INSERT INTO schedule_executions(schedule_id,status,error,error_code,finished_at) VALUES($1,$2,$3,$4,CASE WHEN $2='skipped' THEN now() ELSE NULL END) RETURNING id::text`, id, status, message, code).Scan(&executionID)
 	if err != nil {
 		return "", false, err
 	}
 	return executionID, !active, tx.Commit(ctx)
 }
-func (s *Store) LinkScheduleExecution(ctx context.Context, executionID, runID, sessionID, message string) error {
+func (s *Store) LinkScheduleExecution(ctx context.Context, executionID, runID, sessionID string, failure error) error {
+	message, code := "", runtime.FailureCode(failure)
+	if failure != nil {
+		message = i18n.Text(i18n.English, code, nil)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return err
@@ -334,7 +341,7 @@ func (s *Store) LinkScheduleExecution(ctx context.Context, executionID, runID, s
 		status = "failed"
 	}
 	var scheduleID string
-	err = tx.QueryRow(ctx, `UPDATE schedule_executions SET run_id=NULLIF($2,'')::uuid,session_id=NULLIF($3,'')::uuid,status=$4,error=$5,finished_at=CASE WHEN $4='failed' THEN now() ELSE NULL END WHERE id=$1 RETURNING schedule_id::text`, executionID, runID, sessionID, status, message).Scan(&scheduleID)
+	err = tx.QueryRow(ctx, `UPDATE schedule_executions SET run_id=NULLIF($2,'')::uuid,session_id=NULLIF($3,'')::uuid,status=$4,error=$5,error_code=$6,finished_at=CASE WHEN $4='failed' THEN now() ELSE NULL END WHERE id=$1 RETURNING schedule_id::text`, executionID, runID, sessionID, status, message, code).Scan(&scheduleID)
 	if err != nil {
 		return err
 	}
@@ -343,18 +350,18 @@ func (s *Store) LinkScheduleExecution(ctx context.Context, executionID, runID, s
 			return err
 		}
 	}
-	if _, err = tx.Exec(ctx, `UPDATE schedules SET last_run_at=now(),last_run_id=NULLIF($2,'')::uuid,last_error=$3 WHERE id=$1`, scheduleID, runID, message); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE schedules SET last_run_at=now(),last_run_id=NULLIF($2,'')::uuid,last_error=$3,last_error_code=$4 WHERE id=$1`, scheduleID, runID, message, code); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-const executionColumns = `e.id::text,e.schedule_id::text,COALESCE(e.run_id::text,''),COALESCE(e.session_id::text,''),COALESCE(r.status,e.status),COALESCE(NULLIF(r.error,''),e.error),COALESCE(r.output,''),COALESCE(r.artifacts,'[]'),e.started_at,CASE WHEN r.status IN ('completed','failed','interrupted','cancelled') THEN r.updated_at ELSE e.finished_at END`
+const executionColumns = `e.id::text,e.schedule_id::text,COALESCE(e.run_id::text,''),COALESCE(e.session_id::text,''),COALESCE(r.status,e.status),COALESCE(NULLIF(r.error,''),e.error),COALESCE(NULLIF(r.error_code,''),e.error_code),COALESCE(r.output,''),COALESCE(r.artifacts,'[]'),e.started_at,CASE WHEN r.status IN ('completed','failed','interrupted','cancelled') THEN r.updated_at ELSE e.finished_at END`
 
 func scanExecution(row pgx.Row) (ScheduleExecution, error) {
 	var v ScheduleExecution
 	var artifacts []byte
-	err := row.Scan(&v.ID, &v.ScheduleID, &v.RunID, &v.SessionID, &v.Status, &v.Error, &v.Output, &artifacts, &v.StartedAt, &v.FinishedAt)
+	err := row.Scan(&v.ID, &v.ScheduleID, &v.RunID, &v.SessionID, &v.Status, &v.Error, &v.ErrorCode, &v.Output, &artifacts, &v.StartedAt, &v.FinishedAt)
 	if err == nil {
 		err = json.Unmarshal(artifacts, &v.Artifacts)
 	}

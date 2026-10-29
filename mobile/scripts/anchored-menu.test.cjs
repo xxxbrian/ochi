@@ -1,3 +1,4 @@
+const { testI18n } = require('./helpers/i18n.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -108,6 +109,8 @@ function harness({ platform = 'android', composer = false, preserveKeyboard = tr
       requestAnimationFrame: (callback) => { const id = ++frameId; frames.set(id, callback); return id; }, cancelAnimationFrame: (id) => frames.delete(id),
       setTimeout: (callback, ms) => { const id = ++timerId; timers.set(id, { callback, ms }); return id; }, clearTimeout: (id) => timers.delete(id),
       require(name) {
+        const translated = testI18n.importFor(name); if (translated) return translated;
+
         if (name === 'react') return hooks;
         if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx, Fragment: 'Fragment' };
         if (name === 'react-native') return {
@@ -182,10 +185,36 @@ function harness({ platform = 'android', composer = false, preserveKeyboard = tr
 }
 
 for (const platform of ['android', 'ios']) {
+  test(`${platform}: switching interface language updates the open model/effort controls without remounting or changing the focused composer draft`, () => {
+    const h = harness({ platform, composer: true });
+    const originalInput = find(h.composerTree, 'TextInput').props.ref;
+    const originalValue = find(h.composerTree, 'TextInput').props.value;
+    try {
+      h.open('effort');
+      assert.ok(h.row(testI18n.native.thinkingLevelLabel('high')));
+      testI18n.core.setLanguage('en');
+      h.render(); h.settle();
+      assert.ok(h.row('High'));
+      assert.equal(find(h.composerTree, 'TextInput').props.ref, originalInput);
+      assert.equal(find(h.composerTree, 'TextInput').props.value, originalValue);
+      assert.equal(find(h.composerTree, 'TextInput').props.placeholder, 'Ask anything…');
+      assert.equal(h.menuProps.preserveKeyboard, true);
+      assert.equal(h.input.focused, true);
+      assert.deepEqual(h.keyboardCalls, []);
+      h.tap('High'); h.settle(); h.exit().finish(); h.settle(); h.frame(); h.frame();
+      assert.deepEqual(h.calls, [{ kind: 'effort', value: 'high' }]);
+      assert.equal(find(h.composerTree, 'TextInput').props.ref, originalInput);
+      assert.equal(find(h.composerTree, 'TextInput').props.value, originalValue);
+    } finally {
+      h.unmount();
+      testI18n.core.setLanguage('zh-CN');
+    }
+  });
+
   test(`${platform}: actual Composer model and effort selections finish their exit before applying once without changing input focus`, () => {
     const h = harness({ platform, composer: true });
     const originalInput = find(h.composerTree, 'TextInput').props.ref;
-    for (const [kind, title, expected] of [['model', 'Model 2', { kind: 'model', value: 'model-2' }], ['effort', 'high', { kind: 'effort', value: 'high' }]]) {
+    for (const [kind, title, expected] of [['model', 'Model 2', { kind: 'model', value: 'model-2' }], ['effort', testI18n.native.thinkingLevelLabel('high'), { kind: 'effort', value: 'high' }]]) {
       const before = h.calls.length;
       h.open(kind); assert.equal(h.menuProps.preserveKeyboard, true);
       h.tap(title); h.settle();

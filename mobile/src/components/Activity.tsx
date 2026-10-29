@@ -1,3 +1,4 @@
+import { t, useI18n, type MessageKey } from "../lib/i18n";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -22,7 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react-native";
 import type { Artifact, ProcessEntry, Snapshot } from "../lib/types";
-import { isActiveStatus } from "../lib/api";
+import { isActiveStatus, userFacingRunError } from "../lib/api";
 import {
   detailLabel,
   formatReasoningText,
@@ -47,30 +48,30 @@ import { ActivityDisclosure, ActivityStatusText, OchiActivityMark, useReducedMot
 export { StepRow } from "./ActivityStep";
 
 export function runLabel(snapshot: Snapshot) {
-  if (snapshot.status === "completed") return "已完成";
-  if (snapshot.status === "cancelled") return "已停止";
-  if (snapshot.status === "failed" || snapshot.status === "interrupted") return "未完成";
-  if (snapshot.status === "cancelling") return "正在停止";
-  if (snapshot.status === "queued") return "排队中";
+  if (snapshot.status === "completed") return t("status.completed");
+  if (snapshot.status === "cancelled") return t("status.stopped");
+  if (snapshot.status === "failed" || snapshot.status === "interrupted") return t("status.incomplete");
+  if (snapshot.status === "cancelling") return t("status.stopping");
+  if (snapshot.status === "queued") return t("status.queued");
   if (snapshot.status === "waiting_user")
-    return snapshot.waiting_input?.kind === "computer_permission" ? "等待授权" : "等待回复";
+    return snapshot.waiting_input?.kind === "computer_permission" ? t("status.waitingPermission") : t("status.waitingReply");
   if (snapshot.status === "waiting_resource")
-    return snapshot.resource?.includes("desktop") ? "等待电脑" : "等待工作区";
+    return snapshot.resource?.includes("desktop") ? t("status.waitingComputer") : t("status.waitingWorkspace");
   const running = snapshot.steps.findLast((step) => step.status === "running");
   if (running) {
-    if (/image/.test(running.name)) return "正在生成图片";
-    if (/^(?:web_search|search)$/.test(running.name)) return "正在搜索";
-    if (/^(?:web_fetch|fetch)$/.test(running.name)) return "正在阅读";
-    if (running.name === "exec") return "正在运行代码";
-    if (running.name.startsWith("browser_")) return "正在浏览网页";
-    if (running.name.startsWith("computer_")) return "正在操作电脑";
-    if (running.name.startsWith("files_")) return "正在处理文件";
-    return "正在处理";
+    if (/image/.test(running.name)) return t("status.generatingImage");
+    if (/^(?:web_search|search)$/.test(running.name)) return t("status.searching");
+    if (/^(?:web_fetch|fetch)$/.test(running.name)) return t("status.reading");
+    if (running.name === "exec") return t("status.runningCode");
+    if (running.name.startsWith("browser_")) return t("status.browsing");
+    if (running.name.startsWith("computer_")) return t("status.usingComputer");
+    if (running.name.startsWith("files_")) return t("status.handlingFiles");
+    return t("status.working");
   }
   const latest = snapshot.timeline.at(-1);
-  if (latest?.kind === "progress" && latest.text) return "正在回复";
-  if (snapshot.reasoning?.some((part) => !part.done)) return "思考中";
-  return "正在处理";
+  if (latest?.kind === "progress" && latest.text) return t("status.replying");
+  if (snapshot.reasoning?.some((part) => !part.done)) return t("status.thinking");
+  return t("status.working");
 }
 
 type ReadingChange = (reading: boolean, interaction?: boolean) => void;
@@ -90,6 +91,7 @@ export const Activity = memo(function Activity({
   readingTranscript?: boolean;
   onViewAnswer?: (offset: number) => void;
 }) {
+  useI18n();
   const { colors } = useTheme();
   const reducedMotion = useReducedMotion();
   const completed = snapshot.status === "completed";
@@ -165,12 +167,12 @@ export const Activity = memo(function Activity({
             ? <Check size={16} color={colors.muted} /> : snapshot.status === "cancelled"
               ? <Square size={14} color={colors.muted} /> : <CircleAlert size={16} color={colors.error} />}
           <ActivityStatusText working={working}>{runLabel(snapshot)}</ActivityStatusText>
-          {snapshot.steps.length > 0 && <AppText muted size={12}>{completed ? `${snapshot.steps.length} 步` : `· 已完成 ${completedSteps} 步`}</AppText>}
+          {snapshot.steps.length > 0 && <AppText muted size={12}>{completed ? t("process.steps", { count: snapshot.steps.length }) : `· ${t("process.completedSteps", { count: completedSteps })}`}</AppText>}
           <ProcessElapsed createdAt={snapshot.created_at} updatedAt={snapshot.updated_at} active={active} />
           {hasHistory && canFold && !retainHistory && <ActivityDisclosure color={colors.subtle} open={open} />}
         </Pressable>
-        {canFold && retainHistory && <Pressable accessibilityRole="button" accessibilityLabel="查看答复" onPress={viewAnswer} style={styles.answerLink}>
-          <AppText muted size={12}>查看答复</AppText><ArrowDown size={12} color={colors.muted} />
+        {canFold && retainHistory && <Pressable accessibilityRole="button" accessibilityLabel={t("process.viewAnswer")} onPress={viewAnswer} style={styles.answerLink}>
+          <AppText muted size={12}>{t("process.viewAnswer")}</AppText><ArrowDown size={12} color={colors.muted} />
         </Pressable>}
       </View>}
       {collapse && open && <ProcessViewport maxHeight={processPanelLimit(availableHeight)} onReadingChange={onDetailReading}>
@@ -193,7 +195,7 @@ export const Activity = memo(function Activity({
             onReadingChange?.(next, next);
           }} onReadingChange={onDetailReading} stepExpansion={stepExpansion} onStepExpansionChange={changeStepExpansion} />
       ))}
-      {snapshot.error && <AppText size={13} style={{ color: colors.error, paddingVertical: 6 }}>{snapshot.error}</AppText>}
+      {snapshot.error && <AppText size={13} style={{ color: colors.error, paddingVertical: 6 }}>{userFacingRunError(snapshot.error, Boolean(snapshot.artifacts?.length), snapshot.error_code)}</AppText>}
     </View>
   );
 });
@@ -201,6 +203,7 @@ export const Activity = memo(function Activity({
 const PublicText = memo(function PublicText({ entry, hidden, active, files, onReadingChange, onLayout }: {
   entry: ProcessEntry; hidden: boolean; active: boolean; files?: Artifact[]; onReadingChange?: ReadingChange; onLayout?: (offset: number) => void;
 }) {
+  useI18n();
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (hold.current !== null) clearTimeout(hold.current); }, []);
   return (
@@ -220,6 +223,7 @@ const DetailSection = memo(function DetailSection({ id, entries, hidden, open, a
   id: string; entries: ProcessEntry[]; hidden: boolean; open: boolean; active: boolean;
   availableHeight?: number; onToggle: () => void; onReadingChange?: ReadingChange;
 } & ToolExpansionProps) {
+  useI18n();
   const { colors } = useTheme();
   const rows = useMemo(() => processRows(entries), [entries]);
   if (!entries.some((entry) => entry.step || entry.reasoning?.text.trim())) return null;
@@ -235,6 +239,7 @@ const DetailSection = memo(function DetailSection({ id, entries, hidden, open, a
 });
 
 const ProcessText = memo(function ProcessText({ entry, active }: { entry: ProcessEntry; active: boolean }) {
+  useI18n();
   const { colors } = useTheme();
   const { fontScale } = useWindowDimensions();
   const reasoning = entry.kind === "reasoning" ? entry.reasoning : undefined;
@@ -247,7 +252,7 @@ const ProcessText = memo(function ProcessText({ entry, active }: { entry: Proces
   return (
     <View collapsable={false} style={[styles.processText, { borderLeftColor: colors.border }]}>
       <View style={styles.textHeading}>
-        <AppText muted size={11}>{entry.kind === "progress" ? "进展" : reasoning?.kind === "summary" ? "思考摘要" : "思考"}</AppText>
+        <AppText muted size={11}>{entry.kind === "progress" ? t("process.progress") : reasoning?.kind === "summary" ? t("process.reasoningSummary") : t("process.reasoning")}</AppText>
       </View>
       <View style={reasoning ? { height: expanded ? height || limit : Math.min(height || limit, limit), overflow: "hidden" } : undefined}>
         <View collapsable={false} style={reasoning ? styles.reasoningContent : undefined}
@@ -259,19 +264,19 @@ const ProcessText = memo(function ProcessText({ entry, active }: { entry: Proces
         </View>
       </View>
       {canExpand && <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} style={styles.reasoningToggle}>
-        <AppText muted size={12}>{expanded ? "收起思考" : "展开思考"}</AppText>
+        <AppText muted size={12}>{expanded ? t("process.hideReasoning") : t("process.showReasoning")}</AppText>
         <ActivityDisclosure size={12} color={colors.muted} open={expanded} />
       </Pressable>}
     </View>
   );
 });
 
-const familyInfo: Record<ToolFamily, [string, LucideIcon]> = {
-  commands: ["运行命令", Terminal],
-  files: ["处理文件", FileText],
-  browser: ["操作网页", Globe],
-  computer: ["操作电脑", Monitor],
-  integration: ["调用工具", Wrench],
+const familyInfo: Record<ToolFamily, [MessageKey, LucideIcon]> = {
+  commands: ["process.runCommands", Terminal],
+  files: ["process.handleFiles", FileText],
+  browser: ["process.browse", Globe],
+  computer: ["process.useComputer", Monitor],
+  integration: ["process.callTools", Wrench],
 };
 
 type ToolExpansionProps = {
@@ -286,13 +291,15 @@ const ProcessRowView = memo(function ProcessRowView({ row, active, ...expansion 
 });
 
 const ToolGroup = memo(function ToolGroup({ row, stepExpansion, onStepExpansionChange }: { row: Extract<ProcessRow, { kind: "tools" }> } & ToolExpansionProps) {
+  useI18n();
   const { colors } = useTheme();
   const [chosenOpen, setOpen] = useState<boolean | undefined>();
   // A new adjacent tool must not fold the detail the user was already reading.
   const open = chosenOpen ?? row.steps.some((step) => stepExpansion[step.id]?.open);
   const stepRows = row.steps.map((step) => <StepRow key={step.id} step={step} expansion={stepExpansion[step.id] ?? collapsedStep} onExpansionChange={onStepExpansionChange} />);
   if (row.steps.length === 1 || !row.family) return <View collapsable={false} style={styles.group}>{stepRows}</View>;
-  const [label, Icon] = familyInfo[row.family];
+  const [labelKey, Icon] = familyInfo[row.family];
+  const label = t(labelKey);
   const completed = row.steps.filter((step) => step.status === "completed").length;
   const running = row.steps.findLast((step) => step.status === "running");
   return (
@@ -300,14 +307,14 @@ const ToolGroup = memo(function ToolGroup({ row, stepExpansion, onStepExpansionC
       <Pressable
         onPress={() => setOpen(!open)}
         accessibilityRole="button"
-        accessibilityLabel={`${label}，${row.steps.length} 次`}
+        accessibilityLabel={t("process.actionCount", { label, count: row.steps.length })}
         accessibilityState={{ expanded: open }}
         style={styles.groupHeader}
       >
         <View style={styles.groupIcon}>{running ? <ActivityIndicator size="small" color={colors.muted} /> : <Icon size={15} color={colors.muted} strokeWidth={1.7} />}</View>
         <View style={{ flex: 1 }}>
-          <AppText size={13}>{row.family === "commands" ? `运行 ${row.steps.length} 个命令` : `${label} · ${row.steps.length} 次`}</AppText>
-          <AppText muted size={11} numberOfLines={1}>{running ? stepTarget(running) || "正在处理" : `${completed} 次已完成`}</AppText>
+          <AppText size={13}>{row.family === "commands" ? t("process.commandCount", { count: row.steps.length }) : t("process.actionCount", { label, count: row.steps.length })}</AppText>
+          <AppText muted size={11} numberOfLines={1}>{running ? stepTarget(running) || t("status.working") : t("process.completedActions", { count: completed })}</AppText>
         </View>
         <ActivityDisclosure color={colors.subtle} open={Boolean(open)} />
       </Pressable>
@@ -317,6 +324,7 @@ const ToolGroup = memo(function ToolGroup({ row, stepExpansion, onStepExpansionC
 });
 
 function ProcessViewport({ maxHeight, children, onReadingChange }: { maxHeight: number; children: ReactNode; onReadingChange?: (reading: boolean, interaction?: boolean) => void }) {
+  useI18n();
   const { colors } = useTheme();
   const scroll = useRef<ScrollView>(null);
   const follow = useRef(true);
@@ -417,7 +425,7 @@ function ProcessViewport({ maxHeight, children, onReadingChange }: { maxHeight: 
       </ScrollView>
       {showTail && <Pressable
         accessibilityRole="button"
-        accessibilityLabel="最新进展"
+        accessibilityLabel={t("process.latestProgress")}
         onPress={() => {
           follow.current = true;
           interacting.current = false;

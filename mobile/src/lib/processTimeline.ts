@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import type { ProcessEntry, ProcessEventFields, Snapshot, Step } from './types';
 
 export type ToolFamily = 'commands' | 'files' | 'browser' | 'computer' | 'integration';
@@ -197,10 +198,10 @@ export function detailLabel(entries: ProcessEntry[]): string {
     else tools++;
   }
   const parts: string[] = [];
-  if (searches) parts.push(`搜索 ${searches} 次`);
-  if (pages) parts.push(`读取 ${pages} 个网页`);
-  if (tools) parts.push(`调用 ${tools} 个工具`);
-  return parts.join(' · ') || '思考过程';
+  if (searches) parts.push(t("process.searchCount", { count: searches }));
+  if (pages) parts.push(t("process.pageCount", { count: pages }));
+  if (tools) parts.push(t("process.toolCount", { count: tools }));
+  return parts.join(' · ') || t("process.reasoningHistory");
 }
 
 export function latestProgress(snapshot: Snapshot): string {

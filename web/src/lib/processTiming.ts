@@ -1,3 +1,5 @@
+import { processT as t } from "../../../shared/i18n/process";
+
 export function processElapsedMilliseconds(createdAt: string | undefined, updatedAt: string | undefined, active: boolean, now: number): number | null {
   const start = Date.parse(createdAt ?? "");
   const updated = Date.parse(updatedAt ?? "");
@@ -8,8 +10,8 @@ export function processElapsedMilliseconds(createdAt: string | undefined, update
 
 export function formatProcessElapsed(milliseconds: number): string {
   const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
-  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 60) return t("duration.seconds", { seconds });
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} 分 ${String(seconds % 60).padStart(2, "0")} 秒`;
-  return `${Math.floor(minutes / 60)} 小时 ${String(minutes % 60).padStart(2, "0")} 分`;
+  if (minutes < 60) return t("duration.minutesSeconds", { minutes, seconds: seconds % 60 });
+  return t("duration.hoursMinutes", { hours: Math.floor(minutes / 60), minutes: minutes % 60 });
 }

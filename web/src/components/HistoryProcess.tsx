@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, LoaderCircle } from "lucide-react";
 import { api, isActiveStatus } from "../lib/api";
@@ -12,6 +13,7 @@ export function HistoryProcess({
   hasProcess = false,
   status,
   runError,
+  runErrorCode,
   hasArtifacts = false,
   snapshot,
   output,
@@ -27,6 +29,7 @@ export function HistoryProcess({
   hasProcess?: boolean;
   status?: RunStatus;
   runError?: string;
+  runErrorCode?: string;
   hasArtifacts?: boolean;
   snapshot?: Snapshot | null;
   output?: string;
@@ -36,6 +39,7 @@ export function HistoryProcess({
   updatedAt?: string;
   renderBody: (text: string, id: string, streaming: boolean) => ReactNode;
 }) {
+  useI18n();
   const [localOpen, setLocalOpen] = useState(false);
   const open = expanded ?? localOpen;
   const [loaded, setLoaded] = useState<Snapshot | null>(null);
@@ -49,7 +53,7 @@ export function HistoryProcess({
   const needsTerminal = Boolean(saved && isActiveStatus(saved.status) && status && !isActiveStatus(status));
   const current = saved && needsTerminal ? { ...saved, status: status!, output: status === "completed" ? output ?? saved.output : saved.output,
     created_at: createdAt ?? saved.created_at, updated_at: updatedAt ?? saved.updated_at,
-    error: runError || saved.error, waiting_input: undefined } : saved;
+    error: runError || saved.error, error_code: runErrorCode || saved.error_code, waiting_input: undefined } : saved;
   const recoveringPublic = needsTerminal && status !== "completed" && Boolean(output?.trim());
   // The terminal history projection can be ahead of a disconnected stream.
   // Keep all of it visible while the canonical process snapshot recovers.
@@ -79,10 +83,10 @@ export function HistoryProcess({
     setLoading(true);
     void api.run(runId).then((snapshot) => {
       if (owner.current !== token) return;
-      if (snapshot.run_id !== runId || snapshot.seq < (saved?.seq ?? 0) || (needsTerminal && isActiveStatus(snapshot.status))) throw new Error("处理记录尚未同步");
+      if (snapshot.run_id !== runId || snapshot.seq < (saved?.seq ?? 0) || (needsTerminal && isActiveStatus(snapshot.status))) throw new Error(t("process.notSynced"));
       setLoaded(snapshot);
     }).catch(() => {
-      if (owner.current === token) setError("暂时无法加载");
+      if (owner.current === token) setError(t("error.loadTemporary"));
     }).finally(() => {
       if (owner.current === token) setLoading(false);
     });
@@ -97,13 +101,13 @@ export function HistoryProcess({
   return <>
     <RunTranscript timeline={visibleTimeline} output={visibleOutput}
       status={current?.status ?? status} waitingKind={current?.waiting_input?.kind} resource={current?.resource}
-      error={runError || current?.error} hasArtifacts={hasArtifacts || Boolean(current?.artifacts?.length)}
+      error={runError || current?.error} errorCode={runErrorCode || current?.error_code} hasArtifacts={hasArtifacts || Boolean(current?.artifacts?.length)}
       createdAt={current?.created_at ?? createdAt} updatedAt={current?.updated_at ?? updatedAt}
       expanded={expanded ?? localOpen} onExpandedChange={change} renderBody={renderBody} />
     {!current && (stepCount > 0 || hasReasoning || hasProcess) && <section className={`process history-process ${open ? "is-open" : ""}`}>
       <button className="process-toggle" onClick={() => change(!open)} aria-expanded={open}>
-        <span className="process-title">处理过程</span>
-        <span className="process-meta">{loading ? "加载中" : stepCount > 0 ? `${stepCount} 步` : hasReasoning ? "思考过程" : "处理过程"}</span>
+        <span className="process-title">{t("process.title")}</span>
+        <span className="process-meta">{loading ? t("status.loading") : stepCount > 0 ? t("process.steps", { count: stepCount }) : hasReasoning ? t("process.reasoning") : t("process.title")}</span>
         <ChevronRight size={16} className="process-chevron" />
       </button>
       {open && (loading ? <div className="history-loading"><LoaderCircle size={14} className="spin" /></div> : error ? <p className="form-error">{error}</p> : null)}

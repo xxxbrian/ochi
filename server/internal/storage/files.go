@@ -3,11 +3,12 @@ package storage
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 )
 
 type Artifact struct {
@@ -72,7 +73,7 @@ func (s *Store) GetArtifact(ctx context.Context, userID, id string) (Artifact, e
 
 func (s *Store) GetArtifacts(ctx context.Context, userID string, ids []string) ([]Artifact, error) {
 	if len(ids) > 12 {
-		return nil, fmt.Errorf("too many attachments")
+		return nil, i18n.New("attachments_limit")
 	}
 	items := make([]Artifact, 0, len(ids))
 	seen := map[string]bool{}

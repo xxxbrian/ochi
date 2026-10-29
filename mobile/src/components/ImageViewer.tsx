@@ -1,3 +1,5 @@
+import { errorForDisplay, errorText, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Keyboard, Modal, Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { Info, Share2, X } from "lucide-react-native";
@@ -37,6 +39,7 @@ export function measureImageOrigin(view: View | null, radius: number, done: (ori
 export function ImageViewer({ file, origin, onClose, onTransitionActive }: {
   file: Artifact; origin?: ImageOrigin; onClose: () => void; onTransitionActive?: (active: boolean) => void;
 }) {
+  useI18n();
   const viewport = useWindowDimensions();
   const parentInsets = useSafeAreaInsets();
   const geometry = `${viewport.width}:${viewport.height}`;
@@ -57,7 +60,7 @@ export function ImageViewer({ file, origin, onClose, onTransitionActive }: {
   const [ratio, setRatio] = useState(file.generation?.width && file.generation.height ? file.generation.width / file.generation.height : origin?.aspectRatio ?? 1);
   const [showInfo, setShowInfo] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [presented, setPresented] = useState(Platform.OS !== "android");
   const initialViewport = useRef({ width: viewport.width, height: viewport.height });
   const previousViewport = useRef({ width: viewport.width, height: viewport.height });
@@ -173,7 +176,7 @@ export function ImageViewer({ file, origin, onClose, onTransitionActive }: {
     if (sharing) return;
     setSharing(true); setError("");
     try { await shareArtifact(file); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "下载失败"); }
+    catch (reason) { setError(errorForDisplay(reason, "error.download")); }
     finally { setSharing(false); }
   }
   const generation = file.generation;
@@ -188,22 +191,22 @@ export function ImageViewer({ file, origin, onClose, onTransitionActive }: {
           <ZoomImage file={file} imageRatio={ratio} transitionProgress={progress} dragX={dragX} dragY={dragY} onDismiss={close} />
         </Animated.View>
         <Animated.View style={[styles.toolbar, { top: insets.top + 8, left: insets.left + 14, right: insets.right + 14 }, chrome]}>
-          <IconButton icon={X} label="关闭图片" onPress={close} variant="glass" colorScheme="dark" size={44} />
+          <IconButton icon={X} label={t("image.close")} onPress={close} variant="glass" colorScheme="dark" size={44} />
           <View style={{ flex: 1 }} />
-          <IconButton icon={Info} label="图片信息" onPress={() => setShowInfo(!showInfo)} variant="glass" colorScheme="dark" size={44} />
-          <IconButton icon={Share2} label="下载或分享" onPress={() => void share()} variant="glass" colorScheme="dark" size={44} disabled={sharing} />
+          <IconButton icon={Info} label={t("image.info")} onPress={() => setShowInfo(!showInfo)} variant="glass" colorScheme="dark" size={44} />
+          <IconButton icon={Share2} label={t("file.share")} onPress={() => void share()} variant="glass" colorScheme="dark" size={44} disabled={sharing} />
         </Animated.View>
         {showInfo && (
           <Animated.View style={[styles.info, { top: insets.top + 64, left: insets.left + 14, right: insets.right + 14, maxHeight: Math.min(canvas.height * 0.36, target.height) }, chrome]}>
             <ScrollView contentContainerStyle={styles.infoContent}>
-              <Text style={[styles.infoTitle, { fontFamily: fonts.medium }]}>{generation ? "生成信息" : file.name}</Text>
+              <Text style={[styles.infoTitle, { fontFamily: fonts.medium }]}>{generation ? t("image.generationInfo") : file.name}</Text>
               {generation && <Text selectable style={[styles.prompt, { fontFamily: fonts.regular }]}>{generation.prompt}</Text>}
               {generation?.revised_prompt && generation.revised_prompt !== generation.prompt && <Text selectable style={[styles.meta, { fontFamily: fonts.regular }]}>{generation.revised_prompt}</Text>}
               <Text style={[styles.meta, { fontFamily: fonts.regular }]}>{[generation?.model_name || generation?.model_id, generation?.size, generation?.quality, generation?.output_format, fileSize(file.size)].filter(Boolean).join(" · ")}</Text>
             </ScrollView>
           </Animated.View>
         )}
-        {Boolean(error) && <Text accessibilityRole="alert" style={[styles.error, { bottom: insets.bottom + 18, left: insets.left + 20, right: insets.right + 20, fontFamily: fonts.regular }]}>{error}</Text>}
+        {Boolean(error) && <Text accessibilityRole="alert" style={[styles.error, { bottom: insets.bottom + 18, left: insets.left + 20, right: insets.right + 20, fontFamily: fonts.regular }]}>{errorText(error)}</Text>}
       </GestureHandlerRootView>
       </SafeAreaListener>
       </Modal>

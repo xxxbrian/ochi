@@ -440,7 +440,7 @@ func (e coreEvalRunner) run(id, boundary, prompt string, session storage.Session
 	if err != nil {
 		status = runtime.StatusFailed
 	}
-	live.Finish(status, result.Error)
+	live.Finish(status, err)
 	snapshot = live.Snapshot()
 	if completeErr := e.store.CompleteRun(context.Background(), snapshot); completeErr != nil {
 		result.Error = "owned QA terminal state could not be persisted"

@@ -1,3 +1,5 @@
+import { errorForDisplay, localizedError, type DisplayError } from "../lib/errors";
+import { t, useI18n, formatDate, formatNumber, weekdayNames, thinkingLevelLabel } from "../lib/i18n";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, View, useWindowDimensions } from "react-native";
 import {
@@ -25,7 +27,6 @@ import {
 import { SessionSearch } from "./SessionSearch";
 import { ScheduleTimePicker } from "./ScheduleTimePicker";
 
-const weekdays = ["一", "二", "三", "四", "五", "六", "日"];
 type Choice = "project" | "model" | "effort" | null;
 
 export function TaskEditor({
@@ -39,13 +40,16 @@ export function TaskEditor({
   onClose: () => void;
   onSaved: (value: Schedule) => void;
 }) {
+  useI18n();
+  const weekdays = weekdayNames('narrow');
+  const weekdayLabels = weekdayNames('long');
   const { colors, models } = useApp();
   const { height } = useWindowDimensions();
   const compact = height < 500;
   const [draft, setDraft] = useState<Partial<Schedule>>({});
   const [projects, setProjects] = useState<Project[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [advanced, setAdvanced] = useState(false);
   const [sessionSearch, setSessionSearch] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
@@ -95,22 +99,22 @@ export function TaskEditor({
   async function save() {
     if (!draft.name?.trim() || !draft.prompt?.trim()) return;
     if (draft.recurrence === "weekly" && !draft.weekdays?.length) {
-      setError("请选择星期");
+      setError(localizedError("schedule.chooseWeekday"));
       return;
     }
     if (draft.context_mode === "session" && !draft.session_id) {
-      setError("请选择对话");
+      setError(localizedError("schedule.chooseChat"));
       return;
     }
     if (draft.recurrence === "once" && !draft.once_at) {
-      setError("请选择日期与时间");
+      setError(localizedError("schedule.chooseDateTime"));
       return;
     }
     if (
       draft.recurrence === "interval" &&
       (!draft.interval_minutes || draft.interval_minutes < 1)
     ) {
-      setError("间隔至少为 1 分钟");
+      setError(localizedError("schedule.minimumInterval"));
       return;
     }
     setBusy(true);
@@ -124,7 +128,7 @@ export function TaskEditor({
         }),
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(errorForDisplay(reason, "error.save"));
     } finally {
       setBusy(false);
     }
@@ -154,14 +158,14 @@ export function TaskEditor({
           ),
         });
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "时间无效");
+        setError(errorForDisplay(reason, "schedule.invalidTime"));
       }
     } else patch({ time_of_day: value });
   }
   const choiceItems =
     choice === "project"
       ? [
-          { id: "", title: "无项目", detail: "" },
+          { id: "", title: t("project.noneSelected"), detail: "" },
           ...projects.map((project) => ({
             id: project.id,
             title: project.name,
@@ -170,7 +174,7 @@ export function TaskEditor({
         ]
       : choice === "model"
         ? [
-            { id: "", title: "默认模型", detail: "" },
+            { id: "", title: t("model.default"), detail: "" },
             ...models.map((item) => ({
               id: item.id,
               title: item.name,
@@ -178,11 +182,11 @@ export function TaskEditor({
             })),
           ]
         : [
-            { id: "", title: "默认", detail: "" },
+            { id: "", title: t("common.default"), detail: "" },
             ...(model?.reasoning_kind === "toggle"
               ? ["on", "off"]
               : (model?.efforts ?? [])
-            ).map((value) => ({ id: value, title: value, detail: "" })),
+            ).map((value) => ({ id: value, title: thinkingLevelLabel(value), detail: "" })),
           ];
   const saveButton = (
     <View style={[styles.footer, compact && { paddingHorizontal: 0 }]}>
@@ -191,14 +195,13 @@ export function TaskEditor({
         disabled={!draft.name?.trim() || !draft.prompt?.trim()}
         onPress={() => void save()}
       >
-        保存
-      </Button>
+        {t("common.save")}</Button>
     </View>
   );
   return (
     <Sheet
       visible={visible}
-      title={task ? "编辑任务" : "创建任务"}
+      title={task ? t("schedule.edit") : t("schedule.create")}
       onClose={onClose}
       height="full"
     >
@@ -208,26 +211,25 @@ export function TaskEditor({
           contentContainerStyle={styles.body}
         >
           <Field
-            label="名称"
+            label={t("common.name")}
             value={draft.name ?? ""}
             onChangeText={(name) => patch({ name })}
           />
           <Field
-            label="任务"
+            label={t("schedule.task")}
             multiline
             value={draft.prompt ?? ""}
             onChangeText={(prompt) => patch({ prompt })}
           />
           <AppText muted size={13} style={{ marginBottom: 7 }}>
-            频率
-          </AppText>
+            {t("schedule.frequency")}</AppText>
           <View style={[styles.segment, { backgroundColor: colors.hover }]}>
             {(
               [
-                { value: "once", title: "单次" },
-                { value: "daily", title: "每天" },
-                { value: "weekly", title: "每周" },
-                { value: "interval", title: "间隔" },
+                { value: "once", title: t("schedule.once") },
+                { value: "daily", title: t("schedule.daily") },
+                { value: "weekly", title: t("schedule.weekly") },
+                { value: "interval", title: t("schedule.interval") },
               ] as const
             ).map((item) => (
               <Pressable
@@ -244,7 +246,7 @@ export function TaskEditor({
                       });
                     } catch (reason) {
                       setError(
-                        reason instanceof Error ? reason.message : "日期无效",
+                        errorForDisplay(reason, "schedule.invalidDate"),
                       );
                     }
                   } else patch({ recurrence: item.value });
@@ -264,7 +266,7 @@ export function TaskEditor({
           </View>
           {draft.recurrence === "interval" ? (
             <Field
-              label="间隔（分钟）"
+              label={t("schedule.intervalMinutes")}
               value={String(draft.interval_minutes ?? 60)}
               keyboardType="number-pad"
               onChangeText={(value) =>
@@ -275,7 +277,7 @@ export function TaskEditor({
             <Surface>
               {draft.recurrence === "once" && (
                 <SettingRow
-                  title="日期"
+                  title={t("schedule.date")}
                   detail={selectedDate}
                   onPress={() => setDateOpen(!dateOpen)}
                 />
@@ -294,14 +296,14 @@ export function TaskEditor({
                       setDateOpen(false);
                     } catch (reason) {
                       setError(
-                        reason instanceof Error ? reason.message : "日期无效",
+                        errorForDisplay(reason, "schedule.invalidDate"),
                       );
                     }
                   }}
                 />
               )}
               <SettingRow
-                title="时间"
+                title={t("schedule.time")}
                 detail={selectedTime}
                 onPress={() => setTimeOpen(!timeOpen)}
                 last
@@ -316,7 +318,7 @@ export function TaskEditor({
               {weekdays.map((day, index) => (
                 <Pressable
                   key={day}
-                  accessibilityLabel={`星期${day}`}
+                  accessibilityLabel={weekdayLabels[index]}
                   accessibilityState={{
                     selected: draft.weekdays?.includes(index + 1),
                   }}
@@ -355,8 +357,7 @@ export function TaskEditor({
             style={styles.advanced}
           >
             <AppText muted size={14}>
-              高级设置
-            </AppText>
+              {t("settings.advanced")}</AppText>
             <ChevronDown
               size={16}
               color={colors.muted}
@@ -366,29 +367,29 @@ export function TaskEditor({
           {advanced && (
             <>
               <Field
-                label="时区"
+                label={t("schedule.timezone")}
                 value={draft.timezone ?? "Asia/Shanghai"}
                 autoCapitalize="none"
                 onChangeText={(timezone) => patch({ timezone })}
               />
               <Surface>
                 <SettingRow
-                  title="项目"
+                  title={t("project.title")}
                   detail={
                     projects.find((item) => item.id === draft.project_id)
-                      ?.name ?? "无项目"
+                      ?.name ?? t("project.noneSelected")
                   }
                   onPress={() => setChoice("project")}
                 />
                 <SettingRow
-                  title="模型"
-                  detail={draft.model_id ? model?.name : "默认模型"}
+                  title={t("model.label")}
+                  detail={draft.model_id ? model?.name : t("model.default")}
                   onPress={() => setChoice("model")}
                 />
                 {model?.reasoning_kind === "budget" ? (
                   <View style={{ padding: 14 }}>
                     <Field
-                      label="思考预算"
+                      label={t("model.thinkingBudget")}
                       keyboardType="number-pad"
                       value={
                         draft.effort?.replace("budget:", "") ??
@@ -402,14 +403,14 @@ export function TaskEditor({
                 ) : model?.effort_parameter &&
                   ["effort", "toggle"].includes(model.reasoning_kind ?? "") ? (
                   <SettingRow
-                    title="思考程度"
-                    detail={draft.effort || "默认"}
+                    title={t("model.thinkingLevel")}
+                    detail={thinkingLevelLabel(draft.effort)}
                     onPress={() => setChoice("effort")}
                   />
                 ) : null}
-                <SettingRow title="连续对话" last>
+                <SettingRow title={t("schedule.continuous")} last>
                   <Switch
-                    accessibilityLabel="复用指定对话"
+                    accessibilityLabel={t("schedule.reuseChat")}
                     value={draft.context_mode === "session"}
                     onValueChange={(enabled) =>
                       patch({
@@ -422,8 +423,8 @@ export function TaskEditor({
                 </SettingRow>
                 {draft.context_mode === "session" && (
                   <SettingRow
-                    title="对话"
-                    detail={selectedSession?.title ?? "选择对话"}
+                    title={t("chat.chats")}
+                    detail={selectedSession ? selectedSession.title || t("chat.new") : t("chat.select")}
                     onPress={() => setSessionSearch(true)}
                     last
                   />
@@ -432,7 +433,7 @@ export function TaskEditor({
             </>
           )}
           <Surface>
-            <SettingRow title="启用" last>
+            <SettingRow title={t("common.enable")} last>
               <Switch
                 value={draft.enabled ?? true}
                 onValueChange={(enabled) => patch({ enabled })}
@@ -450,10 +451,10 @@ export function TaskEditor({
         visible={Boolean(choice)}
         title={
           choice === "project"
-            ? "项目"
+            ? t("project.title")
             : choice === "model"
-              ? "模型"
-              : "思考程度"
+              ? t("model.label")
+              : t("model.thinkingLevel")
         }
         onClose={() => setChoice(null)}
         height={420}
@@ -511,7 +512,9 @@ function DateGrid({
   value: string;
   onChange: (value: string) => void;
 }) {
+  useI18n();
   const { colors } = useApp();
+  const weekdays = weekdayNames("narrow");
   const [month, setMonth] = useState(() => new Date(`${value}T12:00:00`));
   const days = useMemo(() => {
     const start = new Date(month.getFullYear(), month.getMonth(), 1);
@@ -530,6 +533,8 @@ function DateGrid({
     <View style={styles.calendar}>
       <View style={styles.month}>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("date.previousMonth")}
           onPress={() =>
             setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))
           }
@@ -538,9 +543,11 @@ function DateGrid({
           <ChevronLeft size={20} color={colors.text} />
         </Pressable>
         <AppText weight="medium" size={15}>
-          {month.getFullYear()} 年 {month.getMonth() + 1} 月
+          {formatDate(month, { year: "numeric", month: "long" })}
         </AppText>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("date.nextMonth")}
           onPress={() =>
             setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))
           }
@@ -550,8 +557,8 @@ function DateGrid({
         </Pressable>
       </View>
       <View style={styles.calendarGrid}>
-        {weekdays.map((day) => (
-          <View key={day} style={styles.calendarCell}>
+        {weekdays.map((day, index) => (
+          <View key={index} style={styles.calendarCell}>
             <AppText muted size={12}>
               {day}
             </AppText>
@@ -562,6 +569,9 @@ function DateGrid({
           return (
             <Pressable
               key={index}
+              accessibilityRole="button"
+              accessibilityLabel={day ? formatDate(new Date(month.getFullYear(), month.getMonth(), day), { dateStyle: "full" }) : undefined}
+              accessibilityState={{ selected: key === value, disabled: !day }}
               disabled={!day}
               onPress={() => onChange(key)}
               style={[
@@ -576,7 +586,7 @@ function DateGrid({
                 size={14}
                 style={{ color: key === value ? colors.canvas : colors.text }}
               >
-                {day || ""}
+                {day ? formatNumber(day) : ""}
               </AppText>
             </Pressable>
           );

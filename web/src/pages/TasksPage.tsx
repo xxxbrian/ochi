@@ -1,3 +1,4 @@
+import { t, useI18n, getLocale } from "../lib/i18n";
 import {
   lazy,
   Suspense,
@@ -18,7 +19,7 @@ import {
   Search,
   Trash2,
 } from "lucide-react";
-import { api, isActiveStatus } from "../lib/api";
+import { api, isActiveStatus, userFacingRunError } from "../lib/api";
 import { statusLabel } from "../lib/router";
 import type {
   Model,
@@ -39,12 +40,14 @@ import { SessionSearch } from "../components/SessionSearch";
 import { scheduleInstant, scheduleWallTime } from "../lib/scheduling";
 import "./tasks.css";
 const MarkdownContent = lazy(() => import("../components/MarkdownContent"));
-const weekdayNames = ["一", "二", "三", "四", "五", "六", "日"];
+function weekdayNames() {
+  return Array.from({ length: 7 }, (_, day) => new Intl.DateTimeFormat(getLocale(), { weekday: "short", timeZone: "UTC" }).format(new Date(Date.UTC(2024, 0, day + 1))));
+}
 function timing(task: Schedule) {
   switch (task.recurrence) {
     case "once":
       return task.once_at
-        ? new Date(task.once_at).toLocaleString("zh-CN", {
+        ? new Date(task.once_at).toLocaleString(getLocale(), {
             timeZone: task.timezone,
             year: "numeric",
             month: "short",
@@ -53,18 +56,18 @@ function timing(task: Schedule) {
             minute: "2-digit",
             hour12: false,
           })
-        : "单次";
+        : t("schedule.once");
     case "daily":
-      return `每天 ${task.time_of_day ?? "09:00"}`;
+      return t("schedule.dailyAt", { time: task.time_of_day ?? "09:00" });
     case "weekly":
-      return `每周 ${(task.weekdays ?? []).map((day) => weekdayNames[day - 1]).join("、")} ${task.time_of_day ?? "09:00"}`;
+      return t("schedule.weeklyAt", { days: new Intl.ListFormat(getLocale(), { style: "short", type: "conjunction" }).format((task.weekdays ?? []).map((day) => weekdayNames()[day - 1])), time: task.time_of_day ?? "09:00" });
     default:
-      return `每 ${task.interval_minutes} 分钟`;
+      return t("schedule.everyMinutes", { count: task.interval_minutes ?? 0 });
   }
 }
 function taskDate(value?: string, timezone?: string) {
   return value
-    ? new Date(value).toLocaleString("zh-CN", {
+    ? new Date(value).toLocaleString(getLocale(), {
         timeZone: timezone,
         month: "short",
         day: "numeric",
@@ -85,8 +88,8 @@ function executionDuration(item: ScheduleExecution) {
     ),
   );
   return seconds < 60
-    ? `${seconds} 秒`
-    : `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
+    ? t("duration.seconds", { seconds })
+    : t("duration.minutesSeconds", { minutes: Math.floor(seconds / 60), seconds: seconds % 60 });
 }
 function TaskToggle({
   task,
@@ -97,15 +100,16 @@ function TaskToggle({
   updating: boolean;
   onChange: (task: Schedule, enabled: boolean) => void;
 }) {
+  useI18n();
   return (
     <label
       className={`ochi-task-toggle${updating ? " is-updating" : ""}`}
-      title={task.enabled ? "停用任务" : "启用任务"}
+      title={task.enabled ? t("tasks.disable") : t("tasks.enable")}
     >
       <input
         type="checkbox"
         role="switch"
-        aria-label={`启用 ${task.name}`}
+        aria-label={t("tasks.enableName", { name: task.name })}
         aria-busy={updating}
         checked={task.enabled}
         disabled={updating}
@@ -118,12 +122,13 @@ function TaskToggle({
   );
 }
 function MobileTaskTiming({ task }: { task: Schedule }) {
+  useI18n();
   return (
     <span className="ochi-task-row__mobile-plan">
       <span>{timing(task)}</span>
       {task.enabled && task.next_run_at
-        ? <span>下次 {taskDate(task.next_run_at, task.timezone)}</span>
-        : !task.enabled ? <span>已停用</span> : null}
+        ? <span>{t("schedule.next")} {taskDate(task.next_run_at, task.timezone)}</span>
+        : !task.enabled ? <span>{t("tasks.disabled")}</span> : null}
     </span>
   );
 }
@@ -144,6 +149,7 @@ export default function TasksPage({
   onNavigate: (path: string) => void;
   onMenu: () => void;
 }) {
+  useI18n();
   const [items, setItems] = useState<Schedule[]>([]);
   const [task, setTask] = useState<Schedule | null>(null);
   const [executions, setExecutions] = useState<ScheduleExecution[]>([]);
@@ -191,7 +197,7 @@ export default function TasksPage({
           const selected = history.find(
             (item) => item.id === executionId || item.run_id === executionId,
           );
-          if (!selected) throw new Error("执行记录不存在");
+          if (!selected) throw new Error(t("tasks.executionMissing"));
           const details = await api.scheduleExecution(taskId, selected.id);
           if (token !== generation.current) return;
           setExecution(details);
@@ -207,7 +213,7 @@ export default function TasksPage({
       }
     } catch (reason) {
       if (token === generation.current)
-        setError(reason instanceof Error ? reason.message : "加载失败");
+        setError(reason instanceof Error ? reason.message : t("error.load"));
     } finally {
       if (token === generation.current) setLoading(false);
     }
@@ -267,7 +273,7 @@ export default function TasksPage({
       onNavigate(`/tasks/${value.id}`);
       if (taskId === value.id) void refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("error.save"));
     } finally {
       mutations.current += 1;
       setBusy(false);
@@ -290,7 +296,7 @@ export default function TasksPage({
       setTask((current) => current?.id === value.id ? value : current);
     } catch (reason) {
       if (token === generation.current)
-        setError(reason instanceof Error ? reason.message : "更新失败");
+        setError(reason instanceof Error ? reason.message : t("error.update"));
     } finally {
       updatingIds.current.delete(item.id);
       mutations.current += 1;
@@ -308,7 +314,7 @@ export default function TasksPage({
       else onNavigate(`/tasks/${id}`);
     } catch (reason) {
       if (token === generation.current)
-        setError(reason instanceof Error ? reason.message : "加载失败");
+        setError(reason instanceof Error ? reason.message : t("error.load"));
     } finally {
       setOpeningId(null);
     }
@@ -328,7 +334,7 @@ export default function TasksPage({
         const latestExecution = history[0];
         if (latestExecution)
           onNavigate(`/tasks/${id}/runs/${latestExecution.id}`);
-        else setError("暂无执行结果");
+        else setError(t("tasks.noResult"));
         return;
       }
       onNavigate(
@@ -336,7 +342,7 @@ export default function TasksPage({
       );
     } catch (reason) {
       if (token === generation.current)
-        setError(reason instanceof Error ? reason.message : "执行失败");
+        setError(reason instanceof Error ? reason.message : t("error.execution"));
     } finally {
       mutations.current += 1;
       setRunningId(null);
@@ -355,7 +361,7 @@ export default function TasksPage({
       setItems((current) => current.filter((item) => item.id !== id));
       if (taskId === id) onNavigate("/tasks");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "删除失败");
+      setError(reason instanceof Error ? reason.message : t("error.delete"));
     } finally {
       mutations.current += 1;
       setBusy(false);
@@ -404,7 +410,7 @@ export default function TasksPage({
           {taskId && (
             <button
               className="icon-button"
-              aria-label="返回任务"
+              aria-label={t("tasks.back")}
               onClick={() =>
                 onNavigate(executionId ? `/tasks/${taskId}` : "/tasks")
               }
@@ -412,11 +418,11 @@ export default function TasksPage({
               <ArrowLeft size={18} />
             </button>
           )}
-          <h1>{executionId ? "执行结果" : "定时任务"}</h1>
+          <h1>{executionId ? t("tasks.result") : t("tasks.title")}</h1>
         </div>
         <button className="secondary-button" onClick={create}>
           <Plus size={16} />
-          创建任务
+          {t("tasks.create")}
         </button>
       </header>
       <div className="workspace-page-scroll">
@@ -445,7 +451,7 @@ export default function TasksPage({
                       </span>
                       <time dateTime={execution.started_at}>
                         {execution.started_at
-                          ? new Date(execution.started_at).toLocaleString("zh-CN", {
+                          ? new Date(execution.started_at).toLocaleString(getLocale(), {
                               timeZone: task.timezone,
                               hour12: false,
                             })
@@ -460,7 +466,7 @@ export default function TasksPage({
                       className="secondary-button"
                       onClick={() => onNavigate(`/c/${execution.session_id}`)}
                     >
-                      打开对话
+                      {t("chat.open")}
                       <ArrowUpRight size={15} />
                     </button>
                   )}
@@ -468,7 +474,8 @@ export default function TasksPage({
                 <div className="task-output ochi-tasks__output">
                   <RunTranscript timeline={current?.timeline ?? []} output={visibleOutput} status={executionStatus}
                     waitingKind={current?.waiting_input?.kind} resource={current?.resource}
-                    error={current?.error ?? execution.error} hasArtifacts={Boolean((current?.artifacts ?? execution.artifacts)?.length)}
+                    error={current?.error ?? execution.error} errorCode={current?.error_code ?? execution.error_code}
+                    hasArtifacts={Boolean((current?.artifacts ?? execution.artifacts)?.length)}
                     createdAt={current?.created_at ?? execution.started_at}
                     updatedAt={current?.updated_at ?? execution.finished_at}
                     renderBody={(text, _id, streaming) => <Suspense fallback={<p className="markdown-loading">{text}</p>}>
@@ -501,7 +508,7 @@ export default function TasksPage({
                   </div>
                   <div className="ochi-tasks__detail-actions">
                     <div className="ochi-tasks__enabled">
-                      <span>{task.enabled ? "已启用" : "已停用"}</span>
+                      <span>{task.enabled ? t("tasks.enabled") : t("tasks.disabled")}</span>
                       <TaskToggle task={task} updating={Boolean(updating[task.id])}
                         onChange={(item, enabled) => void toggleTask(item, enabled)} />
                     </div>
@@ -511,16 +518,16 @@ export default function TasksPage({
                       onClick={() => void run(task.id)}
                     >
                       {runningId === task.id ? <LoaderCircle size={15} className="spin" /> : <Play size={15} />}
-                      执行
+                      {t("tasks.run")}
                     </button>
                     <button className="secondary-button" disabled={busy || Boolean(updating[task.id])}
                       onClick={() => { setError(""); setEditing(task); }}
                     >
                       <Pencil size={15} />
-                      编辑
+                      {t("common.edit")}
                     </button>
                     <button className="icon-button ochi-tasks__delete" disabled={busy || Boolean(updating[task.id])}
-                      aria-label="删除任务" title="删除任务" onClick={() => setDeleting(task)}>
+                      aria-label={t("tasks.delete")} title={t("tasks.delete")} onClick={() => setDeleting(task)}>
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -528,7 +535,7 @@ export default function TasksPage({
                 <div className="ochi-tasks__prompt">{task.prompt}</div>
                 <div className="ochi-tasks__facts">
                   <span>
-                    {task.context_mode === "session" ? "连续对话" : "独立执行"}
+                    {task.context_mode === "session" ? t("tasks.continuous") : t("tasks.isolated")}
                   </span>
                   {task.project_id && (
                     <button
@@ -546,13 +553,13 @@ export default function TasksPage({
                   </span>
                   {task.enabled && task.next_run_at && (
                     <span>
-                      下次 {taskDate(task.next_run_at, task.timezone)}
+                      {t("schedule.next")} {taskDate(task.next_run_at, task.timezone)}
                     </span>
                   )}
                 </div>
                 <div className="ochi-tasks__section-heading">
-                  <h3>执行历史</h3>
-                  <span>{task.execution_count ?? executions.length} 次</span>
+                  <h3>{t("tasks.history")}</h3>
+                  <span>{t("tasks.executionCount", { count: task.execution_count ?? executions.length })}</span>
                 </div>
                 <div className="ochi-executions">
                   {executions.map((item) => (
@@ -572,15 +579,15 @@ export default function TasksPage({
                       <time className="ochi-execution__time" dateTime={item.started_at}>
                         {taskDate(item.started_at, task.timezone)}
                       </time>
-                      <span className={`ochi-execution__preview${item.error ? " is-error" : ""}`}>
-                        {item.error?.slice(0, 180) || item.output?.slice(0, 180) || (item.artifacts?.length ? `${item.artifacts.length} 个文件` : "")}
+                      <span className={`ochi-execution__preview${item.error || item.error_code ? " is-error" : ""}`}>
+                        {item.error || item.error_code ? userFacingRunError(item.error, Boolean(item.artifacts?.length), item.error_code) : item.output?.slice(0, 180) || (item.artifacts?.length ? t("file.count", { count: item.artifacts.length }) : "")}
                       </span>
                       <span className="ochi-execution__duration">{executionDuration(item)}</span>
                       <ArrowUpRight size={15} />
                     </button>
                   ))}
                   {!executions.length && (
-                    <div className="ochi-tasks__empty">暂无执行记录</div>
+                    <div className="ochi-tasks__empty">{t("tasks.emptyHistory")}</div>
                   )}
                 </div>
               </>
@@ -588,11 +595,11 @@ export default function TasksPage({
           ) : (
             <>
               <div className="ochi-tasks__list-toolbar">
-                <div className="ochi-tasks__filters" role="group" aria-label="筛选任务">
+                <div className="ochi-tasks__filters" role="group" aria-label={t("tasks.filter")}>
                   {([
-                    ["all", "全部", items.length],
-                    ["enabled", "已启用", enabledCount],
-                    ["disabled", "已停用", items.length - enabledCount],
+                    ["all", t("common.all"), items.length],
+                    ["enabled", t("tasks.enabled"), enabledCount],
+                    ["disabled", t("tasks.disabled"), items.length - enabledCount],
                   ] as const).map(([value, label, count]) => (
                     <button key={value} className={filter === value ? "is-selected" : ""}
                       aria-pressed={filter === value} onClick={() => setFilter(value)}>
@@ -603,7 +610,7 @@ export default function TasksPage({
               </div>
               <div className="ochi-task-list">
                 {visibleItems.length > 0 && <div className="ochi-task-list__columns" aria-hidden="true">
-                  <span>任务</span><span>安排</span><span>最近执行</span><span /> <span>启用</span>
+                  <span>{t("tasks.task")}</span><span>{t("schedule.title")}</span><span>{t("tasks.latestRun")}</span><span /> <span>{t("tasks.enableLabel")}</span>
                 </div>}
                 {visibleItems.map((item) => (
                   <article key={item.id} className="ochi-task-row">
@@ -618,13 +625,13 @@ export default function TasksPage({
                       <span>{timing(item)}</span>
                       <small>
                         {item.enabled && item.next_run_at
-                          ? `下次 ${taskDate(item.next_run_at, item.timezone)}`
-                          : item.enabled ? "" : "已停用"}
+                          ? t("schedule.nextAt", { time: taskDate(item.next_run_at, item.timezone) })
+                          : item.enabled ? "" : t("tasks.disabled")}
                       </small>
                     </div>
                     {item.last_status ? <button className="ochi-task-row__result"
-                      aria-label={`查看 ${item.name} 最近执行结果`}
-                      title={item.last_error || "查看执行结果"} disabled={openingId !== null}
+                      aria-label={t("tasks.viewLatest", { name: item.name })}
+                      title={item.last_error || item.last_error_code ? userFacingRunError(item.last_error, false, item.last_error_code) : t("tasks.viewResult")} disabled={openingId !== null}
                       onClick={() => void openLatest(item.id)}>
                       <MobileTaskTiming task={item} />
                       <span className="ochi-task-row__recent">
@@ -636,15 +643,15 @@ export default function TasksPage({
                         <small>{taskDate(item.last_run_at, item.timezone)}</small>
                       </span>
                     </button> : <span className="ochi-task-row__no-result">
-                      <MobileTaskTiming task={item} /><span>未执行</span>
+                      <MobileTaskTiming task={item} /><span>{t("tasks.notRun")}</span>
                     </span>}
                     <div className="ochi-task-row__actions">
-                      <button className="icon-button" aria-label={`立即执行 ${item.name}`}
-                        title="立即执行" disabled={busy || Boolean(updating[item.id])} onClick={() => void run(item.id)}>
+                      <button className="icon-button" aria-label={t("tasks.runName", { name: item.name })}
+                        title={t("tasks.runNow")} disabled={busy || Boolean(updating[item.id])} onClick={() => void run(item.id)}>
                         {runningId === item.id ? <LoaderCircle size={16} className="spin" /> : <Play size={16} />}
                       </button>
-                      <button className="icon-button" aria-label={`编辑 ${item.name}`}
-                        title="编辑任务" disabled={busy || Boolean(updating[item.id])}
+                      <button className="icon-button" aria-label={t("tasks.editName", { name: item.name })}
+                        title={t("tasks.edit")} disabled={busy || Boolean(updating[item.id])}
                         onClick={() => { setError(""); setEditing(item); }}>
                         <Pencil size={16} />
                       </button>
@@ -657,7 +664,7 @@ export default function TasksPage({
               {!visibleItems.length && (
                 <div className="ochi-tasks__empty">
                   <CalendarClock size={23} />
-                  <span>{items.length ? "暂无此类任务" : "暂无任务"}</span>
+                  <span>{items.length ? t("tasks.emptyFiltered") : t("tasks.empty")}</span>
                 </div>
               )}
             </>
@@ -666,7 +673,7 @@ export default function TasksPage({
       </div>
       {editing && (
         <Modal
-          title={editing.id ? "编辑任务" : "创建任务"}
+          title={editing.id ? t("tasks.edit") : t("tasks.create")}
           className="ochi-task-editor"
           onClose={() => setEditing(null)}
           size="form"
@@ -677,7 +684,7 @@ export default function TasksPage({
                 className="secondary-button"
                 onClick={() => setEditing(null)}
               >
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
@@ -689,7 +696,7 @@ export default function TasksPage({
                   (editing.recurrence === "weekly" && !editing.weekdays?.length)
                 }
               >
-                保存
+                {t("common.save")}
               </button>
             </div>
           }
@@ -703,7 +710,7 @@ export default function TasksPage({
             }}
           >
             <label className="form-field">
-              <span>名称</span>
+              <span>{t("common.name")}</span>
               <input
                 required
                 autoFocus
@@ -714,7 +721,7 @@ export default function TasksPage({
               />
             </label>
             <label className="form-field">
-              <span>任务</span>
+              <span>{t("tasks.task")}</span>
               <textarea
                 rows={4}
                 required
@@ -726,14 +733,14 @@ export default function TasksPage({
             </label>
             <div className="form-grid">
               <label className="form-field">
-                <span>频率</span>
+                <span>{t("schedule.frequency")}</span>
                 <SelectField
                   value={editing.recurrence ?? "interval"}
                   options={[
-                    { value: "once", label: "单次" },
-                    { value: "daily", label: "每天" },
-                    { value: "weekly", label: "每周" },
-                    { value: "interval", label: "固定间隔" },
+                    { value: "once", label: t("schedule.once") },
+                    { value: "daily", label: t("schedule.daily") },
+                    { value: "weekly", label: t("schedule.weekly") },
+                    { value: "interval", label: t("schedule.interval") },
                   ]}
                   onChange={(value) =>
                     setEditing({
@@ -745,7 +752,7 @@ export default function TasksPage({
               </label>
               {editing.recurrence === "interval" ? (
                 <label className="form-field">
-                  <span>间隔（分钟）</span>
+                  <span>{t("schedule.intervalMinutes")}</span>
                   <input
                     type="number"
                     min={1}
@@ -761,7 +768,7 @@ export default function TasksPage({
                 </label>
               ) : editing.recurrence === "once" ? (
                 <label className="form-field">
-                  <span>日期与时间</span>
+                  <span>{t("schedule.dateTime")}</span>
                   <input
                     type="datetime-local"
                     required
@@ -783,7 +790,7 @@ export default function TasksPage({
                         setError(
                           reason instanceof Error
                             ? reason.message
-                            : "日期或时间无效",
+                            : t("schedule.invalidDate"),
                         );
                       }
                     }}
@@ -791,7 +798,7 @@ export default function TasksPage({
                 </label>
               ) : (
                 <label className="form-field">
-                  <span>时间</span>
+                  <span>{t("schedule.time")}</span>
                   <input
                     type="time"
                     required
@@ -808,7 +815,7 @@ export default function TasksPage({
             </div>
             {editing.recurrence === "weekly" && (
               <div className="weekday-picker">
-                {weekdayNames.map((name, index) => (
+                {weekdayNames().map((name, index) => (
                   <button
                     key={name}
                     type="button"
@@ -818,7 +825,7 @@ export default function TasksPage({
                     aria-pressed={
                       editing.weekdays?.includes(index + 1) ?? false
                     }
-                    aria-label={`星期${name}`}
+                    aria-label={name}
                     onClick={() =>
                       setEditing({
                         ...editing,
@@ -834,9 +841,9 @@ export default function TasksPage({
               </div>
             )}
             <details className="advanced-section">
-              <summary>高级设置</summary>
+              <summary>{t("common.advanced")}</summary>
               <label className="form-field">
-                <span>时区</span>
+                <span>{t("schedule.timezone")}</span>
                 <input
                   required
                   value={editing.timezone ?? "Asia/Shanghai"}
@@ -847,11 +854,11 @@ export default function TasksPage({
               </label>
               <div className="form-grid">
                 <label className="form-field">
-                  <span>项目</span>
+                  <span>{t("projects.title")}</span>
                   <SelectField
                     value={editing.project_id ?? ""}
                     options={[
-                      { value: "", label: "无项目" },
+                      { value: "", label: t("projects.none") },
                       ...projects.map((project) => ({
                         value: project.id,
                         label: project.name,
@@ -863,11 +870,11 @@ export default function TasksPage({
                   />
                 </label>
                 <label className="form-field">
-                  <span>模型</span>
+                  <span>{t("model.title")}</span>
                   <SelectField
                     value={editing.model_id ?? ""}
                     options={[
-                      { value: "", label: "默认模型" },
+                      { value: "", label: t("model.default") },
                       ...models.map((model) => ({
                         value: model.id,
                         label: model.name,
@@ -893,12 +900,12 @@ export default function TasksPage({
                 onChange={(effort) => setEditing({ ...editing, effort })}
               />
               <label className="form-field">
-                <span>上下文</span>
+                <span>{t("schedule.context")}</span>
                 <SelectField
                   value={editing.context_mode ?? "independent"}
                   options={[
-                    { value: "independent", label: "每次独立执行" },
-                    { value: "session", label: "复用指定对话" },
+                    { value: "independent", label: t("schedule.isolated") },
+                    { value: "session", label: t("schedule.reuse") },
                   ]}
                   onChange={(value) =>
                     setEditing({
@@ -910,16 +917,16 @@ export default function TasksPage({
               </label>
               {editing.context_mode === "session" && (
                 <div className="form-field">
-                  <span>对话</span>
+                  <span>{t("chat.conversations")}</span>
                   <button type="button" className="choice-trigger" onClick={() => setChoosingSession(true)}>
-                    <span>{chosenSession && chosenSession.id === editing.session_id ? chosenSession.title : sessions.find((item) => item.id === editing.session_id)?.title ?? (editing.session_id ? "已选择对话" : "选择对话")}</span>
+                    <span>{chosenSession && chosenSession.id === editing.session_id ? chosenSession.title : sessions.find((item) => item.id === editing.session_id)?.title ?? (editing.session_id ? t("chat.selected") : t("chat.choose"))}</span>
                     <Search size={15} />
                   </button>
                 </div>
               )}
             </details>
             <label className="toggle-field">
-              <span>启用</span>
+              <span>{t("tasks.enableLabel")}</span>
               <input
                 type="checkbox"
                 role="switch"
@@ -937,7 +944,7 @@ export default function TasksPage({
         onSelect={(session_id) => setEditing((current) => current ? { ...current, session_id } : current)} onSelectSession={setChosenSession} />}
       {deleting && (
         <Modal
-          title="删除任务？"
+          title={t("tasks.deleteConfirm")}
           className="ochi-task-editor"
           onClose={() => setDeleting(null)}
           size="small"
@@ -947,14 +954,14 @@ export default function TasksPage({
                 className="secondary-button"
                 onClick={() => setDeleting(null)}
               >
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 className="danger-button"
                 disabled={busy}
                 onClick={() => void removeTask()}
               >
-                删除
+                {t("common.delete")}
               </button>
             </div>
           }

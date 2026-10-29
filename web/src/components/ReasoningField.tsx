@@ -1,4 +1,6 @@
+import { t, useI18n } from "../lib/i18n";
 import type { Model } from "../lib/types";
+import { effortLabel } from "../lib/reasoningLabels";
 import { SelectField } from "./ui/Select";
 
 export function ReasoningField({
@@ -10,6 +12,7 @@ export function ReasoningField({
   effort?: string;
   onChange: (value: string) => void;
 }) {
+  useI18n();
   if (
     !model?.effort_parameter ||
     !["effort", "toggle", "budget"].includes(model.reasoning_kind ?? "unknown")
@@ -18,7 +21,7 @@ export function ReasoningField({
   if (model.reasoning_kind === "budget") {
     return (
       <label className="form-field">
-        <span>思考预算</span>
+        <span>{t("reasoning.budget")}</span>
         <input
           type="number"
           min={model.reasoning_budget_min ?? 0}
@@ -40,12 +43,12 @@ export function ReasoningField({
   if (!values.length) return null;
   return (
     <label className="form-field">
-      <span>思考程度</span>
+      <span>{t("reasoning.effort")}</span>
       <SelectField
         value={effort ?? model.default_effort ?? ""}
         options={[
-          { value: "", label: "默认" },
-          ...values.map((value) => ({ value, label: value })),
+          { value: "", label: t("common.default") },
+          ...values.map((value) => ({ value, label: effortLabel(value) })),
         ]}
         onChange={onChange}
       />

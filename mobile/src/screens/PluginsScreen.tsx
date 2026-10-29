@@ -1,3 +1,5 @@
+import { errorForDisplay, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import { useCallback, useRef, useState } from "react";
 import {
   AppState,
@@ -30,7 +32,7 @@ type PluginState = {
   loaded: boolean;
   refreshing: boolean;
   pending: string[];
-  error: string;
+  error: DisplayError;
 };
 type RequestScope = {
   owner: string;
@@ -51,6 +53,7 @@ const isLocked = (plugin: Plugin) => plugin.default_enabled || Boolean(plugin.lo
 const isEnabled = (plugin: Plugin) => plugin.enabled && (isLocked(plugin) || Boolean(plugin.effective_enabled));
 
 export function PluginsScreen() {
+  useI18n();
   const { colors, dark, user } = useApp();
   const owner = user ? `${getAPIBaseURL()}\0${user.id}` : "";
   const [state, setState] = useState(() => initialState(owner));
@@ -78,7 +81,7 @@ export function PluginsScreen() {
       setState((previous) => ({ ...previous, items: items.filter((item) => item.enabled), loaded: true }));
     } catch (reason) {
       if (!current(scope) || controller.signal.aborted || scope.refresh !== controller) return;
-      setState((previous) => ({ ...previous, error: reason instanceof Error ? reason.message : "加载失败" }));
+      setState((previous) => ({ ...previous, error: errorForDisplay(reason, "error.load") }));
     } finally {
       if (current(scope) && scope.refresh === controller) {
         scope.refresh = undefined;
@@ -139,7 +142,7 @@ export function PluginsScreen() {
       setState((previous) => ({
         ...previous,
         items: previous.items.map((item) => item.id === pluginId ? before : item),
-        error: reason instanceof Error ? reason.message : "保存失败",
+        error: errorForDisplay(reason, "error.save"),
       }));
     } finally {
       scope.changes.delete(pluginId);
@@ -151,7 +154,7 @@ export function PluginsScreen() {
   const track = { false: dark ? "#3b3b3d" : "#d0d0d3", true: dark ? "#848489" : "#343436" };
   return (
     <SettingsPage>
-      <SettingsHeader title="插件" />
+      <SettingsHeader title={t("plugin.title")} />
       <FlatList
         data={view.items}
         keyExtractor={(item) => item.id}
@@ -159,7 +162,7 @@ export function PluginsScreen() {
         onRefresh={() => void refresh()}
         contentContainerStyle={settingsStyles.content}
         ListHeaderComponent={<ErrorNotice error={view.error} retry={() => void refresh()} />}
-        ListEmptyComponent={!view.loaded && !view.error ? <LoadingState /> : !view.error ? <EmptyState icon={Puzzle} text="暂无可用插件" /> : null}
+        ListEmptyComponent={!view.loaded && !view.error ? <LoadingState /> : !view.error ? <EmptyState icon={Puzzle} text={t("plugin.none")} /> : null}
         renderItem={({ item, index }) => {
           const locked = isLocked(item);
           const pending = view.pending.includes(item.id);
@@ -176,14 +179,14 @@ export function PluginsScreen() {
                 {locked ? (
                   <View style={styles.locked}>
                     <LockKeyhole size={12} color={colors.muted} />
-                    <AppText muted size={12}>管理员已开启</AppText>
+                    <AppText muted size={12}>{t("plugin.adminEnabled")}</AppText>
                   </View>
                 ) : null}
               </View>
               <View style={styles.control}>
                 <Switch
                   accessibilityLabel={item.name}
-                  accessibilityHint={locked ? "管理员默认开启，不可关闭" : undefined}
+                  accessibilityHint={locked ? t("plugin.required") : undefined}
                   accessibilityState={{ disabled: locked || pending, checked: isEnabled(item), busy: pending }}
                   value={isEnabled(item)}
                   disabled={locked || pending}

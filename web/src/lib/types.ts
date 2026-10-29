@@ -18,14 +18,18 @@ export type UpdateState = {
   latest?: UpdateBuild;
   supported: boolean;
   unsupported_reason?: string;
+  unsupported_reason_code?: string;
   available: boolean;
   blocked_reason?: string;
+  blocked_reason_code?: string;
   phase: "idle" | "checking" | "downloading" | "ready" | "restarting" | "failed";
   downloaded_bytes: number;
   total_bytes: number;
   pending?: UpdateBuild;
   backup?: UpdateBuild;
   error?: string;
+  error_code?: string;
+  error_params?: Record<string, string | number>;
   checked_at?: string;
 };
 
@@ -33,6 +37,7 @@ export type UserPreferences = {
   memory_enabled: boolean;
   computer_default: boolean;
   preferred_model_id: string;
+  language: import("../../../shared/i18n").LanguagePreference;
 };
 
 export type ReasoningOption = {
@@ -91,6 +96,9 @@ export type Model = {
     ok: boolean;
     status?: number;
     error?: string;
+    error_code?: string;
+    error_params?: Record<string, string | number>;
+    detail?: string;
     checked_at?: string;
     effort?: string;
     parameter_accepted?: boolean;
@@ -132,6 +140,7 @@ export type Provider = {
   error?: string;
   icon?: string;
   sync_error?: string;
+  sync_error_code?: string;
   imported?: number;
 };
 export type Artifact = {
@@ -199,6 +208,7 @@ export type Schedule = {
   next_run_at?: string;
   last_run_id?: string;
   last_error?: string;
+  last_error_code?: string;
   last_status?: string;
   execution_count?: number;
 };
@@ -215,6 +225,7 @@ export type ScheduleExecution = {
     | "failed"
     | "cancelled";
   error?: string;
+  error_code?: string;
   output?: string;
   artifacts?: Artifact[];
   started_at?: string;
@@ -362,6 +373,7 @@ export type Message = {
   run_id?: string;
   run_status?: RunStatus;
   run_error?: string;
+  run_error_code?: string;
   run_created_at?: string;
   run_updated_at?: string;
   role: "user" | "assistant" | "system";
@@ -405,6 +417,7 @@ export type Snapshot = {
   reasoning?: ReasoningPart[];
   timeline: ProcessEntry[];
   error?: string;
+  error_code?: string;
   seq: number;
   created_at: string;
   updated_at: string;
@@ -458,6 +471,7 @@ export type AdminRun = Pick<
   | "model_name"
   | "effort"
   | "error"
+  | "error_code"
   | "usage"
   | "updated_at"
 > & {
@@ -603,6 +617,7 @@ export type StatusEvent = ProcessEventFields & {
   seq: number;
   status: RunStatus;
   error?: string;
+  error_code?: string;
   computer_granted?: boolean;
 };
 export type OutputReset = ProcessEventFields & {
@@ -643,7 +658,12 @@ export type ArtifactsEvent = ProcessEventFields & {
   seq: number;
   artifacts: Artifact[];
 };
-export type ApiError = Error & { status?: number; detail?: string };
+export type ApiError = Error & {
+  status?: number;
+  detail?: string;
+  code?: string;
+  params?: Record<string, string | number>;
+};
 
 export type RunInstruction = {
   id: string;

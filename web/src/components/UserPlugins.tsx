@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import { LoaderCircle, LockKeyhole, Puzzle, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
@@ -5,6 +6,7 @@ import type { ApiError, Plugin } from "../lib/types";
 import "./user-plugins.css";
 
 export function UserPlugins() {
+  useI18n();
   const [items, setItems] = useState<Plugin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -41,7 +43,7 @@ export function UserPlugins() {
     } catch (reason) {
       if (!mounted.current) return;
       setItems((current) => current.map((item) => item.id === plugin.id ? plugin : item));
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("error.save"));
       // A catalog change may have locked or removed the switch since it loaded.
       if ([403, 404, 409].includes((reason as ApiError | null)?.status ?? 0)) needsRefresh.current = true;
     } finally {
@@ -57,15 +59,15 @@ export function UserPlugins() {
   }
 
   return (
-    <section className="ochi-settings__panel user-plugins" id="settings-plugins" aria-label="插件">
+    <section className="ochi-settings__panel user-plugins" id="settings-plugins" aria-label={t("plugins.title")}>
       <div className="ochi-settings__heading">
-        <h3><Puzzle size={16} />插件{!loading && <span>{items.length}</span>}</h3>
-        <button className="icon-button" aria-label="刷新插件" title="刷新插件" disabled={loading || pending.size > 0} onClick={() => setRevision((value) => value + 1)}>
+        <h3><Puzzle size={16} />{t("plugins.title")}{!loading && <span>{items.length}</span>}</h3>
+        <button className="icon-button" aria-label={t("plugins.refresh")} title={t("plugins.refresh")} disabled={loading || pending.size > 0} onClick={() => setRevision((value) => value + 1)}>
           <RefreshCw size={16} />
         </button>
       </div>
-      {error && <div className="user-plugins__error" role="alert"><p>{error}</p><button className="text-button" disabled={loading || pending.size > 0} onClick={() => setRevision((value) => value + 1)}>重试</button></div>}
-      {loading ? <div className="panel-loading" role="status"><LoaderCircle className="spin" size={20} /><span className="sr-only">加载插件</span></div> : (
+      {error && <div className="user-plugins__error" role="alert"><p>{error}</p><button className="text-button" disabled={loading || pending.size > 0} onClick={() => setRevision((value) => value + 1)}>{t("common.retry")}</button></div>}
+      {loading ? <div className="panel-loading" role="status"><LoaderCircle className="spin" size={20} /><span className="sr-only">{t("plugins.loading")}</span></div> : (
         <div className="user-plugins__list">
           {items.map((plugin) => {
             const locked = plugin.default_enabled || Boolean(plugin.locked);
@@ -74,7 +76,7 @@ export function UserPlugins() {
               <div className="user-plugins__main">
                 <strong id={`plugin-name-${plugin.id}`}>{plugin.name}</strong>
                 {plugin.description && <p>{plugin.description}</p>}
-                {locked && <span className="user-plugins__locked" id={`plugin-lock-${plugin.id}`}><LockKeyhole size={12} />管理员默认开启</span>}
+                {locked && <span className="user-plugins__locked" id={`plugin-lock-${plugin.id}`}><LockKeyhole size={12} />{t("plugins.required")}</span>}
               </div>
               <label className={`user-plugins__switch${updating ? " is-pending" : ""}`}>
                 <input type="checkbox" role="switch" aria-labelledby={`plugin-name-${plugin.id}`} aria-describedby={locked ? `plugin-lock-${plugin.id}` : undefined}
@@ -84,7 +86,7 @@ export function UserPlugins() {
               </label>
             </article>;
           })}
-          {!items.length && !error && <p className="user-plugins__empty">暂无可用插件</p>}
+          {!items.length && !error && <p className="user-plugins__empty">{t("plugins.empty")}</p>}
         </div>
       )}
     </section>

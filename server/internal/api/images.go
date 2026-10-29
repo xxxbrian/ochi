@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/storage"
 )
 
@@ -44,7 +45,7 @@ func (s *Server) selectedImageModel(ctx context.Context) (storage.Model, storage
 		var models []storage.Model
 		models, err = s.store.ImageModels(ctx)
 		if err == nil && len(models) == 0 {
-			err = errors.New("尚未配置可用的生图模型")
+			err = i18n.New("image_model_unconfigured")
 		}
 		if err == nil {
 			model = models[0]
@@ -54,11 +55,11 @@ func (s *Server) selectedImageModel(ctx context.Context) (storage.Model, storage
 		return model, storage.Provider{}, err
 	}
 	if model.Kind != "image" || !model.Enabled || !model.Available || !model.SupportsImageGeneration {
-		return model, storage.Provider{}, errors.New("生图模型未启用或不可用")
+		return model, storage.Provider{}, i18n.New("image_model_unavailable")
 	}
 	provider, err := s.store.Provider(ctx, model.ProviderID)
 	if err != nil || !provider.Enabled {
-		return model, provider, errors.New("生图服务未启用或不可用")
+		return model, provider, i18n.New("image_provider_unavailable")
 	}
 	return model, provider, nil
 }
@@ -78,7 +79,7 @@ func (s *Server) generateImageTool(ctx context.Context, scope agent.RunScope, ar
 		ImageIDs []string `json:"image_ids"`
 	}
 	if err := json.Unmarshal(args, &input); err != nil {
-		return agent.ToolResult{}, errors.New("图片生成参数无效")
+		return agent.ToolResult{}, i18n.New("image_arguments_invalid")
 	}
 	model, provider, err := s.selectedImageModel(ctx)
 	if err != nil {
@@ -94,22 +95,22 @@ func (s *Server) generateImageTool(ctx context.Context, scope agent.RunScope, ar
 	}
 	if len(input.ImageIDs) > 0 {
 		if len(input.ImageIDs) > 8 {
-			return agent.ToolResult{}, errors.New("参考图片最多为 8 张")
+			return agent.ToolResult{}, i18n.New("reference_images_limit")
 		}
 		if model.ImageConfig.SupportsEdit != nil && !*model.ImageConfig.SupportsEdit {
-			return agent.ToolResult{}, errors.New("当前生图模型不支持图片编辑")
+			return agent.ToolResult{}, i18n.New("image_edit_unsupported")
 		}
 		items, err := s.store.GetArtifacts(ctx, scope.UserID, input.ImageIDs)
 		if err != nil {
-			return agent.ToolResult{}, errors.New("参考图片不存在或不可访问")
+			return agent.ToolResult{}, i18n.New("reference_image_unavailable")
 		}
 		for _, file := range items {
 			if !strings.HasPrefix(file.MIMEType, "image/") || file.Size > 32<<20 {
-				return agent.ToolResult{}, errors.New("参考文件需要是 32 MB 以内的图片")
+				return agent.ToolResult{}, i18n.New("reference_image_invalid")
 			}
 			data, err := artifactBytes(file)
 			if err != nil {
-				return agent.ToolResult{}, errors.New("无法读取参考图片")
+				return agent.ToolResult{}, i18n.New("reference_image_read_failed")
 			}
 			options.Images = append(options.Images, agent.ImageInput{Name: file.Name, MIMEType: file.MIMEType, Data: data})
 		}
@@ -117,7 +118,10 @@ func (s *Server) generateImageTool(ctx context.Context, scope agent.RunScope, ar
 	config := s.modelConfig(ctx, model, provider, "", storage.Settings{})
 	generated, err := agent.GenerateImage(ctx, *config, options)
 	if err != nil {
-		return agent.ToolResult{}, errors.New(storage.SanitizeProviderError(provider, err))
+		if _, _, public := i18n.Details(err); public {
+			return agent.ToolResult{}, err
+		}
+		return agent.ToolResult{}, i18n.Wrap("image_generation_failed", err)
 	}
 	// The provider has already charged for these bytes. Persist delivery even if
 	// the user closes the client or stops immediately as generation completes.
@@ -125,7 +129,7 @@ func (s *Server) generateImageTool(ctx context.Context, scope agent.RunScope, ar
 	defer cancel()
 	file, err := s.saveGeneratedImage(save, scope, model, options, generated)
 	if err != nil {
-		return agent.ToolResult{}, errors.New("图片已生成，但保存失败；请勿重新生成")
+		return agent.ToolResult{}, i18n.New("generated_image_save_failed")
 	}
 	if run, ok := s.runtime.Get(scope.RunID); ok {
 		if items, err := s.store.ListRunArtifacts(save, scope.UserID, scope.RunID); err == nil {

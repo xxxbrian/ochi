@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/runtime"
 	"ochi/server/internal/storage"
 )
@@ -18,7 +20,7 @@ const checkpointTimeout = 5 * time.Second
 
 func (s *Server) startRun(parent context.Context, userID, sessionID, prompt, modelID, effort string, attachmentIDs []string, revision ...storage.Revision) (runtime.Snapshot, error) {
 	if s.agent == nil {
-		return runtime.Snapshot{}, errors.New("no model runner is configured")
+		return runtime.Snapshot{}, i18n.New("runner_unconfigured")
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 10*time.Second)
 	defer cancel()
@@ -34,7 +36,7 @@ func (s *Server) startRun(parent context.Context, userID, sessionID, prompt, mod
 	}
 	var model storage.Model
 	if _, demo := s.agent.(agent.DemoGenerator); demo {
-		model.Name = "演示模式"
+		model.Name = "Demo"
 	} else {
 		model, _, err = s.selectedModel(ctx, modelID, effort)
 		if err != nil {
@@ -56,10 +58,10 @@ func (s *Server) startRun(parent context.Context, userID, sessionID, prompt, mod
 	}
 	if rev.EditMessageID != "" || rev.RetryRunID != "" {
 		if rev.EditMessageID != "" && rev.RetryRunID != "" {
-			return runtime.Snapshot{}, errors.New("修改和重试不能同时进行")
+			return runtime.Snapshot{}, i18n.New("edit_retry_conflict")
 		}
 		if session.ActiveRunID != "" {
-			return runtime.Snapshot{}, errors.New("请先停止当前轮次后再修改或重试")
+			return runtime.Snapshot{}, i18n.New("stop_before_edit")
 		}
 		last, lastErr := s.store.LastUserMessage(ctx, userID, sessionID, rev)
 		if lastErr != nil {
@@ -151,7 +153,8 @@ func (s *Server) launchQueued(sessionID string) {
 	defer finish()
 	snapshot, readErr := s.store.GetRun(persist, v.UserID, v.RunID)
 	if readErr == nil {
-		snapshot.Status, snapshot.Error = runtime.StatusFailed, err.Error()
+		code := runtime.FailureCode(err)
+		snapshot.Status, snapshot.Error, snapshot.ErrorCode = runtime.StatusFailed, i18n.Text(i18n.English, code, nil), code
 		snapshot.Seq++
 		snapshot.UpdatedAt = time.Now().UTC()
 		_ = s.store.CompleteRun(persist, snapshot)
@@ -240,7 +243,7 @@ func (s *Server) registerQueueRoutes(mux *http.ServeMux) {
 			selected.Effort = *input.Effort
 		}
 		if selected.Message == "" {
-			writeError(w, http.StatusBadRequest, errors.New("请输入消息"))
+			writeError(w, http.StatusBadRequest, i18n.New("message_required"))
 			return
 		}
 		if _, demo := s.agent.(agent.DemoGenerator); !demo {

@@ -1,3 +1,4 @@
+import { t, useAdminI18n, getLocale, translateError } from "./i18n";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
@@ -26,6 +27,7 @@ import { UpdateCard } from "./UpdateCard";
 const MarkdownContent = lazy(() => import("../../components/MarkdownContent"));
 
 export function UsersPage() {
+  useAdminI18n();
   const [users, setUsers] = useState<User[]>([]);
   const [editor, setEditor] = useState<
     (Partial<User> & { password?: string }) | null
@@ -39,7 +41,7 @@ export function UsersPage() {
     try {
       setUsers(await adminApi.users());
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "加载失败");
+      setError(reason instanceof Error ? reason.message : t("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -63,7 +65,7 @@ export function UsersPage() {
       setEditor(null);
       void refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -71,7 +73,7 @@ export function UsersPage() {
   return (
     <>
       <div className="admin-page-heading">
-        <h2>用户</h2>
+        <h2>{t("users")}</h2>
         <button
           className="primary-button"
           onClick={() =>
@@ -85,8 +87,7 @@ export function UsersPage() {
           }
         >
           <Plus size={16} />
-          添加用户
-        </button>
+          {t("addUser")}</button>
       </div>
       <ErrorNotice error={error} />
       {loading ? (
@@ -104,17 +105,17 @@ export function UsersPage() {
                 <strong>{user.display_name || user.username}</strong>
                 <span>{user.username}</span>
               </div>
-              <span className="admin-user-role">{user.role === "admin" ? "管理员" : "用户"}</span>
+              <span className="admin-user-role">{user.role === "admin" ? t("administrator") : t("userRole")}</span>
               <span className={`admin-state${user.enabled !== false ? " is-enabled" : ""}`}>
-                <i />{user.enabled !== false ? "已启用" : "已停用"}
+                <i />{user.enabled !== false ? t("enabled") : t("disabled")}
               </span>
               <div className="admin-row-actions">
-                <button className="icon-button" aria-label={`编辑用户 ${user.display_name || user.username}`}
-                  title="编辑用户" onClick={() => setEditor({ ...user, password: "" })}>
+                <button className="icon-button" aria-label={t("editUserNamed", { name: user.display_name || user.username })}
+                  title={t("editUser")} onClick={() => setEditor({ ...user, password: "" })}>
                   <Pencil size={16} />
                 </button>
-                <button className="icon-button admin-delete-action" aria-label={`删除用户 ${user.display_name || user.username}`}
-                  title="删除用户" onClick={() => setDeleting(user)}>
+                <button className="icon-button admin-delete-action" aria-label={t("deleteUserNamed", { name: user.display_name || user.username })}
+                  title={t("deleteUser")} onClick={() => setDeleting(user)}>
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -125,7 +126,7 @@ export function UsersPage() {
       {editor && (
         <Modal
           className="ochi-admin-modal"
-          title={editor.id ? "编辑用户" : "添加用户"}
+          title={editor.id ? t("editUser") : t("addUser")}
           onClose={() => setEditor(null)}
           footer={
             <div className="modal-actions">
@@ -135,8 +136,7 @@ export function UsersPage() {
                 className="primary-button"
                 disabled={busy}
               >
-                保存
-              </button>
+                {t("save")}</button>
             </div>
           }
         >
@@ -148,7 +148,7 @@ export function UsersPage() {
               void save();
             }}
           >
-            <Field title="账号">
+            <Field title={t("account")}>
               <input
                 required
                 readOnly={Boolean(editor.id)}
@@ -158,7 +158,7 @@ export function UsersPage() {
                 }
               />
             </Field>
-            <Field title="显示名称">
+            <Field title={t("displayName")}>
               <input
                 value={editor.display_name ?? ""}
                 onChange={(event) =>
@@ -166,7 +166,7 @@ export function UsersPage() {
                 }
               />
             </Field>
-            <Field title={editor.id ? "新密码" : "密码"}>
+            <Field title={editor.id ? t("newPassword") : t("password")}>
               <input
                 type="password"
                 required={!editor.id}
@@ -177,12 +177,12 @@ export function UsersPage() {
                 }
               />
             </Field>
-            <Field title="角色">
+            <Field title={t("role")}>
               <SelectField
                 value={editor.role ?? "user"}
                 options={[
-                  { value: "user", label: "用户" },
-                  { value: "admin", label: "管理员" },
+                  { value: "user", label: t("userRole") },
+                  { value: "admin", label: t("administrator") },
                 ]}
                 onChange={(role) =>
                   setEditor({ ...editor, role: role as User["role"] })
@@ -190,7 +190,7 @@ export function UsersPage() {
               />
             </Field>
             <Toggle
-              title="启用"
+              title={t("enable")}
               value={editor.enabled ?? true}
               onChange={(enabled) => setEditor({ ...editor, enabled })}
             />
@@ -201,7 +201,7 @@ export function UsersPage() {
       {deleting && (
         <Modal
           className="ochi-admin-modal"
-          title="删除用户？"
+          title={t("deleteUserQuestion")}
           onClose={() => setDeleting(null)}
           size="small"
           footer={
@@ -210,8 +210,7 @@ export function UsersPage() {
                 className="secondary-button"
                 onClick={() => setDeleting(null)}
               >
-                取消
-              </button>
+                {t("cancel")}</button>
               <button
                 className="danger-button"
                 disabled={busy}
@@ -227,8 +226,7 @@ export function UsersPage() {
                     .finally(() => setBusy(false));
                 }}
               >
-                删除
-              </button>
+                {t("delete")}</button>
             </div>
           }
         >
@@ -239,6 +237,7 @@ export function UsersPage() {
   );
 }
 export function SystemPage() {
+  useAdminI18n();
   const [settings, setSettings] = useState<Record<string, unknown>>({});
   const [debugMode, setDebugMode] = useState(false);
   const [debugBusy, setDebugBusy] = useState(false);
@@ -274,9 +273,9 @@ export function SystemPage() {
     try {
       const value = await adminApi.saveSettings({ debug_mode });
       setDebugMode(value.debug_mode === true);
-      setNotice(value.debug_mode === true ? "Debug 模式已开启" : "Debug 模式已关闭");
+      setNotice(value.debug_mode === true ? t("debugEnabled") : t("debugDisabled"));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("saveFailed"));
     } finally {
       setDebugBusy(false);
     }
@@ -290,7 +289,7 @@ export function SystemPage() {
   return (
     <>
       <div className="admin-page-heading">
-        <h2>系统</h2>
+        <h2>{t("system")}</h2>
       </div>
       <ErrorNotice error={error} notice={notice} />
       <form
@@ -306,44 +305,44 @@ export function SystemPage() {
             .saveSettings(draft)
             .then((value) => {
               setSettings(value);
-              setNotice("已保存");
+              setNotice(t("saved"));
             })
             .catch((reason: Error) => setError(reason.message))
             .finally(() => setBusy(false));
         }}
       >
         <section className="settings-card">
-          <h3>辅助模型</h3>
+          <h3>{t("auxiliaryModels")}</h3>
           {[
             {
               key: "compaction_model_id",
-              title: "上下文压缩",
+              title: t("contextCompaction"),
               kind: "chat",
-              fallback: "使用主模型",
+              fallback: t("useMainModel"),
             },
             {
               key: "memory_model_id",
-              title: "记忆提炼",
+              title: t("memoryExtraction"),
               kind: "chat",
-              fallback: "使用主模型",
+              fallback: t("useMainModel"),
             },
             {
               key: "title_model_id",
-              title: "对话标题",
+              title: t("conversationTitles"),
               kind: "chat",
-              fallback: "使用主模型",
+              fallback: t("useMainModel"),
             },
             {
               key: "image_model_id",
-              title: "图像生成",
+              title: t("imageGeneration"),
               kind: "image",
-              fallback: "首个已启用的生图模型",
+              fallback: t("firstEnabledImageModel"),
             },
             {
               key: "embedding_model_id",
-              title: "记忆向量化",
+              title: t("memoryEmbeddings"),
               kind: "embedding",
-              fallback: "本地 BGE small",
+              fallback: t("localBGESmall"),
             },
           ].map((slot) => (
             <Field title={slot.title} key={slot.key}>
@@ -371,17 +370,17 @@ export function SystemPage() {
         </section>
         <section className="settings-card">
           <h3>Agent</h3>
-          <Field title="补充指令">
+          <Field title={t("additionalInstructions")}>
             <textarea
               rows={14}
-              placeholder="可选"
+              placeholder={t("optional")}
               value={String(settings.system_prompt ?? "")}
               onChange={(event) =>
                 setSettings({ ...settings, system_prompt: event.target.value })
               }
             />
           </Field>
-          <Field title="工具轮次上限">
+          <Field title={t("maxToolRounds")}>
             <input
               type="number"
               min={1}
@@ -397,22 +396,19 @@ export function SystemPage() {
           </Field>
         </section>
         <section className="settings-card">
-          <h3>诊断</h3>
+          <h3>{t("diagnostics")}</h3>
           <Toggle
-            title="Debug 模式"
+            title={t("debugMode")}
             value={debugMode}
             disabled={busy || debugBusy}
             onChange={(debug_mode) => void saveDebugMode(debug_mode)}
           />
           <p className="settings-note">
-            开启后记录模型请求、响应原文及流数据，包含对话及工具内容，仅管理员可见。凭据脱敏，限量保存 7 天。
-            {debugBusy ? "正在保存…" : "切换后立即对新的上游请求生效，无需重启。"}关闭不会清除已有记录。可在“请求诊断”或运行详情中查看或清除。
-          </p>
+            {t("debugModeHint")}{debugBusy ? t("savingEllipsis") : t("debugImmediateHint")}{t("debugHistoryHint")}</p>
         </section>
         <div className="form-footer">
           <button className="primary-button" disabled={busy || debugBusy}>
-            {busy && <LoaderCircle className="spin" size={15} />}保存
-          </button>
+            {busy && <LoaderCircle className="spin" size={15} />}{t("save")}</button>
         </div>
       </form>
       <UpdateCard />
@@ -420,6 +416,7 @@ export function SystemPage() {
   );
 }
 export function WorkspacesPage() {
+  useAdminI18n();
   const [items, setItems] = useState<Workspace[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -435,7 +432,7 @@ export function WorkspacesPage() {
       setItems(values);
       setUsers(accounts);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "加载失败");
+      setError(reason instanceof Error ? reason.message : t("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -450,7 +447,7 @@ export function WorkspacesPage() {
       setConfirm(null);
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "操作失败");
+      setError(reason instanceof Error ? reason.message : t("operationFailed"));
     } finally {
       setBusy("");
     }
@@ -458,10 +455,10 @@ export function WorkspacesPage() {
   return (
     <>
       <div className="admin-page-heading">
-        <h2>工作区</h2>
+        <h2>{t("workspaces")}</h2>
         <button
           className="icon-button"
-          aria-label="刷新"
+          aria-label={t("refresh")}
           onClick={() => void refresh()}
         >
           <RefreshCw size={18} />
@@ -486,7 +483,7 @@ export function WorkspacesPage() {
                 <small>{item.container}</small>
               </div>
               <span className={`admin-state${item.running ? " is-enabled" : ""}`}>
-                <i />{item.running ? "运行中" : item.state || "未启动"}
+                <i />{item.running ? t("running") : item.state || t("notStarted")}
               </span>
               <div className="workspace-row-actions">
                 <button
@@ -496,20 +493,20 @@ export function WorkspacesPage() {
                     void action(item, item.running ? "stop" : "start")
                   }
                 >
-                  {item.running ? "停止" : "启动"}
+                  {item.running ? t("stop") : t("startAction")}
                 </button>
                 <button className="secondary-button" disabled={busy === item.user_id}
-                  onClick={() => setConfirm(item)}>重建</button>
+                  onClick={() => setConfirm(item)}>{t("rebuild")}</button>
               </div>
             </article>
           ))}
-          {!items.length && <div className="empty-page">暂无工作区</div>}
+          {!items.length && <div className="empty-page">{t("noWorkspaces")}</div>}
         </div>
       )}
       {confirm && (
         <Modal
           className="ochi-admin-modal"
-          title="重建工作区？"
+          title={t("rebuildWorkspaceQuestion")}
           onClose={() => setConfirm(null)}
           size="small"
           footer={
@@ -518,15 +515,13 @@ export function WorkspacesPage() {
                 className="secondary-button"
                 onClick={() => setConfirm(null)}
               >
-                取消
-              </button>
+                {t("cancel")}</button>
               <button
                 className="primary-button"
                 disabled={busy === confirm.user_id}
                 onClick={() => void action(confirm, "rebuild")}
               >
-                重建
-              </button>
+                {t("rebuild")}</button>
             </div>
           }
         >
@@ -547,14 +542,17 @@ function formatDuration(milliseconds?: number | null) {
   return `${Math.floor(seconds / 60)} m ${Math.round(seconds % 60)} s`;
 }
 function formatTokens(tokens?: number | null) {
-  return tokens == null ? "—" : tokens.toLocaleString();
+  return tokens == null ? "—" : tokens.toLocaleString(getLocale());
 }
-function RunStatusBadge({ run }: { run: Pick<AdminRun, "status" | "error"> }) {
-  return <span className={`run-status run-status-${run.status}`} title={run.error || undefined}>
-    <i />{statusLabel(run.status)}{run.error && <CircleAlert size={12} />}
+function RunStatusBadge({ run }: { run: Pick<AdminRun, "status" | "error" | "error_code"> }) {
+  useAdminI18n();
+  const error = translateError(run.error_code) ?? run.error;
+  return <span className={`run-status run-status-${run.status}`} title={error || undefined}>
+    <i />{statusLabel(run.status)}{error && <CircleAlert size={12} />}
   </span>;
 }
 function ReadOnlySteps({ steps }: { steps: Step[] }) {
+  useAdminI18n();
   return <div className="admin-readonly-steps">{steps.map(step => {
     const scope = ["command", "url", "path", "query"].map(key => step.arguments?.[key]).find(value => typeof value === "string") as string | undefined;
     let result: Record<string, unknown> | null = null;
@@ -567,22 +565,23 @@ function ReadOnlySteps({ steps }: { steps: Step[] }) {
       <summary><RunStatusBadge run={{ status: step.status === "running" ? "running" : step.status === "failed" ? "failed" : "completed" }} /><strong>{step.name}</strong><span>{scope}</span></summary>
       {scope && <pre>{scope}</pre>}
       {text && <pre>{text.slice(0, 32000)}</pre>}
-      {result && <details className="technical-details"><summary>返回数据</summary><pre>{JSON.stringify(result, null, 2).slice(0, 64000)}</pre></details>}
+      {result && <details className="technical-details"><summary>{t("returnedData")}</summary><pre>{JSON.stringify(result, null, 2).slice(0, 64000)}</pre></details>}
     </details>;
   })}</div>;
 }
-const statusOptions = [
-  { value: "", label: "所有状态" },
+function statusOptions() { return [
+  { value: "", label: t("allStatuses") },
   ...["completed", "running", "queued", "waiting_user", "waiting_resource", "failed", "interrupted", "cancelled", "cancelling"].map(value => ({ value, label: statusLabel(value) })),
-];
-const dateOptions = [
-  { value: "today", label: "今天" },
-  { value: "7", label: "最近 7 天" },
-  { value: "30", label: "最近 30 天" },
-  { value: "90", label: "最近 90 天" },
-];
+]; }
+function dateOptions() { return [
+  { value: "today", label: t("today") },
+  { value: "7", label: t("last7Days") },
+  { value: "30", label: t("last30Days") },
+  { value: "90", label: t("last90Days") },
+]; }
 
 export function RunsPage({ currentUserID, onNavigate }: { currentUserID: string; onNavigate: (path: string) => void }) {
+  useAdminI18n();
   const [page, setPage] = useState<AdminRunPage | null>(null);
   const [stats, setStats] = useState<AdminRunStats | null>(null);
   const [models, setModels] = useState<Model[]>([]);
@@ -647,98 +646,98 @@ export function RunsPage({ currentUserID, onNavigate }: { currentUserID: string;
   const current = detail ?? selected;
   return <>
     <div className="admin-page-heading">
-      <h2>运行记录</h2>
+      <h2>{t("runRecords")}</h2>
       <div className="toolbar-actions">
-        <SelectField label="统计范围" value={period} options={dateOptions} onChange={value => { setPeriod(value); setOffset(0); }} />
-        <button className="icon-button" aria-label="刷新运行记录" disabled={loading} onClick={() => setRevision(value => value + 1)}>
+        <SelectField label={t("statisticsRange")} value={period} options={dateOptions()} onChange={value => { setPeriod(value); setOffset(0); }} />
+        <button className="icon-button" aria-label={t("refreshRuns")} disabled={loading} onClick={() => setRevision(value => value + 1)}>
           <RefreshCw size={16} className={loading ? "spin" : undefined} />
         </button>
       </div>
     </div>
     <ErrorNotice error={error} />
-    <div className="run-view-tabs" role="tablist" aria-label="运行记录视图">
-      {[{ id: "records", label: "记录" }, { id: "overview", label: "概览" }].map(tab =>
+    <div className="run-view-tabs" role="tablist" aria-label={t("runView")}>
+      {[{ id: "records", label: t("records") }, { id: "overview", label: t("overview") }].map(tab =>
         <button key={tab.id} id={`run-tab-${tab.id}`} role="tab" aria-selected={view === tab.id} aria-controls="run-view" className={view === tab.id ? "selected" : ""} onClick={() => setView(tab.id)}>{tab.label}</button>,
       )}
-      <span className="run-period-label">{stats ? `${new Date(stats.from).toLocaleDateString("zh-CN")} — ${new Date(stats.to).toLocaleDateString("zh-CN")}` : ""}</span>
+      <span className="run-period-label">{stats ? `${new Date(stats.from).toLocaleDateString(getLocale())} — ${new Date(stats.to).toLocaleDateString(getLocale())}` : ""}</span>
     </div>
     <div className={`run-summary-strip ${loading ? "is-updating" : ""}`} data-view={view} aria-busy={loading}>
-      <div><span>运行</span><strong>{stats?.runs.toLocaleString() ?? "—"}</strong><small>{stats ? `${stats.completed} 完成 · ${stats.active} 进行中` : ""}</small></div>
-      <div><span>异常</span><strong className={stats && stats.failed + stats.interrupted ? "danger" : ""}>{stats ? (stats.failed + stats.interrupted).toLocaleString() : "—"}</strong><small>{stats ? `${stats.failed} 失败 · ${stats.interrupted} 中断` : ""}</small></div>
-      <div><span>输入 Tokens</span><strong>{stats?.usage_reported_runs ? formatTokens(stats.prompt_tokens) : "—"}</strong><small>{stats?.usage_reported_runs ? `${stats.usage_reported_runs} 条有用量` : ""}</small></div>
-      <div><span>输出 Tokens</span><strong>{stats?.usage_reported_runs ? formatTokens(stats.completion_tokens) : "—"}</strong><small>{stats?.usage_reported_runs ? `${formatTokens(stats.total_tokens)} 总量` : ""}</small></div>
-      <div><span>缓存 Tokens</span><strong>{formatTokens(stats?.cached_tokens)}</strong></div>
-      <div><span>平均总耗时</span><strong>{formatDuration(stats?.average_duration_ms)}</strong><small>{stats ? `${stats.cancelled} 已停止` : ""}</small></div>
+      <div><span>{t("runs")}</span><strong>{stats?.runs.toLocaleString(getLocale()) ?? "—"}</strong><small>{stats ? t("runsCompletedActive", { completed: stats.completed, active: stats.active }) : ""}</small></div>
+      <div><span>{t("issues")}</span><strong className={stats && stats.failed + stats.interrupted ? "danger" : ""}>{stats ? (stats.failed + stats.interrupted).toLocaleString(getLocale()) : "—"}</strong><small>{stats ? t("runsFailedInterrupted", { failed: stats.failed, interrupted: stats.interrupted }) : ""}</small></div>
+      <div><span>{t("inputTokens")}</span><strong>{stats?.usage_reported_runs ? formatTokens(stats.prompt_tokens) : "—"}</strong><small>{stats?.usage_reported_runs ? t("usageCount", { count: stats.usage_reported_runs }) : ""}</small></div>
+      <div><span>{t("outputTokens")}</span><strong>{stats?.usage_reported_runs ? formatTokens(stats.completion_tokens) : "—"}</strong><small>{stats?.usage_reported_runs ? t("totalTokensCount", { count: formatTokens(stats.total_tokens) }) : ""}</small></div>
+      <div><span>{t("cachedTokens")}</span><strong>{formatTokens(stats?.cached_tokens)}</strong></div>
+      <div><span>{t("averageDuration")}</span><strong>{formatDuration(stats?.average_duration_ms)}</strong><small>{stats ? t("cancelledCount", { count: stats.cancelled }) : ""}</small></div>
     </div>
     <div className="runs-filterbar">
-      <label className="search-input"><Search size={15} /><input aria-label="搜索运行记录" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索任务、模型、用户" /></label>
-      <SelectField label="运行状态" value={status} options={statusOptions} onChange={value => { setStatus(value); setOffset(0); }} />
-      <SelectField label="筛选模型" value={model} options={[{ value: "", label: "所有模型" }, ...models.map(item => ({ value: item.id, label: item.name }))]} onChange={value => { setModel(value); setOffset(0); }} />
-      <SelectField label="筛选用户" value={account} options={[{ value: "", label: "所有用户" }, ...users.map(item => ({ value: item.id, label: item.display_name || item.username }))]} onChange={value => { setAccount(value); setOffset(0); }} />
+      <label className="search-input"><Search size={15} /><input aria-label={t("searchRuns")} value={query} onChange={event => setQuery(event.target.value)} placeholder={t("searchRunsPlaceholder")} /></label>
+      <SelectField label={t("runStatus")} value={status} options={statusOptions()} onChange={value => { setStatus(value); setOffset(0); }} />
+      <SelectField label={t("filterModel")} value={model} options={[{ value: "", label: t("allModels") }, ...models.map(item => ({ value: item.id, label: item.name }))]} onChange={value => { setModel(value); setOffset(0); }} />
+      <SelectField label={t("filterUser")} value={account} options={[{ value: "", label: t("allUsers") }, ...users.map(item => ({ value: item.id, label: item.display_name || item.username }))]} onChange={value => { setAccount(value); setOffset(0); }} />
     </div>
     <section id="run-view" role="tabpanel" aria-labelledby={`run-tab-${view}`}>
     {view === "records" ? <>
       <div className={`admin-table-wrap runs-table-wrap ${loading ? "is-updating" : ""}`} aria-busy={loading}>
         <table className="admin-table runs-table">
-          <thead><tr><th>任务 / 用户</th><th>模型</th><th>状态</th><th className="numeric">耗时</th><th className="numeric">Tokens</th><th>开始</th><th><span className="sr-only">详情</span></th></tr></thead>
+          <thead><tr><th>{t("taskUser")}</th><th>{t("model")}</th><th>{t("status")}</th><th className="numeric">{t("duration")}</th><th className="numeric">Tokens</th><th>{t("start")}</th><th><span className="sr-only">{t("details")}</span></th></tr></thead>
           <tbody>{page?.items.map(run => <tr key={run.run_id}>
             <td className="runs-cell-task"><button className="run-task-link" onClick={() => selectRun(run)} title={run.prompt || run.session_title}>
-              <strong>{run.prompt || run.session_title}</strong>
+              <strong>{run.prompt || run.session_title || t("newChat")}</strong>
               <small className="run-task-user" title={run.username}>{run.display_name || run.username || "—"}{run.prompt && run.prompt !== run.session_title ? ` · ${run.session_title}` : ""}</small>
             </button></td>
             <td className="runs-cell-model" title={[run.model_name, run.provider_name, run.effort].filter(Boolean).join(" · ")}><span className="table-model-name" title={run.model_name}>{run.model_name || "—"}</span><small className="table-secondary">{[run.provider_name, run.effort].filter(Boolean).join(" · ")}</small></td>
             <td className="runs-cell-status"><RunStatusBadge run={run} /></td>
-            <td className="numeric runs-cell-duration" data-label="耗时">{formatDuration(run.duration_ms)}</td>
+            <td className="numeric runs-cell-duration" data-label={t("duration")}>{formatDuration(run.duration_ms)}</td>
             <td className="numeric runs-cell-tokens" data-label="Tokens"
-              title={`输入 ${formatTokens(run.usage?.prompt_tokens)} · 输出 ${formatTokens(run.usage?.completion_tokens)} · 缓存 ${formatTokens(run.usage?.cached_tokens)}`}>
+              title={t("usageSummary", { input: formatTokens(run.usage?.prompt_tokens), output: formatTokens(run.usage?.completion_tokens), cached: formatTokens(run.usage?.cached_tokens) })}>
               {run.usage?.total_tokens ? formatTokens(run.usage.total_tokens) : "—"}
-              <small className="table-secondary">{run.step_count} 次工具</small>
+              <small className="table-secondary">{run.step_count} {t("toolCallsSuffix")}</small>
             </td>
-            <td className="table-date runs-cell-time" title={new Date(run.created_at).toLocaleString("zh-CN")}>
-              <span>{new Date(run.created_at).toLocaleDateString("zh-CN", { month: "short", day: "numeric" })}</span>
-              <small>{new Date(run.created_at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })}</small>
+            <td className="table-date runs-cell-time" title={new Date(run.created_at).toLocaleString(getLocale())}>
+              <span>{new Date(run.created_at).toLocaleDateString(getLocale(), { month: "short", day: "numeric" })}</span>
+              <small>{new Date(run.created_at).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", hour12: false })}</small>
               <span className="run-responsive-user" title={[run.username, run.session_title].filter(Boolean).join(" · ")}>{run.display_name || run.username || "—"}{run.prompt && run.prompt !== run.session_title ? ` · ${run.session_title}` : ""}</span>
             </td>
-            <td className="runs-cell-action"><button className="icon-button" aria-label={`查看运行 ${run.prompt || run.session_title}`} title="运行详情" onClick={() => selectRun(run)}><ArrowUpRight size={16} /></button></td>
+            <td className="runs-cell-action"><button className="icon-button" aria-label={t("viewRunNamed", { name: run.prompt || run.session_title })} title={t("runDetails")} onClick={() => selectRun(run)}><ArrowUpRight size={16} /></button></td>
           </tr>)}</tbody>
         </table>
-        {!page?.items.length && <div className="table-empty">{loading ? <LoaderCircle className="spin" size={18} /> : "暂无记录"}</div>}
+        {!page?.items.length && <div className="table-empty">{loading ? <LoaderCircle className="spin" size={18} /> : t("noRecords")}</div>}
       </div>
       <div className="table-pagination">
-        <span>{page ? `${page.total.toLocaleString()} 条 · ${page.total ? Math.min(offset + 1, page.total) : 0}–${Math.min(offset + limit, page.total)}` : ""}</span>
-        <div><button className="icon-button" aria-label="上一页运行记录" disabled={loading || offset === 0} onClick={() => setOffset(value => Math.max(0, value - limit))}><ChevronLeft size={16} /></button><span>{Math.floor(offset / limit) + 1} / {Math.max(1, Math.ceil((page?.total ?? 0) / limit))}</span><button className="icon-button" aria-label="下一页运行记录" disabled={loading || !page || offset + limit >= page.total} onClick={() => setOffset(value => value + limit)}><ChevronRight size={16} /></button></div>
+        <span>{page ? t("recordsRange", { total: page.total, start: page.total ? Math.min(offset + 1, page.total) : 0, end: Math.min(offset + limit, page.total) }) : ""}</span>
+        <div><button className="icon-button" aria-label={t("previousRunsPage")} disabled={loading || offset === 0} onClick={() => setOffset(value => Math.max(0, value - limit))}><ChevronLeft size={16} /></button><span>{Math.floor(offset / limit) + 1} / {Math.max(1, Math.ceil((page?.total ?? 0) / limit))}</span><button className="icon-button" aria-label={t("nextRunsPage")} disabled={loading || !page || offset + limit >= page.total} onClick={() => setOffset(value => value + limit)}><ChevronRight size={16} /></button></div>
       </div>
     </> : <div className="admin-table-wrap" aria-busy={loading}>
-      <table className="admin-table usage-model-table"><thead><tr><th>模型 / 服务</th><th className="numeric">运行</th><th className="numeric">异常</th><th className="numeric">Tokens</th><th className="numeric">缓存</th></tr></thead>
+      <table className="admin-table usage-model-table"><thead><tr><th>{t("modelProvider")}</th><th className="numeric">{t("runs")}</th><th className="numeric">{t("issues")}</th><th className="numeric">Tokens</th><th className="numeric">{t("cache")}</th></tr></thead>
         <tbody>{stats?.models.map(item => <tr key={`${item.model_id}:${item.model_name}`}>
           <td className="usage-cell-name"><strong>{item.model_name || "—"}</strong><small className="table-secondary">{item.provider_name || "—"}</small></td>
-          <td className="numeric" data-label="运行">{formatTokens(item.runs)}</td>
-          <td className={`numeric ${item.failed ? "danger" : ""}`} data-label="异常">{item.failed}</td>
-          <td className="numeric" data-label="Tokens" title={`输入 ${formatTokens(item.prompt_tokens)} · 输出 ${formatTokens(item.completion_tokens)}`}>{item.total_tokens ? formatTokens(item.total_tokens) : "—"}</td>
-          <td className="numeric" data-label="缓存">{formatTokens(item.cached_tokens)}</td>
+          <td className="numeric" data-label={t("runs")}>{formatTokens(item.runs)}</td>
+          <td className={`numeric ${item.failed ? "danger" : ""}`} data-label={t("issues")}>{item.failed}</td>
+          <td className="numeric" data-label="Tokens" title={t("inputOutputSummary", { input: formatTokens(item.prompt_tokens), output: formatTokens(item.completion_tokens) })}>{item.total_tokens ? formatTokens(item.total_tokens) : "—"}</td>
+          <td className="numeric" data-label={t("cache")}>{formatTokens(item.cached_tokens)}</td>
         </tr>)}</tbody>
-      </table>{!stats?.models.length && <div className="table-empty">{loading ? <LoaderCircle className="spin" size={18} /> : "暂无记录"}</div>}
+      </table>{!stats?.models.length && <div className="table-empty">{loading ? <LoaderCircle className="spin" size={18} /> : t("noRecords")}</div>}
     </div>}
     </section>
-    {selected && current && <Modal className="ochi-admin-modal" title="运行详情" size="large" onClose={() => setSelected(null)} footer={<div className="modal-actions">
-      {current.user_id === currentUserID && <button className="secondary-button" onClick={() => onNavigate(`/c/${current.session_id}`)}>打开对话<ArrowUpRight size={14} /></button>}
-      <button className="secondary-button" disabled={detailLoading} onClick={() => setDetailRevision(value => value + 1)}><RefreshCw size={14} className={detailLoading ? "spin" : undefined} />刷新</button>
+    {selected && current && <Modal className="ochi-admin-modal" title={t("runDetails")} size="large" onClose={() => setSelected(null)} footer={<div className="modal-actions">
+      {current.user_id === currentUserID && <button className="secondary-button" onClick={() => onNavigate(`/c/${current.session_id}`)}>{t("openConversation")}<ArrowUpRight size={14} /></button>}
+      <button className="secondary-button" disabled={detailLoading} onClick={() => setDetailRevision(value => value + 1)}><RefreshCw size={14} className={detailLoading ? "spin" : undefined} />{t("refresh")}</button>
     </div>}>
-      <div className="run-detail-heading"><strong>{current.session_title}</strong><RunStatusBadge run={current} /></div>
-      <div className="run-detail-meta"><span>{current.display_name || current.username}</span><span>{current.model_name}{current.effort ? ` · ${current.effort}` : ""}</span><span>{new Date(current.created_at).toLocaleString("zh-CN", { hour12: false })}</span><span>{formatDuration(current.duration_ms)}</span></div>
-      <div className="run-detail-tabs" role="tablist" aria-label="运行详情">
-        {[{ id: "result", title: "内容" }, { id: "tools", title: `工具 (${current.step_count})` }, { id: "metadata", title: "数据" }, { id: "requests", title: "请求诊断" }].map(tab => <button key={tab.id} role="tab" aria-selected={detailTab === tab.id} aria-controls="run-detail-content" className={detailTab === tab.id ? "selected" : ""} onClick={() => setDetailTab(tab.id)}>{tab.title}</button>)}
+      <div className="run-detail-heading"><strong>{current.session_title || t("newChat")}</strong><RunStatusBadge run={current} /></div>
+      <div className="run-detail-meta"><span>{current.display_name || current.username}</span><span>{current.model_name}{current.effort ? ` · ${current.effort}` : ""}</span><span>{new Date(current.created_at).toLocaleString(getLocale(), { hour12: false })}</span><span>{formatDuration(current.duration_ms)}</span></div>
+      <div className="run-detail-tabs" role="tablist" aria-label={t("runDetails")}>
+        {[{ id: "result", title: t("content") }, { id: "tools", title: t("toolCount", { count: current.step_count }) }, { id: "metadata", title: t("data") }, { id: "requests", title: t("requestDiagnostics") }].map(tab => <button key={tab.id} role="tab" aria-selected={detailTab === tab.id} aria-controls="run-detail-content" className={detailTab === tab.id ? "selected" : ""} onClick={() => setDetailTab(tab.id)}>{tab.title}</button>)}
       </div>
       <ErrorNotice error={detailError} />
       {detailLoading ? <div className="run-detail-loading"><LoaderCircle size={18} className="spin" /></div> : detail && <div id="run-detail-content" role="tabpanel" className="run-detail-content">
         {detailTab === "result" ? <>
           <div className="run-prompt-text">{detail.prompt}</div>
-          {detail.error && <pre className="run-error-output">{detail.error}</pre>}
+          {(detail.error_code || detail.error) && <pre className="run-error-output">{translateError(detail.error_code) ?? detail.error}</pre>}
           {detail.output && <div className="markdown-body"><Suspense fallback={<div>{detail.output}</div>}><MarkdownContent content={detail.output} isStreaming={false} /></Suspense></div>}
           {detail.artifacts.length > 0 && (detail.user_id === currentUserID ? <FileCards files={detail.artifacts} /> : <ul className="run-artifact-names">{detail.artifacts.map(file => <li key={file.id}>{file.name}</li>)}</ul>)}
-        </> : detailTab === "tools" ? (detail.steps.length ? detail.user_id === currentUserID ? <StepList steps={detail.steps} /> : <ReadOnlySteps steps={detail.steps} /> : <div className="table-empty">无工具调用</div>) : detailTab === "requests" ? <RequestDiagnostics key={`${detail.run_id}:${detailRevision}`} runID={detail.run_id} /> : <dl className="run-data-facts">
+        </> : detailTab === "tools" ? (detail.steps.length ? detail.user_id === currentUserID ? <StepList steps={detail.steps} /> : <ReadOnlySteps steps={detail.steps} /> : <div className="table-empty">{t("noToolCalls")}</div>) : detailTab === "requests" ? <RequestDiagnostics key={`${detail.run_id}:${detailRevision}`} runID={detail.run_id} /> : <dl className="run-data-facts">
           {[
-            ["用户", detail.display_name || detail.username], ["服务", detail.provider_name || "—"], ["输入 Tokens", formatTokens(detail.usage?.prompt_tokens)], ["输出 Tokens", formatTokens(detail.usage?.completion_tokens)], ["缓存 Tokens", formatTokens(detail.usage?.cached_tokens)], ["总耗时", formatDuration(detail.duration_ms)], ["更新", new Date(detail.updated_at).toLocaleString("zh-CN", { hour12: false })], ["文件", String(detail.artifact_count)], ["运行 ID", detail.run_id], ["对话 ID", detail.session_id], ["用户 ID", detail.user_id], ...(detail.resource ? [["资源", detail.resource]] : []), ...(detail.archived ? [["版本", "历史版本"]] : []),
+            [t("users"), detail.display_name || detail.username], [t("provider"), detail.provider_name || "—"], [t("inputTokens"), formatTokens(detail.usage?.prompt_tokens)], [t("outputTokens"), formatTokens(detail.usage?.completion_tokens)], [t("cachedTokens"), formatTokens(detail.usage?.cached_tokens)], [t("totalDuration"), formatDuration(detail.duration_ms)], [t("update"), new Date(detail.updated_at).toLocaleString(getLocale(), { hour12: false })], [t("files"), String(detail.artifact_count)], [t("runID"), detail.run_id], [t("sessionID"), detail.session_id], [t("userID"), detail.user_id], ...(detail.resource ? [[t("resource"), detail.resource]] : []), ...(detail.archived ? [[t("version"), t("archivedVersion")]] : []),
           ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
         </dl>}
       </div>}

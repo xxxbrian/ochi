@@ -39,6 +39,7 @@ export function reduceRunDelta(current: Snapshot, event: Exclude<RunEvent, { kin
     next.status = event.value.status;
     next.waiting_input = event.value.status === "running" ? undefined : current.waiting_input;
     next.error = event.value.error;
+    next.error_code = event.value.error_code;
     next.computer_granted = event.value.computer_granted ?? current.computer_granted;
   }
   if (value.timeline !== undefined) next.timeline = orderedProcessEntries(value.timeline);

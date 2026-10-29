@@ -52,7 +52,7 @@ export function applyRunEvent(current: Snapshot, event: Exclude<RunEvent, { kind
       resource: event.value.resource,
       computer_granted: event.value.computer_granted ?? current.computer_granted };
     case 'artifacts': return { ...next, artifacts: event.value.artifacts };
-    case 'status': return { ...next, status: event.value.status, error: event.value.error,
+    case 'status': return { ...next, status: event.value.status, error: event.value.error, error_code: event.value.error_code,
       waiting_input: event.value.status === 'running' ? undefined : current.waiting_input,
       computer_granted: event.value.computer_granted ?? current.computer_granted };
   }

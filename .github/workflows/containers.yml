@@ -6,6 +6,7 @@ on:
     paths:
       - server/**
       - web/**
+      - shared/i18n/**
       - db/**
       - workspace/**
       - Dockerfile
@@ -254,7 +255,7 @@ jobs:
           head="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
           git fetch --no-tags --depth=1 origin "$head"
           if git diff --quiet "$GITHUB_SHA" "$head" -- \
-            server web db workspace Dockerfile .dockerignore compose.dokploy.yaml \
+            server web shared/i18n db workspace Dockerfile .dockerignore compose.dokploy.yaml \
             scripts/deploy.py scripts/release.py scripts/tests .github/workflows/containers.yml; then
             echo 'latest=true' >> "$GITHUB_OUTPUT"
           else

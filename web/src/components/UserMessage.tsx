@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { memo, useState, type KeyboardEvent } from "react";
 import { ContextMenu } from "@base-ui/react/context-menu";
 import { Check, Copy, Pencil, RotateCcw } from "lucide-react";
@@ -14,6 +15,7 @@ export const UserMessage = memo(function UserMessage({
   onEdit?: (message: Message) => void;
   onRetry?: (message: Message) => void;
 }) {
+  useI18n();
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -39,17 +41,17 @@ export const UserMessage = memo(function UserMessage({
       }
     }}>
       <ContextMenu.Trigger className="user-message-content" tabIndex={0}
-        aria-label={message.content || "消息"} onKeyDown={keyboardMenu}>
+        aria-label={message.content || t("message.title")} onKeyDown={keyboardMenu}>
         <MarkdownMessage message={message} />
         <div className="user-message-actions">
           <button className="icon-button" onClick={() => void copy()}
-            aria-label={copied ? "已复制消息" : "复制消息"} title="复制">
+            aria-label={copied ? t("message.copied") : t("message.copy")} title={t("common.copy")}>
             {copied ? <Check size={15} /> : <Copy size={15} />}
           </button>
           {onEdit && <button className="icon-button" onClick={() => onEdit(message)}
-            aria-label="编辑消息" title="编辑"><Pencil size={15} /></button>}
+            aria-label={t("chat.editMessage")} title={t("common.edit")}><Pencil size={15} /></button>}
           {onRetry && <button className="icon-button" onClick={() => onRetry(message)}
-            aria-label="重新发送" title="重新发送"><RotateCcw size={15} /></button>}
+            aria-label={t("message.resend")} title={t("message.resend")}><RotateCcw size={15} /></button>}
         </div>
       </ContextMenu.Trigger>
       <ContextMenu.Portal>
@@ -57,13 +59,13 @@ export const UserMessage = memo(function UserMessage({
           collisionPadding={12} collisionAvoidance={{ side: "flip", align: "shift" }}>
           <ContextMenu.Popup className="action-menu user-message-menu">
             <ContextMenu.Item className="action-menu-item" onClick={() => void copy()}>
-              <Copy size={16} />复制
+              <Copy size={16} />{t("common.copy")}
             </ContextMenu.Item>
             {onEdit && <ContextMenu.Item className="action-menu-item" onClick={() => onEdit(message)}>
-              <Pencil size={16} />编辑
+              <Pencil size={16} />{t("common.edit")}
             </ContextMenu.Item>}
             {onRetry && <ContextMenu.Item className="action-menu-item" onClick={() => onRetry(message)}>
-              <RotateCcw size={16} />重新发送
+              <RotateCcw size={16} />{t("message.resend")}
             </ContextMenu.Item>}
           </ContextMenu.Popup>
         </ContextMenu.Positioner>

@@ -1,3 +1,5 @@
+import { errorForDisplay, localizedError, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -70,6 +72,7 @@ export function ChatScreen({
   sessionId?: string;
   projectId?: string;
 }) {
+  useI18n();
   const navigation =
     useNavigation<
       NativeStackNavigationProp<
@@ -99,7 +102,7 @@ export function ChatScreen({
   const [effort, setEffort] = useState("");
   const [computerDraft, setComputerDraft] = useState(Boolean(projectId));
   const [computerOperation, setComputerOperation] = useState<number | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [menu, setMenu] = useState(false);
   const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 44, height: 44 });
   const [renaming, setRenaming] = useState(false);
@@ -145,7 +148,7 @@ export function ChatScreen({
     setError("");
     setRefreshOperation(owner);
     void chat.refresh().catch((reason) => {
-      if (actionEpoch.current === owner) setError(reason instanceof Error ? reason.message : "刷新失败");
+      if (actionEpoch.current === owner) setError(errorForDisplay(reason, "error.refresh"));
     }).finally(() => {
       if (refreshOwner.current === owner) refreshOwner.current = null;
       setRefreshOperation((current) => current === owner ? null : current);
@@ -307,7 +310,7 @@ export function ChatScreen({
               })
             ) {
               acceptedCreated = true;
-              setError(reason instanceof Error ? reason.message : "发送失败");
+              setError(errorForDisplay(reason, "error.send"));
               navigation.setParams({ sessionId: session.id });
             }
             throw reason;
@@ -357,7 +360,7 @@ export function ChatScreen({
       }
     } catch (reason) {
       if (owner === actionEpoch.current)
-        setError(reason instanceof Error ? reason.message : "操作失败");
+        setError(errorForDisplay(reason, "error.action"));
     } finally {
       if (owner === actionEpoch.current) setComputerOperation(null);
     }
@@ -367,7 +370,7 @@ export function ChatScreen({
       chat.messages.find(
         (item) => item.role === "user" && item.run_id === message.run_id,
       ) ?? [...chat.messages].reverse().find((item) => item.role === "user");
-    if (!source) throw new Error("找不到原始消息");
+    if (!source) throw localizedError("error.originalMessageMissing");
     await chat.send(source.content, {
       model_id: modelId,
       effort,
@@ -377,10 +380,10 @@ export function ChatScreen({
   function deleteChat() {
     const owner = actionEpoch.current;
     setMenu(false);
-    Alert.alert("删除对话？", chat.session?.title, [
-      { text: "取消", style: "cancel" },
+    Alert.alert(t("chat.deleteConfirm"), chat.session?.title || t("chat.new"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "删除",
+        text: t("common.delete"),
         style: "destructive",
         onPress: () => {
           if (sessionId)
@@ -392,7 +395,7 @@ export function ChatScreen({
               })
               .catch((reason) => {
                 if (owner === actionEpoch.current)
-                  setError(reason instanceof Error ? reason.message : "删除失败");
+                  setError(errorForDisplay(reason, "error.delete"));
               });
         },
       },
@@ -441,8 +444,7 @@ export function ChatScreen({
           size={12}
           style={{ textAlign: "center", paddingVertical: 4 }}
         >
-          重新连接中
-        </AppText>
+          {t("chat.reconnecting")}</AppText>
       )}
       {chat.pending.length > 0 && (
         <ScrollView
@@ -473,14 +475,14 @@ export function ChatScreen({
               <ActionIcon
                 icon={X}
                 size={14}
-                label="取消排队消息"
+                label={t("chat.cancelQueued")}
                 style={{ width: 28, height: 30 }}
                 onPress={() =>
                   void chat
                     .cancelQueued(item.run_id)
                     .catch((reason) =>
                       setError(
-                        reason instanceof Error ? reason.message : "操作失败",
+                        errorForDisplay(reason, "error.action"),
                       ),
                     )
                 }
@@ -504,7 +506,7 @@ export function ChatScreen({
             models.find((item) => item.id === id)?.default_effort ?? "",
           );
           void selectPreferredModel(id).catch((reason) =>
-            setError(reason instanceof Error ? reason.message : "记住模型失败"),
+            setError(errorForDisplay(reason, "error.rememberModel")),
           );
         }}
         onEffort={setEffort}
@@ -518,7 +520,7 @@ export function ChatScreen({
           void chat
             .stop()
             .catch((reason) =>
-              setError(reason instanceof Error ? reason.message : "停止失败"),
+              setError(errorForDisplay(reason, "error.stop")),
             )
         }
         onSubmit={submit}
@@ -595,7 +597,7 @@ export function ChatScreen({
             <View style={[styles.header, { paddingTop: insets.top + 3, paddingLeft: insets.left + 12, paddingRight: insets.right + 12 }, shortViewport && { paddingBottom: 4 }]}>
               <HeaderGlassAction
                 icon={Menu}
-                label="打开侧栏"
+                label={t("chat.openSidebar")}
                 color={colors.text}
                 onPress={openDrawer}
               />
@@ -605,13 +607,13 @@ export function ChatScreen({
                 numberOfLines={1}
                 style={styles.title}
               >
-                {sessionId ? (chat.session?.title ?? "") : brand.displayName}
+                {sessionId ? (chat.session?.title || t("chat.new")) : brand.displayName}
               </AppText>
               {sessionId ? (
                 <GlassSurface interactive style={styles.headerActions}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="新对话"
+                    accessibilityLabel={t("chat.new")}
                     onPress={requestNewChat}
                     style={styles.headerAction}
                   >
@@ -620,7 +622,7 @@ export function ChatScreen({
                   <View ref={menuRef} collapsable={false}>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="对话选项"
+                      accessibilityLabel={t("chat.options")}
                       onPress={() => {
                         const measuredGeometry = menuGeometry.current;
                         menuRef.current?.measureInWindow((x, y, width, height) => {
@@ -638,7 +640,7 @@ export function ChatScreen({
               ) : (
                 <HeaderGlassAction
                   icon={SquarePen}
-                  label="新对话"
+                  label={t("chat.new")}
                   color={colors.text}
                   onPress={requestNewChat}
                 />
@@ -709,7 +711,7 @@ export function ChatScreen({
             {drawerOpen && (
               <Pressable
                 style={StyleSheet.absoluteFill}
-                accessibilityLabel="关闭侧栏"
+                accessibilityLabel={t("chat.closeSidebar")}
                 onPress={() => {
                   if (drawerNavigation.canHandleInput()) setDrawerOpen(false);
                 }}
@@ -725,13 +727,13 @@ export function ChatScreen({
         items={[
           {
             key: "rename",
-            title: "重命名",
+            title: t("common.rename"),
             icon: Pencil,
             onPress: () => setRenaming(true),
           },
           {
             key: "delete",
-            title: "删除",
+            title: t("common.delete"),
             icon: Trash2,
             danger: true,
             separatorBefore: true,
@@ -750,13 +752,13 @@ export function ChatScreen({
       />
       <Sheet
         visible={Boolean(editingQueue)}
-        title="编辑排队消息"
+        title={t("chat.editQueued")}
         onClose={() => setEditingQueue(null)}
         height={350}
       >
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 18 }}>
           <Field
-            label="消息"
+            label={t("chat.message")}
             value={queueText}
             onChangeText={setQueueText}
             multiline
@@ -775,7 +777,7 @@ export function ChatScreen({
                 })
                 .catch((reason) => {
                   if (owner === actionEpoch.current) setError(
-                    reason instanceof Error ? reason.message : "保存失败",
+                    errorForDisplay(reason, "error.save"),
                   );
                 })
                 .finally(() => {
@@ -783,8 +785,7 @@ export function ChatScreen({
                 });
             }}
           >
-            保存
-          </Button>
+            {t("common.save")}</Button>
         </ScrollView>
       </Sheet>
     </View>

@@ -4,6 +4,8 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 const ts = require("typescript");
+const { createI18nHarness } = require("./i18n-harness.cjs");
+const i18n = createI18nHarness();
 
 function load(file, imports = {}, globals = {}, tail = "") {
   const source = fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
@@ -11,7 +13,7 @@ function load(file, imports = {}, globals = {}, tail = "") {
   const module = { exports: {} };
   vm.runInNewContext(output + tail, {
     module, exports: module.exports, ...globals,
-    require(name) { if (name in imports) return imports[name]; throw new Error(`Unexpected import ${name}`); },
+    require(name) { if (name in imports) return imports[name]; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
   });
   return module.exports;
 }
@@ -34,7 +36,7 @@ test("terminal elapsed is frozen by the server timestamp, never by page mount ti
 });
 
 test("compact elapsed formatting has stable second/minute/hour boundaries", () => {
-  for (const [milliseconds, label] of [[0, "0 秒"], [59_999, "59 秒"], [60_000, "1 分 00 秒"], [67_999, "1 分 07 秒"], [3_600_000, "1 小时 00 分"], [7_380_000, "2 小时 03 分"]]) {
+  for (const [milliseconds, label] of [[0, "0 秒"], [59_999, "59 秒"], [60_000, "1 分 0 秒"], [67_999, "1 分 7 秒"], [3_600_000, "1 小时 0 分"], [7_380_000, "2 小时 3 分"]]) {
     assert.equal(timing.formatProcessElapsed(milliseconds), label);
   }
 });
@@ -56,12 +58,12 @@ test("the header clock keeps one interval across token updates and clears it on 
     setInterval(callback, delay) { assert.equal(delay, 1000); interval = callback; started++; return started; },
     clearInterval() { cleared++; interval = undefined; },
   });
-  assert.equal(useProcessElapsed(start, end, true), "1 分 07 秒");
+  assert.equal(useProcessElapsed(start, end, true), "1 分 7 秒");
   now += 2000;
   interval();
-  assert.equal(useProcessElapsed(start, "2026-10-16T00:01:09Z", true), "1 分 09 秒");
+  assert.equal(useProcessElapsed(start, "2026-10-16T00:01:09Z", true), "1 分 9 秒");
   assert.equal(started, 1, "tokens must not restart the local timer");
-  assert.equal(useProcessElapsed(start, end, false), "1 分 07 秒");
+  assert.equal(useProcessElapsed(start, end, false), "1 分 7 秒");
   assert.equal(cleared, 1);
   assert.equal(interval, undefined);
   useProcessElapsed(start, end, true);

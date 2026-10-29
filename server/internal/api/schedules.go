@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/runtime"
 	"ochi/server/internal/storage"
 )
@@ -24,7 +25,7 @@ func (s *Server) newSchedule(ctx context.Context, userID string, item storage.Sc
 			return item, err
 		}
 		if item.ProjectID != "" && item.ProjectID != session.ProjectID {
-			return item, errors.New("所选对话不属于此项目")
+			return item, i18n.New("schedule_project_mismatch")
 		}
 		item.ProjectID = session.ProjectID
 	}
@@ -57,36 +58,36 @@ func (s *Server) launchSchedule(ctx context.Context, userID string, item storage
 	if !shouldRun {
 		return runtime.Snapshot{Status: "skipped"}, nil
 	}
-	fail := func(message string) (runtime.Snapshot, error) {
+	fail := func(failure error) (runtime.Snapshot, error) {
 		persist, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if err := s.store.LinkScheduleExecution(persist, executionID, "", "", message); err != nil {
+		if err := s.store.LinkScheduleExecution(persist, executionID, "", "", failure); err != nil {
 			log.Printf("persist failed schedule execution %s: %v", executionID, err)
 		}
-		return runtime.Snapshot{}, errors.New(message)
+		return runtime.Snapshot{}, failure
 	}
 	enabled, err := s.store.UserEnabled(ctx, userID)
 	if err != nil || !enabled {
-		return fail("账号未启用")
+		return fail(i18n.New("account_disabled"))
 	}
 	sessionID := item.SessionID
 	if item.ContextMode != "session" {
 		session, e := s.store.CreateSession(ctx, userID, item.ProjectID)
 		if e != nil {
-			return fail("创建执行会话失败")
+			return fail(i18n.Wrap("schedule_session_failed", e))
 		}
 		sessionID = session.ID
 		if e = s.store.MarkScheduleSession(ctx, userID, sessionID, item.Name+" · "+time.Now().Format("01-02 15:04")); e != nil {
-			return fail("创建执行记录失败")
+			return fail(i18n.Wrap("schedule_execution_failed", e))
 		}
 	}
 	snapshot, err := s.startRun(ctx, userID, sessionID, item.Prompt, item.ModelID, item.Effort, nil)
 	if err != nil {
-		return fail(err.Error())
+		return fail(err)
 	}
 	persist, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	if err = s.store.LinkScheduleExecution(persist, executionID, snapshot.RunID, sessionID, ""); err != nil {
+	if err = s.store.LinkScheduleExecution(persist, executionID, snapshot.RunID, sessionID, nil); err != nil {
 		return snapshot, err
 	}
 	return snapshot, nil
@@ -164,7 +165,7 @@ func (s *Server) registerScheduleRoutes(mux *http.ServeMux) {
 		for i := range items {
 			if live, ok := s.runtime.Get(items[i].RunID); ok {
 				v := live.Snapshot()
-				items[i].Status, items[i].Output, items[i].Error, items[i].Artifacts = v.Status, v.Output, v.Error, v.Artifacts
+				items[i].Status, items[i].Output, items[i].Error, items[i].ErrorCode, items[i].Artifacts = v.Status, v.Output, v.Error, v.ErrorCode, v.Artifacts
 			}
 		}
 		writeJSON(w, http.StatusOK, items)
@@ -178,7 +179,7 @@ func (s *Server) registerScheduleRoutes(mux *http.ServeMux) {
 		if live, ok := s.runtime.Get(item.RunID); ok {
 			v := live.Snapshot()
 			item.Snapshot = &v
-			item.Status, item.Output, item.Error, item.Artifacts = v.Status, v.Output, v.Error, v.Artifacts
+			item.Status, item.Output, item.Error, item.ErrorCode, item.Artifacts = v.Status, v.Output, v.Error, v.ErrorCode, v.Artifacts
 		}
 		writeJSON(w, http.StatusOK, item)
 	}))

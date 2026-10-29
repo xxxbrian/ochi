@@ -3,11 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/websearch"
 )
 
@@ -52,13 +52,13 @@ func applySearchPatch(c websearch.Config, patch searchPatch) (websearch.Config, 
 		}
 	case "replace":
 		if strings.TrimSpace(patch.APIKey) == "" {
-			return c, errors.New("请输入新的搜索 API 密钥")
+			return c, i18n.New("search_api_key_required")
 		}
 		c.APIKey = strings.TrimSpace(patch.APIKey)
 	case "delete":
 		c.APIKey = ""
 	default:
-		return c, errors.New("密钥操作无效")
+		return c, i18n.New("api_key_action_invalid")
 	}
 	return c, websearch.Validate(c)
 }
@@ -131,11 +131,11 @@ func (s *Server) searchTool(ctx context.Context, args json.RawMessage) (agent.To
 		Limit int    `json:"limit"`
 	}
 	if err := json.Unmarshal(args, &request); err != nil {
-		return agent.ToolResult{}, errors.New("搜索参数无效")
+		return agent.ToolResult{}, i18n.New("search_arguments_invalid")
 	}
 	c, err := s.store.SearchSettings(ctx)
 	if err != nil {
-		return agent.ToolResult{}, errors.New("暂时无法读取搜索配置")
+		return agent.ToolResult{}, i18n.New("search_configuration_unavailable")
 	}
 	result, err := websearch.Search(ctx, c, request.Query, request.Limit)
 	if err != nil {

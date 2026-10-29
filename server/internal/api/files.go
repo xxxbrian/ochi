@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/storage"
 )
 
@@ -29,7 +30,7 @@ func (s *Server) bridgeSource() (bridgeSource, error) {
 	if bridge, ok := s.tools.(bridgeSource); ok {
 		return bridge, nil
 	}
-	return nil, errors.New("computer workspace is unavailable")
+	return nil, i18n.New("computer_unavailable")
 }
 
 func (s *Server) registerExtraRoutes(mux *http.ServeMux) {
@@ -50,19 +51,19 @@ func (s *Server) registerFileRoutes(mux *http.ServeMux) {
 func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 33*1024*1024)
 	if err := r.ParseMultipartForm(2 * 1024 * 1024); err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("file must be no larger than 32 MB"))
+		writeError(w, http.StatusBadRequest, i18n.New("payload_too_large"))
 		return
 	}
 	defer r.MultipartForm.RemoveAll()
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("file is required"))
+		writeError(w, http.StatusBadRequest, i18n.New("file_required"))
 		return
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, 32*1024*1024+1))
 	if err != nil || len(data) > 32*1024*1024 {
-		writeError(w, http.StatusBadRequest, errors.New("file must be no larger than 32 MB"))
+		writeError(w, http.StatusBadRequest, i18n.New("payload_too_large"))
 		return
 	}
 	id, err := newID()

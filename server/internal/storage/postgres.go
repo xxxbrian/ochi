@@ -7,16 +7,17 @@ import (
 	"errors"
 	"time"
 
-	"ochi/server/internal/runtime"
-
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"ochi/server/internal/i18n"
+	"ochi/server/internal/runtime"
 )
 
 //go:embed schema.sql
 var schemaSQL string
 
-var ErrActiveRun = errors.New("当前对话正在运行")
+var ErrActiveRun = i18n.New("session_busy")
 
 type Store struct{ db *pgxpool.Pool }
 
@@ -42,6 +43,7 @@ type Message struct {
 	RunID        *string         `json:"run_id,omitempty"`
 	RunStatus    string          `json:"run_status,omitempty"`
 	RunError     string          `json:"run_error,omitempty"`
+	RunErrorCode string          `json:"run_error_code,omitempty"`
 	RunCreatedAt *time.Time      `json:"run_created_at,omitempty"`
 	RunUpdatedAt *time.Time      `json:"run_updated_at,omitempty"`
 	Role         string          `json:"role"`
@@ -85,9 +87,9 @@ func (s *Store) recoverStartup(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback(context.Background())
-	rows, err := tx.Query(ctx, `UPDATE runs r SET status='interrupted',error='server stopped before the run completed',updated_at=now(),seq=seq+1
+	rows, err := tx.Query(ctx, `UPDATE runs r SET status='interrupted',error=$1,error_code='run_interrupted',updated_at=now(),seq=seq+1
  WHERE status IN ('running','cancelling','waiting_user','waiting_resource') AND NOT EXISTS(SELECT 1 FROM run_requests q WHERE q.run_id=r.id)
- RETURNING `+runColumns)
+ RETURNING `+runColumns, i18n.Text(i18n.English, "run_interrupted", nil))
 	if err != nil {
 		return err
 	}
@@ -113,7 +115,7 @@ func (s *Store) recoverStartup(ctx context.Context) error {
 	}
 	// A request is deleted in the same transaction that appends its canonical
 	// user turn. A claimed-but-not-admitted input is therefore safe to requeue.
-	if _, err = tx.Exec(ctx, `UPDATE runs SET status='queued',error=NULL,resource='',updated_at=now(),seq=seq+1 WHERE status IN ('running','cancelling','waiting_user','waiting_resource','interrupted') AND EXISTS(SELECT 1 FROM run_requests q WHERE q.run_id=runs.id)`); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE runs SET status='queued',error=NULL,error_code='',resource='',updated_at=now(),seq=seq+1 WHERE status IN ('running','cancelling','waiting_user','waiting_resource','interrupted') AND EXISTS(SELECT 1 FROM run_requests q WHERE q.run_id=runs.id)`); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -165,7 +167,7 @@ func (s *Store) CreateSession(ctx context.Context, userID string, projectIDs ...
 		}
 	}
 	var id string
-	if err = tx.QueryRow(ctx, `INSERT INTO sessions(user_id,title,project_id,workspace_path,computer_enabled) VALUES($1,'新对话',NULLIF($2,'')::uuid,$3,CASE WHEN $2<>'' THEN true ELSE COALESCE((SELECT computer_default FROM user_preferences WHERE user_id=$1),false) END) RETURNING id::text`, userID, projectID, path).Scan(&id); err != nil {
+	if err = tx.QueryRow(ctx, `INSERT INTO sessions(user_id,project_id,workspace_path,computer_enabled) VALUES($1,NULLIF($2,'')::uuid,$3,CASE WHEN $2<>'' THEN true ELSE COALESCE((SELECT computer_default FROM user_preferences WHERE user_id=$1),false) END) RETURNING id::text`, userID, projectID, path).Scan(&id); err != nil {
 		return Session{}, err
 	}
 	if path == "" {
@@ -233,7 +235,7 @@ func completeRunTx(ctx context.Context, tx pgx.Tx, snapshot runtime.Snapshot) er
 		reasoning = []byte("[]")
 	}
 	var sessionID string
-	err = tx.QueryRow(ctx, `UPDATE runs SET status=$2,error=NULLIF($3,''),output=$4,steps=$5,seq=$6,updated_at=$7,usage=$8,waiting_input=$9,artifacts=$10,resource=$11,computer_granted=$12,reasoning=$13,timeline=$14 WHERE id=$1 AND seq<=$6 RETURNING session_id::text`, snapshot.RunID, snapshot.Status, snapshot.Error, snapshot.Output, steps, snapshot.Seq, snapshot.UpdatedAt, usage, waiting, artifacts, snapshot.Resource, snapshot.ComputerGranted, reasoning, timeline).Scan(&sessionID)
+	err = tx.QueryRow(ctx, `UPDATE runs SET status=$2,error=NULLIF($3,''),output=$4,steps=$5,seq=$6,updated_at=$7,usage=$8,waiting_input=$9,artifacts=$10,resource=$11,computer_granted=$12,reasoning=$13,timeline=$14,error_code=$15 WHERE id=$1 AND seq<=$6 RETURNING session_id::text`, snapshot.RunID, snapshot.Status, snapshot.Error, snapshot.Output, steps, snapshot.Seq, snapshot.UpdatedAt, usage, waiting, artifacts, snapshot.Resource, snapshot.ComputerGranted, reasoning, timeline, snapshot.ErrorCode).Scan(&sessionID)
 	if err != nil {
 		return err
 	}
@@ -292,7 +294,7 @@ func collectMessages(rows pgx.Rows) ([]Message, error) {
 		var item Message
 		var output string
 		var publicJSON []byte
-		if err := rows.Scan(&item.ID, &item.RunID, &item.Role, &item.Content, &item.CreatedAt, &item.StepCount, &item.ModelID, &item.ModelName, &item.Effort, &item.Attachments, &item.HasReasoning, &item.RunStatus, &item.HasProcess, &item.RunCreatedAt, &item.RunUpdatedAt, &item.RunError, &output, &publicJSON); err != nil {
+		if err := rows.Scan(&item.ID, &item.RunID, &item.Role, &item.Content, &item.CreatedAt, &item.StepCount, &item.ModelID, &item.ModelName, &item.Effort, &item.Attachments, &item.HasReasoning, &item.RunStatus, &item.HasProcess, &item.RunCreatedAt, &item.RunUpdatedAt, &item.RunError, &item.RunErrorCode, &output, &publicJSON); err != nil {
 			return nil, err
 		}
 		if item.Role == "assistant" && runtime.IsTerminal(item.RunStatus) {
@@ -303,7 +305,7 @@ func collectMessages(rows pgx.Rows) ([]Message, error) {
 			item.Content = runtime.PublicReply(runtime.Snapshot{Status: item.RunStatus, Output: output, Timeline: timeline})
 		}
 		if item.Role != "assistant" {
-			item.RunError = ""
+			item.RunError, item.RunErrorCode = "", ""
 		}
 		items = append(items, item)
 	}

@@ -3,11 +3,12 @@ package storage
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"ochi/server/internal/i18n"
 )
 
 type User struct {
@@ -136,7 +137,7 @@ func (s *Store) BootstrapProvider(ctx context.Context, baseURL, key, name string
 		return tx.Commit(ctx)
 	}
 	var providerID string
-	if err = tx.QueryRow(ctx, `INSERT INTO providers (name,base_url,api_key) VALUES ('默认服务',$1,$2) RETURNING id::text`, strings.TrimRight(baseURL, "/"), key).Scan(&providerID); err != nil {
+	if err = tx.QueryRow(ctx, `INSERT INTO providers (name,base_url,api_key) VALUES ('Default provider',$1,$2) RETURNING id::text`, strings.TrimRight(baseURL, "/"), key).Scan(&providerID); err != nil {
 		return err
 	}
 	// Capability options are not invented from a model's marketing name.
@@ -188,7 +189,7 @@ func (s *Store) SaveUser(ctx context.Context, u User) (User, error) {
 			return u, err
 		}
 		if last {
-			return u, errors.New("请至少保留一位可用的管理员")
+			return u, i18n.New("last_admin_required")
 		}
 	}
 	err = tx.QueryRow(ctx, `INSERT INTO users (id,username,display_name,password_hash,role,enabled) VALUES ($1,$2,$3,$4,$5,$6)

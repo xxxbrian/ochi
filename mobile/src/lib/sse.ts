@@ -1,5 +1,8 @@
+import { localizedError } from "./errors";
 import { fetch } from 'expo/fetch';
 import { authHeaders } from './api';
+import { getLocale, t } from './i18n';
+import { translateError } from '../../../shared/i18n/errors';
 import type { RunEvent } from '../../../web/src/lib/sse';
 export type { RunEvent };
 
@@ -15,15 +18,16 @@ export function connectRunStream(url: string, handlers: {
   void (async () => {
     try {
       const response = await fetch(url, {
-        headers: { ...authHeaders(), Accept: 'text/event-stream' },
+        headers: { ...authHeaders(), Accept: 'text/event-stream', 'Accept-Language': getLocale() },
         signal: controller.signal,
       });
       if (!response.ok) {
-        const error = new Error(`Stream HTTP ${response.status}`) as Error & { status?: number };
+        const body = await response.json().catch(() => ({})) as { code?: string; params?: Record<string, string | number> };
+        const error = new Error(translateError(body.code, body.params) ?? t('error.connection')) as Error & { status?: number };
         error.status = response.status;
         throw error;
       }
-      if (!response.body) throw new Error('Stream unavailable');
+      if (!response.body) throw localizedError('error.connection');
       if (controller.signal.aborted) return;
       handlers.onOpen();
       const reader = response.body.getReader();
@@ -44,7 +48,7 @@ export function connectRunStream(url: string, handlers: {
       } finally { reader.releaseLock(); }
       if (!controller.signal.aborted) handlers.onClose();
     } catch (reason) {
-      if (!controller.signal.aborted) handlers.onClose(reason instanceof Error ? reason : new Error('Stream disconnected'));
+      if (!controller.signal.aborted) handlers.onClose(reason instanceof Error ? reason : localizedError('error.connection'));
     }
   })();
   return () => controller.abort();

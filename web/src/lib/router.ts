@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { useCallback, useEffect, useState } from "react";
 export type Route = {
   kind: "chat" | "projects" | "tasks" | "admin";
@@ -39,16 +40,16 @@ export function statusLabel(status?: string) {
   return (
     (
       {
-        queued: "排队中",
-        running: "运行中",
-        waiting_user: "等待回复",
-        waiting_resource: "等待工作区",
-        cancelling: "正在停止",
-        completed: "已完成",
-        failed: "未完成",
-        cancelled: "已停止",
-        interrupted: "已中断",
-        skipped: "已跳过",
+        queued: t("status.queued"),
+        running: t("status.running"),
+        waiting_user: t("status.awaitingReply"),
+        waiting_resource: t("status.awaitingWorkspace"),
+        cancelling: t("status.stopping"),
+        completed: t("status.completed"),
+        failed: t("status.failed"),
+        cancelled: t("status.stopped"),
+        interrupted: t("status.interrupted"),
+        skipped: t("status.skipped"),
       } as Record<string, string>
     )[status ?? ""] ??
     status ??

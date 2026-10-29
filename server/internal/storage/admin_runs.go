@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
 	"ochi/server/internal/agent"
 	"ochi/server/internal/runtime"
 )
@@ -30,6 +31,7 @@ type AdminRun struct {
 	ProviderName  string          `json:"provider_name"`
 	Effort        string          `json:"effort"`
 	Error         string          `json:"error,omitempty"`
+	ErrorCode     string          `json:"error_code,omitempty"`
 	Usage         json.RawMessage `json:"usage"`
 	StepCount     int             `json:"step_count"`
 	ArtifactCount int             `json:"artifact_count"`
@@ -70,7 +72,7 @@ const adminRunWhere = ` WHERE r.created_at >= $1 AND r.created_at <= $2
  AND ($6='' OR strpos(lower(concat_ws(' ',s.title,prompt.content,pending.message,r.model_name,u.username,u.display_name,r.error)),lower($6))>0) `
 
 const adminRunColumns = `r.id::text,r.session_id::text,s.title,left(COALESCE(prompt.content,pending.message,''),240),
- s.user_id,COALESCE(u.username,''),COALESCE(u.display_name,''),r.status,r.model_id,r.model_name,COALESCE(p.name,''),r.effort,COALESCE(r.error,''),r.usage,
+ s.user_id,COALESCE(u.username,''),COALESCE(u.display_name,''),r.status,r.model_id,r.model_name,COALESCE(p.name,''),r.effort,COALESCE(r.error,''),r.error_code,r.usage,
  CASE WHEN jsonb_typeof(r.steps)='array' THEN jsonb_array_length(r.steps) ELSE 0 END,
  CASE WHEN jsonb_typeof(r.artifacts)='array' THEN jsonb_array_length(r.artifacts) ELSE 0 END,
  GREATEST(0,(extract(epoch FROM (CASE WHEN r.status IN ('queued','running','waiting_user','waiting_resource','cancelling') THEN now() ELSE r.updated_at END-r.created_at))*1000)::bigint),
@@ -83,7 +85,7 @@ func adminRunArgs(f AdminRunFilter) []any {
 func scanAdminRun(row pgx.Row, item *AdminRun) error {
 	return row.Scan(&item.RunID, &item.SessionID, &item.SessionTitle, &item.Prompt,
 		&item.UserID, &item.Username, &item.DisplayName, &item.Status, &item.ModelID, &item.ModelName, &item.ProviderName,
-		&item.Effort, &item.Error, &item.Usage, &item.StepCount, &item.ArtifactCount, &item.DurationMS, &item.CreatedAt, &item.UpdatedAt)
+		&item.Effort, &item.Error, &item.ErrorCode, &item.Usage, &item.StepCount, &item.ArtifactCount, &item.DurationMS, &item.CreatedAt, &item.UpdatedAt)
 }
 
 func (s *Store) AdminRuns(ctx context.Context, f AdminRunFilter) (AdminRunPage, error) {

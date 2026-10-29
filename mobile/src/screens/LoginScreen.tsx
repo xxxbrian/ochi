@@ -1,3 +1,5 @@
+import { errorForDisplay, localizedError, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import { useState } from "react";
 import {
   Pressable,
@@ -20,7 +22,8 @@ import {
 } from "../components/ScreenChrome";
 
 export function LoginScreen() {
-  const { colors, loading, authError, signIn } = useApp();
+  useI18n();
+  const { colors, loading, authError, signIn, language, selectLanguage } = useApp();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const compact = height < 500;
@@ -28,7 +31,7 @@ export function LoginScreen() {
   const [password, setPassword] = useState("");
   const [server, setServer] = useState(getAPIBaseURL());
   const [serverOpen, setServerOpen] = useState(() => !isConfiguredAPIBaseURL() || getAPIBaseURL() !== DEFAULT_API_BASE_URL);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   async function login() {
     if (!username.trim() || !password || loading || !isConfiguredAPIBaseURL(server)) return;
     setError("");
@@ -36,7 +39,7 @@ export function LoginScreen() {
       await signIn(username.trim(), password, server);
       router.replace("/");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "登录失败");
+      setError(errorForDisplay(reason, "error.login"));
     }
   }
   return (
@@ -66,7 +69,7 @@ export function LoginScreen() {
             {brand.displayName}
           </AppText>
           <Field
-            label="账号"
+            label={t("account.username")}
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="username"
@@ -76,7 +79,7 @@ export function LoginScreen() {
             returnKeyType="next"
           />
           <Field
-            label="密码"
+            label={t("account.password")}
             secureTextEntry
             autoComplete="current-password"
             textContentType="password"
@@ -91,8 +94,7 @@ export function LoginScreen() {
             busy={loading}
             onPress={() => void login()}
           >
-            登录
-          </Button>
+            {t("account.signIn")}</Button>
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ expanded: serverOpen }}
@@ -101,8 +103,7 @@ export function LoginScreen() {
             style={styles.serverToggle}
           >
             <AppText muted size={13}>
-              使用自部署后端
-            </AppText>
+              {t("account.selfHosted")}</AppText>
             {serverOpen ? (
               <ChevronUp size={14} color={colors.muted} />
             ) : (
@@ -112,7 +113,7 @@ export function LoginScreen() {
           {serverOpen && (
             <View>
               <Field
-                label="服务地址"
+                label={t("account.serverAddress")}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
@@ -122,8 +123,7 @@ export function LoginScreen() {
                 editable={!loading}
               />
               <AppText muted size={12}>
-                支持 HTTP 和 HTTPS。HTTP 不加密，请仅在可信网络使用。
-              </AppText>
+                {t("account.httpNotice")}</AppText>
               {server.trim() !== DEFAULT_API_BASE_URL && (
                 <Pressable
                   accessibilityRole="button"
@@ -135,11 +135,28 @@ export function LoginScreen() {
                   }}
                   style={styles.defaultServer}
                 >
-                  <AppText muted size={13}>使用 Ochi 默认服务</AppText>
+                  <AppText muted size={13}>{t("account.defaultServer")}</AppText>
                 </Pressable>
               )}
             </View>
           )}
+          <View style={styles.languages} accessibilityLabel={t("settings.language")}>
+            {([
+              { value: "system", title: t("settings.languageSystem") },
+              { value: "zh-CN", title: "简体中文" },
+              { value: "zh-TW", title: "繁體中文" },
+              { value: "en", title: "English" },
+            ] as const).map((choice) => <Pressable
+              key={choice.value}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: language === choice.value }}
+              disabled={loading}
+              onPress={() => { setError(""); void selectLanguage(choice.value).catch(() => setError(localizedError("error.save"))); }}
+              style={[styles.language, language === choice.value && { backgroundColor: colors.hover }]}
+            >
+              <AppText muted={language !== choice.value} size={12}>{choice.title}</AppText>
+            </Pressable>)}
+          </View>
         </View>
       </KeyboardAwareScrollView>
     </View>
@@ -161,4 +178,6 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   defaultServer: { alignSelf: "center", minHeight: 44, justifyContent: "center" },
+  languages: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 4, marginTop: 8 },
+  language: { minHeight: 44, justifyContent: "center", paddingHorizontal: 9, borderRadius: 14 },
 });

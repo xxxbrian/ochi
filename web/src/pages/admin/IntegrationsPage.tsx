@@ -1,3 +1,4 @@
+import { t, useAdminI18n } from "./i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
@@ -38,6 +39,7 @@ type SkillDraft = Partial<Skill> & {
   artifact_id?: string;
 };
 export function SkillsPage() {
+  useAdminI18n();
   const [items, setItems] = useState<Skill[]>([]);
   const [editor, setEditor] = useState<SkillDraft | null>(null);
   const [original, setOriginal] = useState<SkillDraft | null>(null);
@@ -57,7 +59,7 @@ export function SkillsPage() {
     try {
       setItems(await adminApi.skills());
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "加载失败");
+      setError(reason instanceof Error ? reason.message : t("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -87,7 +89,7 @@ export function SkillsPage() {
       setEditor(details);
       setOriginal(details);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "读取失败");
+      setError(reason instanceof Error ? reason.message : t("readFailed"));
     } finally {
       setBusy("");
     }
@@ -111,10 +113,10 @@ export function SkillsPage() {
             delete value[key];
       await adminApi.save<Skill>("skills", value, Boolean(editor.id));
       setEditor(null);
-      setNotice("已保存");
+      setNotice(t("saved"));
       void refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("saveFailed"));
     } finally {
       setBusy("");
     }
@@ -127,7 +129,7 @@ export function SkillsPage() {
       setUploadName(file.name);
       setEditor({ ...editor, artifact_id: artifact.id, source: artifact.path });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "上传失败");
+      setError(reason instanceof Error ? reason.message : t("uploadFailed"));
     } finally {
       setBusy("");
     }
@@ -136,10 +138,10 @@ export function SkillsPage() {
     setBusy(skill.id);
     try {
       const value = await adminApi.test("skills", skill.id);
-      if (!value.ok) throw new Error(value.error ?? "检查失败");
-      setNotice("检查通过");
+      if (!value.ok) throw new Error(value.error ?? t("validationFailed"));
+      setNotice(t("validationPassed"));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "检查失败");
+      setError(reason instanceof Error ? reason.message : t("validationFailed"));
     } finally {
       setBusy("");
     }
@@ -160,10 +162,10 @@ export function SkillsPage() {
         },
         true,
       );
-      setNotice("已更新");
+      setNotice(t("updated"));
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "更新失败");
+      setError(reason instanceof Error ? reason.message : t("updateFailed"));
     } finally {
       setBusy("");
     }
@@ -171,11 +173,10 @@ export function SkillsPage() {
   return (
     <>
       <div className="admin-page-heading">
-        <h2>Skill 组件</h2>
+        <h2>{t("skillComponents")}</h2>
         <button className="primary-button" onClick={() => void edit()}>
           <Plus size={16} />
-          安装 Skill
-        </button>
+          {t("installSkill")}</button>
       </div>
       <ErrorNotice error={error} notice={notice} />
       {loading ? (
@@ -198,14 +199,14 @@ export function SkillsPage() {
                   <small title={skill.source}>
                     {[
                       skill.version ? `v${skill.version}` : "",
-                      skill.source === "inline" ? "SKILL.md" : skill.source?.startsWith("http") || skill.source?.startsWith("git") ? "Git" : "压缩包",
+                      skill.source === "inline" ? "SKILL.md" : skill.source?.startsWith("http") || skill.source?.startsWith("git") ? "Git" : t("archive"),
                     ].filter(Boolean).join(" · ")}
                   </small>
                 </span>
                 <p>{skill.description}</p>
               </button>
               <InlineSwitch
-                title={`启用 ${skill.name}`}
+                title={t("enableNamed", { name: skill.name })}
                 value={skill.enabled}
                 updating={busy === skill.id}
                 onChange={(enabled) => {
@@ -223,16 +224,14 @@ export function SkillsPage() {
               />
               <ActionMenu
                 trigger={<MoreHorizontal size={18} />}
-                label="Skill 操作"
+                label={t("skillActions")}
               >
                 <MenuAction onClick={() => void edit(skill)}>
                   <Pencil size={15} />
-                  详情
-                </MenuAction>
+                  {t("details")}</MenuAction>
                 <MenuAction onClick={() => void test(skill)}>
                   <Check size={15} />
-                  检查
-                </MenuAction>
+                  {t("validate")}</MenuAction>
                 <MenuAction
                   onClick={() => {
                     setInstall(skill);
@@ -241,29 +240,26 @@ export function SkillsPage() {
                   }}
                 >
                   <Terminal size={15} />
-                  安装依赖
-                </MenuAction>
+                  {t("installDependencies")}</MenuAction>
                 {(skill.source?.startsWith("http") ||
                   skill.source?.startsWith("git")) && (
                   <MenuAction onClick={() => void update(skill)}>
                     <RefreshCw size={15} />
-                    更新
-                  </MenuAction>
+                    {t("update")}</MenuAction>
                 )}
                 <MenuAction danger onClick={() => setDeleting(skill)}>
                   <Trash2 size={15} />
-                  删除
-                </MenuAction>
+                  {t("delete")}</MenuAction>
               </ActionMenu>
             </article>
           ))}
-          {!items.length && <div className="empty-page">暂无 Skills</div>}
+          {!items.length && <div className="empty-page">{t("noSkills")}</div>}
         </div>
       )}
       {editor && (
         <Modal
           className="ochi-admin-modal"
-          title={editor.id ? editor.name || "Skill 详情" : "安装 Skill"}
+          title={editor.id ? editor.name || t("skillDetails") : t("installSkill")}
           onClose={() => setEditor(null)}
           size={editor.id || sourceType === "inline" ? "large" : "form"}
           footer={
@@ -273,16 +269,14 @@ export function SkillsPage() {
                 className="secondary-button"
                 onClick={() => setEditor(null)}
               >
-                取消
-              </button>
+                {t("cancel")}</button>
               <button
                 type="submit"
                 form="skill-editor"
                 className="primary-button"
                 disabled={busy === "save" || busy === "upload"}
               >
-                保存
-              </button>
+                {t("save")}</button>
             </div>
           }
         >
@@ -306,10 +300,10 @@ export function SkillsPage() {
             <div className="segmented-control">
               {[
                 { id: "git", label: "Git", icon: <GitBranch size={15} /> },
-                { id: "bundle", label: "压缩包", icon: <Upload size={15} /> },
+                { id: "bundle", label: t("archive"), icon: <Upload size={15} /> },
                 {
                   id: "inline",
-                  label: "直接编写",
+                  label: t("inlineSource"),
                   icon: <FileCode2 size={15} />,
                 },
               ].map((item) => (
@@ -326,7 +320,7 @@ export function SkillsPage() {
             </div>
             {sourceType === "git" ? (
               <>
-                <Field title="仓库地址">
+                <Field title={t("repositoryURL")}>
                   <input
                     required
                     type="url"
@@ -337,7 +331,7 @@ export function SkillsPage() {
                   />
                 </Field>
                 <div className="form-grid">
-                  <Field title="分支 / 版本">
+                  <Field title={t("branchOrVersion")}>
                     <input
                       value={editor.ref ?? ""}
                       onChange={(event) =>
@@ -345,7 +339,7 @@ export function SkillsPage() {
                       }
                     />
                   </Field>
-                  <Field title="仓库目录">
+                  <Field title={t("repositoryDirectory")}>
                     <input
                       value={editor.subdir ?? ""}
                       onChange={(event) =>
@@ -375,7 +369,7 @@ export function SkillsPage() {
                   {busy === "upload" ? (
                     <LoaderCircle className="spin" size={16} />
                   ) : (
-                    "选择压缩包"
+                    t("chooseArchive")
                   )}
                 </button>
               </div>
@@ -396,8 +390,7 @@ export function SkillsPage() {
             {editor.files?.length ? (
               <details className="advanced-section">
                 <summary>
-                  文件
-                  <ChevronDown size={14} />
+                  {t("files")}<ChevronDown size={14} />
                 </summary>
                 <div className="skill-files">
                   {editor.files.map((file) => (
@@ -410,7 +403,7 @@ export function SkillsPage() {
               </details>
             ) : null}
             <Toggle
-              title="启用"
+              title={t("enable")}
               value={editor.enabled ?? true}
               onChange={(enabled) => setEditor({ ...editor, enabled })}
             />
@@ -421,7 +414,7 @@ export function SkillsPage() {
       {install && (
         <Modal
           className="ochi-admin-modal"
-          title={`安装依赖 · ${install.name}`}
+          title={t("installDependenciesNamed", { name: install.name })}
           onClose={() => setInstall(null)}
           size="form"
           footer={
@@ -437,8 +430,7 @@ export function SkillsPage() {
                 ) : (
                   <Terminal size={15} />
                 )}
-                执行
-              </button>
+                {t("execute")}</button>
             </div>
           }
         >
@@ -453,14 +445,14 @@ export function SkillsPage() {
                 .then((value) => {
                   setResult(
                     [value.stdout, value.stderr].filter(Boolean).join("\n") ||
-                      "安装完成",
+                      t("installationComplete"),
                   );
                 })
                 .catch((reason: Error) => setError(reason.message))
                 .finally(() => setBusy(""));
             }}
           >
-            <Field title="命令">
+            <Field title={t("command")}>
               <textarea
                 rows={4}
                 className="code-input"
@@ -476,7 +468,7 @@ export function SkillsPage() {
       {deleting && (
         <Modal
           className="ochi-admin-modal"
-          title="删除 Skill？"
+          title={t("deleteSkillQuestion")}
           onClose={() => setDeleting(null)}
           size="small"
           footer={
@@ -485,8 +477,7 @@ export function SkillsPage() {
                 className="secondary-button"
                 onClick={() => setDeleting(null)}
               >
-                取消
-              </button>
+                {t("cancel")}</button>
               <button
                 className="danger-button"
                 disabled={busy === "delete"}
@@ -502,8 +493,7 @@ export function SkillsPage() {
                     .finally(() => setBusy(""));
                 }}
               >
-                删除
-              </button>
+                {t("delete")}</button>
             </div>
           }
         >
@@ -514,6 +504,7 @@ export function SkillsPage() {
   );
 }
 export function MCPPage() {
+  useAdminI18n();
   const [items, setItems] = useState<MCPServer[]>([]);
   const [editor, setEditor] = useState<Partial<MCPServer> | null>(null);
   const [env, setEnv] = useState<KeyValue[]>([]);
@@ -534,7 +525,7 @@ export function MCPPage() {
     try {
       setItems(await adminApi.mcp());
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "加载失败");
+      setError(reason instanceof Error ? reason.message : t("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -579,10 +570,10 @@ export function MCPPage() {
         Boolean(editor.id),
       );
       setEditor(null);
-      setNotice("已保存");
+      setNotice(t("saved"));
       void refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("saveFailed"));
     } finally {
       setBusy("");
     }
@@ -592,12 +583,12 @@ export function MCPPage() {
     setError("");
     try {
       const result = await adminApi.test("mcp", server.id);
-      if (!result.ok) throw new Error(result.error ?? "连接失败");
+      if (!result.ok) throw new Error(result.error ?? t("connectionFailed"));
       setTestTools({ ...server, tools: result.tools });
-      setNotice(`已连接 · ${result.tools?.length ?? 0} 个工具`);
+      setNotice(t("connectedTools", { count: result.tools?.length ?? 0 }));
       void refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "连接失败");
+      setError(reason instanceof Error ? reason.message : t("connectionFailed"));
     } finally {
       setBusy("");
     }
@@ -611,7 +602,7 @@ export function MCPPage() {
         parsed.command || parsed.url ? parsed : first?.[1]
       ) as Partial<MCPServer>;
       if (!server || (!server.command && !server.url))
-        throw new Error("未找到 MCP 配置");
+        throw new Error(t("noMCPConfig"));
       edit({
         ...server,
         name: server.name || first?.[0] || "",
@@ -634,17 +625,17 @@ export function MCPPage() {
     } catch (reason) {
       setError(
         reason instanceof SyntaxError
-          ? "JSON 格式不正确"
+          ? t("invalidJSON")
           : reason instanceof Error
             ? reason.message
-            : "导入失败",
+            : t("importFailed"),
       );
     }
   }
   return (
     <>
       <div className="admin-page-heading">
-        <h2>MCP 组件</h2>
+        <h2>{t("mcpComponents")}</h2>
         <div className="toolbar-actions">
           <button
             className="secondary-button"
@@ -654,12 +645,10 @@ export function MCPPage() {
               setError("");
             }}
           >
-            导入 JSON
-          </button>
+            {t("importJSON")}</button>
           <button className="primary-button" onClick={() => edit()}>
             <Plus size={16} />
-            添加 MCP
-          </button>
+            {t("addMCP")}</button>
         </div>
       </div>
       <ErrorNotice error={error} notice={notice} />
@@ -678,7 +667,7 @@ export function MCPPage() {
                 <span className="integration-name-line">
                   <strong>{server.name}</strong>
                   <small className={server.error ? "danger" : ""} title={server.error || undefined}>
-                    {server.error ? "连接失败" : server.status === "connected" ? `${server.tools?.length ?? 0} 个工具` : server.transport === "http" ? "HTTP" : "Stdio"}
+                    {server.error ? t("connectionFailed") : server.status === "connected" ? t("toolsCount", { count: server.tools?.length ?? 0 }) : server.transport === "http" ? "HTTP" : "Stdio"}
                   </small>
                 </span>
                 <p className="integration-command">
@@ -688,7 +677,7 @@ export function MCPPage() {
                 </p>
               </button>
               <InlineSwitch
-                title={`启用 ${server.name}`}
+                title={t("enableNamed", { name: server.name })}
                 value={server.enabled}
                 updating={busy === server.id}
                 onChange={(enabled) => {
@@ -706,34 +695,30 @@ export function MCPPage() {
               />
               <ActionMenu
                 trigger={<MoreHorizontal size={18} />}
-                label="MCP 操作"
+                label={t("mcpActions")}
               >
                 <MenuAction onClick={() => edit(server)}>
                   <Pencil size={15} />
-                  编辑
-                </MenuAction>
+                  {t("edit")}</MenuAction>
                 <MenuAction onClick={() => void test(server)}>
                   <Zap size={15} />
-                  测试连接
-                </MenuAction>
+                  {t("testConnection")}</MenuAction>
                 <MenuAction onClick={() => setTestTools(server)}>
                   <Plug size={15} />
-                  工具
-                </MenuAction>
+                  {t("tools")}</MenuAction>
                 <MenuAction danger onClick={() => setDeleting(server)}>
                   <Trash2 size={15} />
-                  删除
-                </MenuAction>
+                  {t("delete")}</MenuAction>
               </ActionMenu>
             </article>
           ))}
-          {!items.length && <div className="empty-page">暂无 MCP</div>}
+          {!items.length && <div className="empty-page">{t("noMCP")}</div>}
         </div>
       )}
       {editor && (
         <Modal
           className="ochi-admin-modal"
-          title={editor.id ? "编辑 MCP" : "添加 MCP"}
+          title={editor.id ? t("editMCP") : t("addMCP")}
           onClose={() => setEditor(null)}
           size="form"
           footer={
@@ -743,16 +728,14 @@ export function MCPPage() {
                 className="secondary-button"
                 onClick={() => setEditor(null)}
               >
-                取消
-              </button>
+                {t("cancel")}</button>
               <button
                 type="submit"
                 form="mcp-editor"
                 className="primary-button"
                 disabled={busy === "save"}
               >
-                保存
-              </button>
+                {t("save")}</button>
             </div>
           }
         >
@@ -765,7 +748,7 @@ export function MCPPage() {
             }}
           >
             <div className="form-grid">
-              <Field title="名称">
+              <Field title={t("name")}>
                 <input
                   required
                   value={editor.name ?? ""}
@@ -774,7 +757,7 @@ export function MCPPage() {
                   }
                 />
               </Field>
-              <Field title="连接方式">
+              <Field title={t("transport")}>
                 <SelectField
                   value={editor.transport ?? "stdio"}
                   onChange={(transport) =>
@@ -803,7 +786,7 @@ export function MCPPage() {
                   />
                 </Field>
                 <details className="advanced-section">
-                  <summary>请求头</summary>
+                  <summary>{t("requestHeaders")}</summary>
                   <KeyValueEditor
                     rows={headers}
                     onChange={setHeaders}
@@ -816,7 +799,7 @@ export function MCPPage() {
               </>
             ) : (
               <>
-                <Field title="命令">
+                <Field title={t("command")}>
                   <input
                     required
                     value={editor.command ?? ""}
@@ -826,13 +809,13 @@ export function MCPPage() {
                   />
                 </Field>
                 <div className="form-field">
-                  <span>参数</span>
+                  <span>{t("arguments")}</span>
                   <div className="argument-editor">
                     {args.map((arg, index) => (
                       <div key={index}>
                         <input
                           value={arg}
-                          aria-label={`参数 ${index + 1}`}
+                          aria-label={t("argumentNumber", { number: index + 1 })}
                           onChange={(event) =>
                             setArgs(
                               args.map((value, i) =>
@@ -844,7 +827,7 @@ export function MCPPage() {
                         <button
                           type="button"
                           className="icon-button"
-                          aria-label="删除参数"
+                          aria-label={t("deleteArgument")}
                           onClick={() =>
                             setArgs(args.filter((_, i) => i !== index))
                           }
@@ -859,13 +842,12 @@ export function MCPPage() {
                       onClick={() => setArgs([...args, ""])}
                     >
                       <Plus size={14} />
-                      添加参数
-                    </button>
+                      {t("addArgument")}</button>
                   </div>
                 </div>
                 <details className="advanced-section">
-                  <summary>高级设置</summary>
-                  <Field title="工作目录">
+                  <summary>{t("advancedSettings")}</summary>
+                  <Field title={t("workingDirectory")}>
                     <input
                       value={editor.cwd ?? ""}
                       onChange={(event) =>
@@ -874,7 +856,7 @@ export function MCPPage() {
                     />
                   </Field>
                   <div className="form-field">
-                    <span>环境变量</span>
+                    <span>{t("environmentVariables")}</span>
                     <KeyValueEditor
                       rows={env}
                       onChange={setEnv}
@@ -888,7 +870,7 @@ export function MCPPage() {
               </>
             )}
             <Toggle
-              title="启用"
+              title={t("enable")}
               value={editor.enabled ?? true}
               onChange={(enabled) => setEditor({ ...editor, enabled })}
             />
@@ -899,7 +881,7 @@ export function MCPPage() {
       {importing && (
         <Modal
           className="ochi-admin-modal"
-          title="导入 MCP JSON"
+          title={t("importMCPJSON")}
           onClose={() => setImporting(false)}
           size="large"
           footer={
@@ -909,8 +891,7 @@ export function MCPPage() {
                 disabled={!json.trim()}
                 onClick={importJSON}
               >
-                导入
-              </button>
+                {t("import")}</button>
             </div>
           }
         >
@@ -926,7 +907,7 @@ export function MCPPage() {
       {testTools && (
         <Modal
           className="ochi-admin-modal"
-          title={`${testTools.name} · 工具`}
+          title={t("namedTools", { name: testTools.name })}
           onClose={() => setTestTools(null)}
           size="large"
         >
@@ -943,7 +924,7 @@ export function MCPPage() {
                   <p>{value.description}</p>
                   {value.inputSchema ? (
                     <details className="technical-details">
-                      <summary>参数</summary>
+                      <summary>{t("arguments")}</summary>
                       <pre>{JSON.stringify(value.inputSchema, null, 2)}</pre>
                     </details>
                   ) : null}
@@ -951,7 +932,7 @@ export function MCPPage() {
               );
             })}
             {!testTools.tools?.length && (
-              <div className="empty-page">暂无工具</div>
+              <div className="empty-page">{t("noTools")}</div>
             )}
           </div>
         </Modal>
@@ -959,7 +940,7 @@ export function MCPPage() {
       {deleting && (
         <Modal
           className="ochi-admin-modal"
-          title="删除 MCP？"
+          title={t("deleteMCPQuestion")}
           onClose={() => setDeleting(null)}
           size="small"
           footer={
@@ -968,8 +949,7 @@ export function MCPPage() {
                 className="secondary-button"
                 onClick={() => setDeleting(null)}
               >
-                取消
-              </button>
+                {t("cancel")}</button>
               <button
                 className="danger-button"
                 disabled={busy === "delete"}
@@ -985,8 +965,7 @@ export function MCPPage() {
                     .finally(() => setBusy(""));
                 }}
               >
-                删除
-              </button>
+                {t("delete")}</button>
             </div>
           }
         >

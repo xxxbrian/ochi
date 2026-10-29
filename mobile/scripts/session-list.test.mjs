@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { appendSessionPage, createSessionListCache, mergeFirstSessionPage, sessionActivity } from '../src/lib/sessionList.ts';
+import localeTools from './helpers/i18n.cjs';
+const { appendSessionPage, createSessionListCache, mergeFirstSessionPage, sessionActivity } = localeTools.testI18n.load('src/lib/sessionList.ts');
 
 const session = (rank, patch = {}) => ({
   id: `session-${String(rank).padStart(3, '0')}`, title: `Conversation ${rank}`, computer_enabled: false,
@@ -52,7 +53,7 @@ test('quiet refresh failure keeps already visible sessions', async () => {
   fail = true;
   assert.equal(await cache.refresh(), null);
   assert.equal(cache.getSnapshot().page, retained);
-  assert.equal(cache.getSnapshot().error, 'Network unavailable');
+  assert.equal(cache.getSnapshot().error.message, '加载失败');
   assert.equal(cache.getSnapshot().refreshing, false);
 });
 

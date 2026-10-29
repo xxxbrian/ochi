@@ -4,6 +4,8 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 const ts = require("typescript");
+const { createI18nHarness } = require("./i18n-harness.cjs");
+const i18n = createI18nHarness();
 
 function load(file, imports = {}, tail = "", globals = {}) {
   const source = fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
@@ -11,7 +13,7 @@ function load(file, imports = {}, tail = "", globals = {}) {
   const module = { exports: {} };
   vm.runInNewContext(output + tail, {
     module, exports: module.exports, URL, ...globals,
-    require(name) { if (name in imports) return imports[name]; throw new Error(`Unexpected import ${name}`); },
+    require(name) { if (name in imports) return imports[name]; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
   }, { filename: file });
   return module.exports;
 }
@@ -216,6 +218,17 @@ test("new session projection has no inherited run and an empty live answer still
   assert.equal(live.length, 1);
   assert.equal(live[0].content, "");
   assert.equal(live[0].run_id, "A");
+});
+
+test("terminal SSE and unsaved assistant projection preserve the stable error code for viewer-language rendering", () => {
+  const event = parseRunEvent({ type: "status", data: JSON.stringify({
+    run_id: "A", seq: 9, status: "failed", error: "raw provider diagnostic", error_code: "run_timeout",
+  }) });
+  const failed = reduceRunDelta(snapshot(), event);
+  assert.equal(failed.error_code, "run_timeout");
+  const message = projectChatMessages([], failed)[0];
+  assert.equal(message.run_error_code, "run_timeout");
+  assert.equal(message.run_error, "raw provider diagnostic");
 });
 
 test("run artifacts project into the canonical message attachment field", () => {

@@ -1,3 +1,4 @@
+import { t, useI18n, getLocale, formatNumber } from "../lib/i18n";
 import { lazy, memo, Suspense, useEffect, useState } from "react";
 import {
   Code2,
@@ -16,10 +17,10 @@ const MarkdownContent = lazy(() => import("./MarkdownContent"));
 
 export function sizeText(size: number) {
   return size < 1024
-    ? `${size} B`
+    ? `${formatNumber(size)} B`
     : size < 1024 * 1024
-      ? `${(size / 1024).toFixed(1)} KB`
-      : `${(size / 1024 / 1024).toFixed(1)} MB`;
+      ? `${formatNumber(size / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KB`
+      : `${formatNumber(size / 1024 / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }
 export function downloadUrl(file: Artifact) {
   return `${file.url}${file.url.includes("?") ? "&" : "?"}download=1`;
@@ -68,6 +69,7 @@ export function ArtifactPreview({
   file: Artifact;
   onClose: () => void;
 }) {
+  useI18n();
   const type = previewType(file);
   const [source, setSource] = useState("");
   const [loading, setLoading] = useState(
@@ -86,9 +88,9 @@ export function ArtifactPreview({
     if (!["html", "svg", "markdown", "code"].includes(type)) return;
     const controller = new AbortController();
     setLoading(true);
-    void fetch(file.url, { credentials: "include", signal: controller.signal })
+    void fetch(file.url, { credentials: "include", headers: { "Accept-Language": getLocale() }, signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) throw new Error("无法加载文件");
+        if (!response.ok) throw new Error(t("file.loadError"));
         const bytes = await response.arrayBuffer();
         return new TextDecoder("utf-8").decode(bytes);
       })
@@ -119,7 +121,7 @@ export function ArtifactPreview({
               onClick={() => setMode("preview")}
             >
               {type === "html" || type === "svg" ? <Play size={15} /> : <FileText size={15} />}
-              预览
+              {t("file.preview")}
             </button>
           )}
           {["html", "svg", "markdown", "code"].includes(type) && (
@@ -128,7 +130,7 @@ export function ArtifactPreview({
               onClick={() => setMode("source")}
             >
               <Code2 size={15} />
-              源码
+              {t("file.source")}
             </button>
           )}
         </div>}
@@ -137,7 +139,7 @@ export function ArtifactPreview({
           <button
             className="icon-button"
             onClick={() => setFullscreen((value) => !value)}
-            aria-label={fullscreen ? "退出全屏" : "全屏"}
+            aria-label={fullscreen ? t("common.exitFullscreen") : t("common.fullscreen")}
           >
             {fullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
           </button>
@@ -145,7 +147,7 @@ export function ArtifactPreview({
             className="icon-button"
             href={downloadUrl(file)}
             download={file.name}
-            aria-label="下载"
+            aria-label={t("file.download")}
           >
             <Download size={17} />
           </a>
@@ -195,14 +197,14 @@ export function ArtifactPreview({
               download={file.name}
             >
               <Download size={16} />
-              下载文件
+              {t("file.downloadFile")}
             </a>
           </div>
         )}
       </div>
       {file.generation && (
         <details className="generation-details">
-          <summary>{file.generation.model_name || "图片详情"}</summary>
+          <summary>{file.generation.model_name || t("file.imageDetails")}</summary>
           <p>{file.generation.prompt}</p>
           {file.generation.revised_prompt && file.generation.revised_prompt !== file.generation.prompt && <p>{file.generation.revised_prompt}</p>}
           <span>{[file.generation.size, file.generation.quality, file.generation.output_format?.toUpperCase()].filter(Boolean).join(" · ")}</span>
@@ -220,6 +222,7 @@ export const FileCards = memo(function FileCards({
   variant?: "artifact" | "attachment";
   compactImages?: boolean;
 }) {
+  useI18n();
   const [preview, setPreview] = useState<Artifact | null>(null);
   if (!files?.length) return null;
   return (
@@ -227,10 +230,10 @@ export const FileCards = memo(function FileCards({
       <div className={`file-cards ${variant === "attachment" ? "attachment-cards" : "artifact-cards"}`}>
         {files.map((file) => file.mime_type.startsWith("image/") && !compactImages ? (
           <div className={`message-image${file.generation ? " generated-image" : ""}`} key={file.id}>
-            <button className="message-image-open" onClick={() => setPreview(file)} aria-label={`查看图片 ${file.name}`}>
+            <button className="message-image-open" onClick={() => setPreview(file)} aria-label={t("file.viewImage", { name: file.name })}>
               <img src={file.url} alt={file.generation?.prompt || file.name} loading="lazy" decoding="async" width={file.generation?.width} height={file.generation?.height} />
             </button>
-            <a className="icon-button image-download" href={downloadUrl(file)} download={file.name} aria-label={`下载 ${file.name}`}>
+            <a className="icon-button image-download" href={downloadUrl(file)} download={file.name} aria-label={t("file.downloadName", { name: file.name })}>
               <Download size={16} />
             </a>
           </div>
@@ -256,7 +259,7 @@ export const FileCards = memo(function FileCards({
               className="icon-button"
               href={downloadUrl(file)}
               download={file.name}
-              aria-label={`下载 ${file.name}`}
+              aria-label={t("file.downloadName", { name: file.name })}
             >
               <Download size={17} />
             </a>

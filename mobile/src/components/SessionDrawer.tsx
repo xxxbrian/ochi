@@ -1,3 +1,5 @@
+import { errorForDisplay, type DisplayError } from "../lib/errors";
+import { t, useI18n } from "../lib/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -52,6 +54,7 @@ export function SessionDrawer({
   onDeletedSession: (sessionId: string) => void;
   activeId?: string;
 }) {
+  useI18n();
   const { user, colors, dark, invalidateLists, signOut } =
     useApp();
   const { page, refreshing, error: listError, cache } = useSessionList();
@@ -66,7 +69,7 @@ export function SessionDrawer({
   const loading = !page && refreshing;
   const [pulling, setPulling] = useState(false);
   const [paging, setPaging] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [search, setSearch] = useState(false);
   const [accountMenu, setAccountMenu] = useState(false);
   const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 44, height: 44 });
@@ -132,7 +135,7 @@ export function SessionDrawer({
       }
     } catch (reason) {
       if (current === sequence.current)
-        setError(reason instanceof Error ? reason.message : "加载失败");
+        setError(errorForDisplay(reason, "error.load"));
     } finally {
       if (current === sequence.current) {
         loadingMore.current = false;
@@ -144,7 +147,7 @@ export function SessionDrawer({
     try {
       onNavigate(path);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "无法打开页面");
+      setError(errorForDisplay(reason, "error.openPage"));
     }
   }
   async function rename(title: string) {
@@ -157,10 +160,10 @@ export function SessionDrawer({
     invalidateLists();
   }
   function remove(item: Session) {
-    Alert.alert("删除对话？", item.title, [
-      { text: "取消", style: "cancel" },
+    Alert.alert(t("chat.deleteConfirm"), item.title || t("chat.new"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "删除",
+        text: t("common.delete"),
         style: "destructive",
         onPress: () => {
           if (!canAct()) return;
@@ -175,7 +178,7 @@ export function SessionDrawer({
               onDeletedSession(item.id);
             })
             .catch((reason) => {
-              if (owner === sequence.current) setError(reason instanceof Error ? reason.message : "删除失败");
+              if (owner === sequence.current) setError(errorForDisplay(reason, "error.delete"));
             });
         },
       },
@@ -183,15 +186,15 @@ export function SessionDrawer({
   }
   function logout() {
     setAccountMenu(false);
-    Alert.alert("退出登录？", undefined, [
-      { text: "取消", style: "cancel" },
+    Alert.alert(t("account.signOutConfirm"), undefined, [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "退出登录",
+        text: t("account.signOut"),
         onPress: () => {
           void signOut()
             .then(() => router.replace("/login"))
             .catch((reason) =>
-              setError(reason instanceof Error ? reason.message : "退出失败"),
+              setError(errorForDisplay(reason, "error.signOut")),
             );
         },
       },
@@ -202,7 +205,7 @@ export function SessionDrawer({
       ? [
           {
             key: "admin",
-            title: "管理后台",
+            title: t("admin.title"),
             icon: Shield,
             onPress: () => {
               setAccountMenu(false);
@@ -213,7 +216,7 @@ export function SessionDrawer({
       : []),
     {
       key: "logout",
-      title: "退出登录",
+      title: t("account.signOut"),
       icon: LogOut,
       separatorBefore: user?.role === "admin",
       onPress: logout,
@@ -234,7 +237,7 @@ export function SessionDrawer({
       <Pressable
         ref={account}
         accessibilityRole="button"
-        accessibilityLabel="账号选项"
+        accessibilityLabel={t("account.options")}
         onPress={() => {
           if (!canAct()) return;
           const owner = canAct;
@@ -276,25 +279,24 @@ export function SessionDrawer({
           <View>
             <View style={styles.destinations}>
               {[
-                { icon: CalendarClock, title: "定时任务", path: "/tasks" },
-                { icon: Folder, title: "项目", path: "/projects" },
-                { icon: Monitor, title: "电脑", path: "/computer" },
+                { icon: CalendarClock, title: t("schedule.title"), path: "/tasks" },
+                { icon: Folder, title: t("project.title"), path: "/projects" },
+                { icon: Monitor, title: t("computer.title"), path: "/computer" },
               ].map((item) => (
                 <Pressable
                   key={item.path}
                   accessibilityRole="button"
-                  accessibilityLabel={item.title}
+                  accessibilityLabel={item.title || t("chat.new")}
                   onPress={() => navigate(item.path)}
                   style={styles.destination}
                 >
                   <item.icon size={22} color={colors.muted} strokeWidth={1.8} />
-                  <AppText size={16}>{item.title}</AppText>
+                  <AppText size={16}>{item.title || t("chat.new")}</AppText>
                 </Pressable>
               ))}
             </View>
             <AppText muted size={13} style={styles.label}>
-              对话
-            </AppText>
+              {t("chat.chats")}</AppText>
             <ErrorNotice error={error || listError} />
           </View>
         }
@@ -323,14 +325,14 @@ export function SessionDrawer({
       <View style={styles.bottom}>
         <IconButton
           icon={Settings}
-          label="设置"
+          label={t("settings.title")}
           variant="glass"
           onPress={() => navigate("/settings")}
         />
         <GlassSurface interactive style={styles.search}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="搜索对话"
+            accessibilityLabel={t("search.chats")}
             onPress={() => {
               if (!canAct()) return;
               searchSelection.current = onSelectSession;
@@ -340,13 +342,12 @@ export function SessionDrawer({
           >
             <Search size={20} color={colors.muted} />
             <AppText muted size={15}>
-              搜索
-            </AppText>
+              {t("common.search")}</AppText>
           </Pressable>
         </GlassSurface>
         <IconButton
           icon={SquarePen}
-          label="新对话"
+          label={t("chat.new")}
           variant="filled"
           onPress={onNewChat}
         />
@@ -387,12 +388,13 @@ function DrawerSession({
   onRename: () => void;
   onDelete: () => void;
 }) {
+  useI18n();
   const { colors } = useTheme();
   const activity = sessionActivity(item);
   const content = <>
     <View style={styles.sessionTitle}>
       <AppText size={15} numberOfLines={1} style={{ flex: 1 }}>
-        {item.title}
+        {item.title || t("chat.new")}
       </AppText>
       {activity?.spinning ? <ActivityIndicator size="small" color={colors.muted} style={styles.runIndicator} /> : activity ? <View style={[styles.statusDot, { backgroundColor: colors.muted }]} /> : null}
     </View>
@@ -410,17 +412,17 @@ function DrawerSession({
   );
   return (
     <LongPressMenu
-      label={activity ? `${item.title}，${activity.label}` : item.title}
+      label={activity ? `${item.title || t("chat.new")}，${activity.label}` : item.title}
       selected={selected}
       onPress={onPress}
       preview={preview}
       previewRadius={12}
       style={styles.sessionTrigger}
       items={[
-        { key: "rename", title: "重命名", icon: Pencil, onPress: onRename },
+        { key: "rename", title: t("common.rename"), icon: Pencil, onPress: onRename },
         {
           key: "delete",
-          title: "删除",
+          title: t("common.delete"),
           icon: Trash2,
           danger: true,
           separatorBefore: true,

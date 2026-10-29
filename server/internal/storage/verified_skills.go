@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"ochi/server/internal/i18n"
 )
 
 const VerifiedSkillPrefix = "private:"
@@ -40,13 +42,13 @@ var verifiedSkillName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
 func ValidateVerifiedSkill(v VerifiedSkillInput) error {
 	if !verifiedSkillName.MatchString(v.Name) {
-		return errors.New("skill name must be a lowercase slug of 1-64 letters, digits, hyphens or underscores")
+		return i18n.New("skill_name_invalid")
 	}
 	if strings.TrimSpace(v.Description) == "" || len(v.Description) > 1000 {
-		return errors.New("skill description must contain 1-1000 bytes")
+		return i18n.New("skill_description_invalid")
 	}
 	if strings.TrimSpace(v.Body) == "" || len(v.Body) > MaxVerifiedSkillBody {
-		return errors.New("skill body must contain 1-16384 bytes")
+		return i18n.New("skill_body_invalid")
 	}
 	return nil
 }
@@ -55,7 +57,7 @@ func ValidateVerifiedSkill(v VerifiedSkillInput) error {
 // progress, old successes and self-asserted prose are not verification evidence.
 func VerifiedMethodEvidence(task TaskState, runID string) ([]TaskEvidence, error) {
 	if runID == "" || task.Status != "complete" || !TaskChecksComplete(task, task.Verification) {
-		return nil, errors.New("complete and verify the current task before promoting a skill")
+		return nil, i18n.New("skill_task_incomplete")
 	}
 	kinds := make(map[string]string, len(task.Acceptance))
 	for _, check := range task.Acceptance {
@@ -75,7 +77,7 @@ func VerifiedMethodEvidence(task TaskState, runID string) ([]TaskEvidence, error
 		}
 	}
 	if len(evidence) == 0 {
-		return nil, errors.New("skill promotion requires a real passed command, test, file or artifact check from this run")
+		return nil, i18n.New("skill_evidence_required")
 	}
 	return evidence, nil
 }
@@ -100,13 +102,13 @@ func (s *Store) PromoteVerifiedSkill(ctx context.Context, userID, sessionID, run
 	if !input.ProjectScoped {
 		projectID = ""
 	} else if projectID == "" {
-		return VerifiedSkill{}, errors.New("a project-scoped skill requires a project conversation")
+		return VerifiedSkill{}, i18n.New("skill_project_required")
 	}
 	var raw []byte
 	var revision int64
 	err = tx.QueryRow(ctx, `SELECT state,revision FROM session_tasks WHERE session_id=$1 AND user_id=$2 FOR UPDATE`, sessionID, userID).Scan(&raw, &revision)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return VerifiedSkill{}, errors.New("no verified task is available to promote")
+		return VerifiedSkill{}, i18n.New("skill_verified_task_missing")
 	}
 	if err != nil {
 		return VerifiedSkill{}, err
@@ -168,7 +170,7 @@ func (s *Store) VerifiedSkills(ctx context.Context, userID, projectID string, li
 func (s *Store) ReadVerifiedSkill(ctx context.Context, userID, projectID, id string) (VerifiedSkill, error) {
 	name := strings.TrimPrefix(id, VerifiedSkillPrefix)
 	if id == name || !verifiedSkillName.MatchString(name) {
-		return VerifiedSkill{}, errors.New("invalid private skill id")
+		return VerifiedSkill{}, i18n.New("skill_id_invalid")
 	}
 	var v VerifiedSkill
 	var proof []byte

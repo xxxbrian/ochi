@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/product"
 )
 
@@ -59,25 +60,25 @@ func ValidateImageOptions(options ImageOptions) error {
 	if options.Size != "" && options.Size != "auto" {
 		parts := imageSizePattern.FindStringSubmatch(options.Size)
 		if len(parts) != 3 {
-			return errors.New("图片尺寸应为 auto 或 宽x高，例如 1024x1024")
+			return i18n.New("image_size_invalid")
 		}
 		w, _ := strconv.Atoi(parts[1])
 		h, _ := strconv.Atoi(parts[2])
 		if w > 8192 || h > 8192 || w*h > 32*1024*1024 {
-			return errors.New("图片尺寸过大")
+			return i18n.New("image_size_too_large")
 		}
 	}
 	if !slices.Contains([]string{"", "auto", "low", "medium", "high", "xhigh", "max", "standard", "hd"}, options.Quality) {
-		return errors.New("图片质量选项无效")
+		return i18n.New("image_quality_invalid")
 	}
 	if !slices.Contains([]string{"", "png", "jpeg", "webp"}, options.OutputFormat) {
-		return errors.New("图片格式应为 png、jpeg 或 webp")
+		return i18n.New("image_format_invalid")
 	}
 	if !slices.Contains([]string{"", "auto", "opaque", "transparent"}, options.Background) {
-		return errors.New("图片背景选项无效")
+		return i18n.New("image_background_invalid")
 	}
 	if options.OutputFormat == "jpeg" && options.Background == "transparent" {
-		return errors.New("透明背景需要 png 或 webp 格式")
+		return i18n.New("image_transparency_invalid")
 	}
 	return nil
 }
@@ -94,22 +95,22 @@ func validateImageModelOptions(model string, options ImageOptions) error {
 	id := imageModelID(model)
 	if id == "gpt-image-2" {
 		if options.Quality == "xhigh" || options.Quality == "max" || options.Quality == "standard" || options.Quality == "hd" {
-			return errors.New("gpt-image-2 的图片质量支持 low、medium、high 或 auto")
+			return i18n.New("gpt_image_quality_invalid")
 		}
 		if parts := imageSizePattern.FindStringSubmatch(options.Size); len(parts) == 3 {
 			w, _ := strconv.Atoi(parts[1])
 			h, _ := strconv.Atoi(parts[2])
 			if w%16 != 0 || h%16 != 0 || w > 3840 || h > 3840 || w > h*3 || h > w*3 || w*h < 655360 || w*h > 8294400 {
-				return errors.New("gpt-image-2 尺寸需为 16 的倍数、最长边不超过 3840、比例不超过 3:1，总像素为 655360–8294400")
+				return i18n.New("gpt_image_size_invalid")
 			}
 		}
 	}
 	if strings.HasPrefix(id, "dall-e-") {
 		if options.OutputFormat != "" && options.OutputFormat != "png" || options.Background != "" && options.Background != "auto" && options.Background != "opaque" {
-			return errors.New("DALL-E 不支持自定义输出格式或透明背景")
+			return i18n.New("dalle_format_unsupported")
 		}
 		if id == "dall-e-3" && len(options.Images) > 0 {
-			return errors.New("DALL-E 3 不支持参考图片编辑")
+			return i18n.New("dalle_edit_unsupported")
 		}
 	}
 	return nil
@@ -120,11 +121,11 @@ func validateImageModelOptions(model string, options ImageOptions) error {
 func GenerateImage(ctx context.Context, config Config, options ImageOptions) (generated GeneratedImage, resultErr error) {
 	ctx = defaultProviderTracePurpose(ctx, "image")
 	if config.BaseURL == "" || config.Model == "" || config.APIKey == "" && !config.AllowNoKey {
-		return GeneratedImage{}, errors.New("请先配置可用的生图服务")
+		return GeneratedImage{}, i18n.New("image_provider_required")
 	}
 	options.Prompt = strings.TrimSpace(options.Prompt)
 	if options.Prompt == "" || len([]rune(options.Prompt)) > 32000 {
-		return GeneratedImage{}, errors.New("请提供有效的图片描述")
+		return GeneratedImage{}, i18n.New("image_prompt_invalid")
 	}
 	if err := validateImageModelOptions(config.Model, options); err != nil {
 		return GeneratedImage{}, err
@@ -153,7 +154,7 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (ge
 		}
 	} else {
 		if len(options.Images) > 8 {
-			return GeneratedImage{}, errors.New("参考图片最多为 8 张")
+			return GeneratedImage{}, i18n.New("reference_images_limit")
 		}
 		endpoint = "/images/edits"
 		writer := multipart.NewWriter(&body)
@@ -168,7 +169,7 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (ge
 		for index, input := range options.Images {
 			mime, ext, _, _, err := generatedImageType(input.Data)
 			if err != nil || len(input.Data) > 32<<20 {
-				return GeneratedImage{}, errors.New("参考图片需为有效的 PNG、JPEG 或 WebP，且不超过 32 MB")
+				return GeneratedImage{}, i18n.New("reference_image_format_invalid")
 			}
 			field := "image[]"
 			if dalle {
@@ -192,7 +193,7 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (ge
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(config.BaseURL, "/")+endpoint, &body)
 	if err != nil {
-		return GeneratedImage{}, errors.New("生图服务地址无效")
+		return GeneratedImage{}, i18n.New("image_provider_url_invalid")
 	}
 	req.Header.Set("User-Agent", product.UserAgent())
 	for key, value := range config.Headers {
@@ -209,7 +210,7 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (ge
 	resp, err := client.Do(capture.request(req))
 	if err != nil {
 		capture.finish(nil, connectionError(err))
-		return GeneratedImage{}, errors.New("生图服务连接中断，未自动重试")
+		return GeneratedImage{}, i18n.New("image_provider_connection_failed")
 	}
 	capture.responseHeaders(resp)
 	defer resp.Body.Close()
@@ -222,7 +223,8 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (ge
 			} `json:"error"`
 		}
 		_ = json.NewDecoder(io.LimitReader(resp.Body, 8192)).Decode(&failure)
-		return GeneratedImage{}, fmt.Errorf("生图服务返回 HTTP %d: %.1000s", resp.StatusCode, failure.Error.Message)
+		return GeneratedImage{}, i18n.WrapWith("image_provider_http_error", map[string]any{"status": resp.StatusCode},
+			fmt.Errorf("image provider returned HTTP %d: %.1000s", resp.StatusCode, failure.Error.Message))
 	}
 	var response struct {
 		Data []struct {
@@ -239,7 +241,7 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (ge
 		} `json:"usage"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxGeneratedImageBytes*4/3+1048576)).Decode(&response); err != nil || len(response.Data) == 0 {
-		return GeneratedImage{}, errors.New("生图服务未返回有效图片")
+		return GeneratedImage{}, i18n.New("image_response_invalid")
 	}
 	imageUsage := Usage{PromptTokens: response.Usage.InputTokens, CompletionTokens: response.Usage.OutputTokens, TotalTokens: response.Usage.TotalTokens}
 	traceUsage = &imageUsage
@@ -247,16 +249,16 @@ func GenerateImage(ctx context.Context, config Config, options ImageOptions) (ge
 	var data []byte
 	if result.Base64 != "" {
 		if base64.StdEncoding.DecodedLen(len(result.Base64)) > maxGeneratedImageBytes {
-			return GeneratedImage{}, errors.New("生成的图片超过 50 MB")
+			return GeneratedImage{}, i18n.New("generated_image_too_large")
 		}
 		data, err = base64.StdEncoding.DecodeString(result.Base64)
 	} else if result.URL != "" {
 		data, err = downloadGeneratedImage(ctx, client, result.URL, config)
 	} else {
-		err = errors.New("生图服务未返回图片内容")
+		err = i18n.New("image_content_missing")
 	}
 	if err != nil {
-		return GeneratedImage{}, errors.New("生成图片下载失败，未重新生成")
+		return GeneratedImage{}, i18n.New("image_download_failed")
 	}
 	mime, ext, width, height, err := generatedImageType(data)
 	if err != nil {
@@ -299,7 +301,7 @@ func downloadGeneratedImage(ctx context.Context, client *http.Client, location s
 
 func generatedImageType(data []byte) (mime, extension string, width, height int, err error) {
 	if len(data) == 0 || len(data) > maxGeneratedImageBytes {
-		return "", "", 0, 0, errors.New("生成的图片内容无效")
+		return "", "", 0, 0, i18n.New("image_content_invalid")
 	}
 	if len(data) >= 30 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP" {
 		switch string(data[12:16]) {
@@ -325,5 +327,5 @@ func generatedImageType(data []byte) (mime, extension string, width, height int,
 	if decodeErr == nil && (format == "png" || format == "jpeg") {
 		return "image/" + format, format, config.Width, config.Height, nil
 	}
-	return "", "", 0, 0, errors.New("生图服务返回的内容不是有效的 PNG、JPEG 或 WebP 图片")
+	return "", "", 0, 0, i18n.New("image_response_format_invalid")
 }

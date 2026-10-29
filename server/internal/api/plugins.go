@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/storage"
 )
 
@@ -91,7 +91,7 @@ func (s *Server) setUserPlugin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Enabled == nil {
-		writeError(w, http.StatusBadRequest, errors.New("enabled is required"))
+		writeError(w, http.StatusBadRequest, i18n.New("plugin_enabled_required"))
 		return
 	}
 	value, err := s.store.SetUserPlugin(r.Context(), currentUser(r).ID, r.PathValue("id"), *input.Enabled)
@@ -114,7 +114,7 @@ func (s *Server) listAdminPlugins(w http.ResponseWriter, r *http.Request) {
 func (s *Server) listPluginComponents(w http.ResponseWriter, r *http.Request) {
 	values, err := s.pluginComponents(r.Context())
 	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, errors.New("插件组件暂时不可用，请重试"))
+		writeError(w, http.StatusServiceUnavailable, i18n.New("plugin_unavailable"))
 		return
 	}
 	writeJSON(w, http.StatusOK, values)
@@ -150,7 +150,7 @@ func (s *Server) saveAdminPlugin(w http.ResponseWriter, r *http.Request) {
 	previous := value
 	if input.ID != nil {
 		if !create && *input.ID != value.ID {
-			writeError(w, http.StatusBadRequest, errors.New("plugin ID cannot be changed"))
+			writeError(w, http.StatusBadRequest, i18n.New("plugin_id_immutable"))
 			return
 		}
 		value.ID = *input.ID
@@ -180,7 +180,7 @@ func (s *Server) saveAdminPlugin(w http.ResponseWriter, r *http.Request) {
 	if create || !sameComponentIDs(previous.SkillIDs, value.SkillIDs) || !sameComponentIDs(previous.MCPIDs, value.MCPIDs) {
 		components, err := s.pluginComponents(r.Context())
 		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, errors.New("插件组件暂时不可用，请重试"))
+			writeError(w, http.StatusServiceUnavailable, i18n.New("plugin_unavailable"))
 			return
 		}
 		for kind, requested := range map[string][]string{"skills": value.SkillIDs, "mcp": value.MCPIDs} {
@@ -194,7 +194,7 @@ func (s *Server) saveAdminPlugin(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, id := range requested {
 				if !known[id] {
-					writeError(w, http.StatusBadRequest, fmt.Errorf("unknown %s component %q", kind, id))
+					writeError(w, http.StatusBadRequest, i18n.New("plugin_component_unknown"))
 					return
 				}
 			}

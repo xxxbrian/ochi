@@ -1,3 +1,4 @@
+import { t, useAdminI18n, getLocale, translateError } from "./i18n";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { adminApi } from "../../lib/api";
 import { moveModel } from "../../lib/modelSelection";
+import { effortLabel } from "../../lib/reasoningLabels";
 import type { CatalogModel, Model, Provider } from "../../lib/types";
 import { Modal } from "../../components/Modal";
 import { BrandIcon } from "../../components/BrandIcon";
@@ -64,6 +66,7 @@ function modelDraft(providerId: string): Model {
   };
 }
 export default function ProvidersPage() {
+  useAdminI18n();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [models, setModels] = useState<Model[]>([]);
   const [selected, setSelected] = useState("");
@@ -116,7 +119,7 @@ export default function ProvidersPage() {
           : (list[0]?.id ?? ""),
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "加载失败");
+      setError(reason instanceof Error ? reason.message : t("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -140,9 +143,9 @@ export default function ProvidersPage() {
       await adminApi.saveModelOrder(modelOrder, defaultModel);
       await refresh();
       setModelOrder(null);
-      setNotice("模型顺序和默认模型已保存");
+      setNotice(t("modelOrderSaved"));
     } catch (reason) {
-      setOrderError(reason instanceof Error ? reason.message : "保存失败");
+      setOrderError(reason instanceof Error ? reason.message : t("saveFailed"));
     } finally { setBusy(""); }
   }
   const filtered = useMemo(
@@ -215,9 +218,9 @@ export default function ProvidersPage() {
       setProviderEditor(null);
       await refresh();
       setSelected(saved.id);
-      setNotice(saved.sync_error ? `已保存 · ${saved.sync_error}` : saved.imported ? `已保存 · ${saved.imported} 个模型` : "已保存");
+      setNotice(saved.sync_error ? t("savedWithError", { error: translateError(saved.sync_error_code) ?? saved.sync_error }) : saved.imported ? t("modelsSaved", { count: saved.imported }) : t("saved"));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("saveFailed"));
     } finally {
       setBusy("");
     }
@@ -265,14 +268,14 @@ export default function ProvidersPage() {
       await adminApi.save<Model>("models", payload, Boolean(value.id));
       setModelEditor(null);
       await refresh();
-      setNotice("已保存");
+      setNotice(t("saved"));
     } catch (reason) {
       setError(
         reason instanceof SyntaxError
-          ? "参数映射格式不正确"
+          ? t("invalidParameterMapping")
           : reason instanceof Error
             ? reason.message
-            : "保存失败",
+            : t("saveFailed"),
       );
     } finally {
       setBusy("");
@@ -284,15 +287,15 @@ export default function ProvidersPage() {
     setNotice("");
     try {
       const value = await adminApi.test(kind, id, options);
-      if (!value.ok) throw new Error(value.error ?? "连接失败");
+      if (!value.ok) throw new Error(translateError(value.error_code, value.error_params) ?? value.error ?? t("connectionFailed"));
       setNotice(
         kind === "providers"
-          ? `连接成功${value.models ? ` · ${value.models.length} 个模型` : ""}`
-          : `模型可用${value.parameter_accepted ? " · 参数已接受" : ""}`,
+          ? value.models ? t("connectionModelCount", { count: value.models.length }) : t("connectionSucceeded")
+          : t(value.parameter_accepted ? "modelAvailableWithParams" : "modelAvailable"),
       );
       if (kind === "models") await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "测试失败");
+      setError(reason instanceof Error ? reason.message : t("testFailed"));
     } finally {
       setBusy("");
     }
@@ -305,10 +308,10 @@ export default function ProvidersPage() {
       const result = await adminApi.syncProvider(provider.id);
       await refresh();
       setNotice(
-        `已同步 · ${result.imported} 个新增模型${result.unavailable ? ` · ${result.unavailable} 个不可用` : ""}`,
+        t(result.unavailable ? "syncResultUnavailable" : "syncResult", { count: result.imported, unavailable: result.unavailable ?? 0 }),
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "同步失败");
+      setError(reason instanceof Error ? reason.message : t("syncFailed"));
     } finally {
       setBusy("");
     }
@@ -320,9 +323,9 @@ export default function ProvidersPage() {
     try {
       const result = await adminApi.refreshMetadata(provider.id);
       await refresh();
-      setNotice(`已匹配 ${result.matched} 个模型${result.unmatched ? ` · ${result.unmatched} 个未收录` : ""}`);
+      setNotice(t(result.unmatched ? "modelMatchStatus" : "modelMatches", { count: result.matched, unmatched: result.unmatched ?? 0 }));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "匹配失败");
+      setError(reason instanceof Error ? reason.message : t("matchFailed"));
     } finally {
       setBusy("");
     }
@@ -338,7 +341,7 @@ export default function ProvidersPage() {
         await refresh();
       } else {
         const value = await adminApi.resolveMetadata(selected, modelEditor.model);
-        if (!value.matched || !value.model) throw new Error("目录中未找到此模型");
+        if (!value.matched || !value.model) throw new Error(t("modelNotInCatalog"));
         const next = { ...modelEditor, ...value.model, id: "", provider_id: selected, model: modelEditor.model, enabled: modelEditor.enabled, is_default: modelEditor.is_default };
         setModelEditor(next);
         setModelOriginal(next);
@@ -348,7 +351,7 @@ export default function ProvidersPage() {
       setMatchStatus("models.dev");
       setModelTouched(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "匹配失败");
+      setError(reason instanceof Error ? reason.message : t("matchFailed"));
     } finally {
       setMatching(false);
     }
@@ -360,14 +363,14 @@ export default function ProvidersPage() {
       setMatching(true);
       void adminApi.resolveMetadata(selected, modelEditor.model).then((value) => {
         if (disposed) return;
-        setMatchStatus(value.matched ? "models.dev" : "未收录");
+        setMatchStatus(value.matched ? "models.dev" : t("notListed"));
         if (!value.model || modelTouched) return;
         const next = { ...modelEditor, ...value.model, id: "", provider_id: selected, model: modelEditor.model, enabled: modelEditor.enabled, is_default: modelEditor.is_default };
         setModelEditor((current) => current ? { ...current, ...next, name: current.name && current.name !== current.model ? current.name : value.model!.name } : current);
         setModelOriginal(next);
         setEffortsText(value.model.efforts?.join(", ") ?? "");
         setMappingText(JSON.stringify(value.model.effort_mapping ?? {}, null, 2));
-      }).catch(() => { if (!disposed) setMatchStatus("目录暂不可用"); }).finally(() => { if (!disposed) setMatching(false); });
+      }).catch(() => { if (!disposed) setMatchStatus(t("catalogUnavailable")); }).finally(() => { if (!disposed) setMatching(false); });
     }, 500);
     return () => { disposed = true; clearTimeout(timer); };
   }, [modelEditor?.id, modelEditor?.model, selected, modelTouched]);
@@ -383,7 +386,7 @@ export default function ProvidersPage() {
         current.map((item) => (item.id === model.id ? value : item)),
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("saveFailed"));
     } finally {
       setBusy("");
     }
@@ -398,7 +401,7 @@ export default function ProvidersPage() {
     try {
       setCatalogProviders(await adminApi.catalogProviders());
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "目录加载失败");
+      setError(reason instanceof Error ? reason.message : t("catalogLoadFailed"));
     }
   }
   useEffect(() => {
@@ -424,28 +427,25 @@ export default function ProvidersPage() {
   return (
     <>
       <div className="admin-page-heading">
-        <h2>模型服务</h2>
+        <h2>{t("modelProviders")}</h2>
         <div className="toolbar-actions">
           <button className="secondary-button" onClick={editModelOrder} disabled={loading}>
             <ListOrdered size={16} />
-            顺序与默认模型
-          </button>
+            {t("orderAndDefault")}</button>
           <button className="primary-button" onClick={() => editProvider()}>
             <Plus size={16} />
-            添加 Provider
-          </button>
+            {t("addProvider")}</button>
         </div>
       </div>
       <ErrorNotice error={error} notice={notice} />
-      {modelOrder && <Modal title="顺序与默认模型" onClose={() => { if (busy !== "model-order") setModelOrder(null); }}
+      {modelOrder && <Modal title={t("orderAndDefault")} onClose={() => { if (busy !== "model-order") setModelOrder(null); }}
         bodyClassName="model-order-body"
         footer={<>
-          <button className="secondary-button" onClick={() => setModelOrder(null)} disabled={busy === "model-order"}>取消</button>
+          <button className="secondary-button" onClick={() => setModelOrder(null)} disabled={busy === "model-order"}>{t("cancel")}</button>
           <button className="primary-button" onClick={() => void saveModelOrder()} disabled={busy === "model-order"}>
-            {busy === "model-order" && <LoaderCircle size={15} className="spin" />}保存
-          </button>
+            {busy === "model-order" && <LoaderCircle size={15} className="spin" />}{t("save")}</button>
         </>}>
-        <p className="model-order-hint">所有服务共用此顺序。新用户使用默认模型，已选过模型的用户保留自己的选择。</p>
+        <p className="model-order-hint">{t("modelOrderHint")}</p>
         <ErrorNotice error={orderError} />
         <ol className="model-order-list">
           {modelOrder.map((id, index) => {
@@ -455,23 +455,23 @@ export default function ProvidersPage() {
             return <li key={id}>
               <label className="model-order-default">
                 <input type="radio" name="default-model" checked={defaultModel === id} onChange={() => setDefaultModel(id)}
-                  disabled={busy === "model-order"} aria-label={`默认模型：${name}`} />
+                  disabled={busy === "model-order"} aria-label={t("defaultModelNamed", { name })} />
                 <BrandIcon src={model.icon} size={20} />
                 <span><strong>{name}</strong><small>{model.provider_name}</small></span>
-                {defaultModel === id && <span className="model-default">默认</span>}
+                {defaultModel === id && <span className="model-default">{t("default")}</span>}
               </label>
               <div className="model-order-actions">
-                <button className="icon-button" aria-label={`置顶 ${name}`} title="置顶" disabled={!index || busy === "model-order"}
+                <button className="icon-button" aria-label={t("moveToTopNamed", { name })} title={t("moveToTop")} disabled={!index || busy === "model-order"}
                   onClick={() => setModelOrder([id, ...modelOrder.filter((item) => item !== id)])}><ArrowUpToLine size={15} /></button>
-                <button className="icon-button" aria-label={`上移 ${name}`} title="上移" disabled={!index || busy === "model-order"}
+                <button className="icon-button" aria-label={t("moveUpNamed", { name })} title={t("moveUp")} disabled={!index || busy === "model-order"}
                   onClick={() => setModelOrder(moveModel(modelOrder, id, -1))}><ArrowUp size={15} /></button>
-                <button className="icon-button" aria-label={`下移 ${name}`} title="下移" disabled={index === modelOrder.length - 1 || busy === "model-order"}
+                <button className="icon-button" aria-label={t("moveDownNamed", { name })} title={t("moveDown")} disabled={index === modelOrder.length - 1 || busy === "model-order"}
                   onClick={() => setModelOrder(moveModel(modelOrder, id, 1))}><ArrowDown size={15} /></button>
               </div>
             </li>;
           })}
         </ol>
-        {!modelOrder.length && <div className="empty-page">暂无已启用的对话模型</div>}
+        {!modelOrder.length && <div className="empty-page">{t("noEnabledChatModels")}</div>}
       </Modal>}
       {loading && !providers.length ? (
         <div className="panel-loading">
@@ -496,21 +496,15 @@ export default function ProvidersPage() {
                 </span>
                 <span>
                   <span>{item.name}</span>
-                  <small>
-                    {
-                      models.filter(
-                        (model) =>
-                          model.provider_id === item.id && model.enabled,
-                      ).length
-                    }{" "}
-                    个启用
-                  </small>
+                  <small>{t("enabledModelCount", {
+                    count: models.filter((model) => model.provider_id === item.id && model.enabled).length,
+                  })}</small>
                 </span>
                 {!item.enabled && <span className="connection-dot" />}
                 <ChevronRight size={14} />
               </button>
             ))}
-            {!providers.length && <div className="empty-page">暂无服务</div>}
+            {!providers.length && <div className="empty-page">{t("noProviders")}</div>}
           </nav>
           {provider && (
             <section className="provider-detail">
@@ -524,27 +518,26 @@ export default function ProvidersPage() {
                 <div className="toolbar-actions">
                   <button
                     className="secondary-button provider-settings-action"
-                    aria-label="编辑服务"
-                    title="编辑服务"
+                    aria-label={t("editProvider")}
+                    title={t("editProvider")}
                     onClick={() => editProvider(provider)}
                   >
                     <Settings2 size={16} />
-                    <span>设置</span>
+                    <span>{t("settings")}</span>
                   </button>
-                  <button className="icon-button" title="测试连接" aria-label="测试服务连接"
+                  <button className="icon-button" title={t("testConnection")} aria-label={t("testProviderConnection")}
                     disabled={busy === provider.id} onClick={() => void test("providers", provider.id)}>
                     <Zap size={16} />
                   </button>
                   <ActionMenu
                     trigger={<MoreHorizontal size={19} />}
-                    label="服务操作"
+                    label={t("providerActions")}
                   >
                     <MenuAction
                       onClick={() => void test("providers", provider.id)}
                     >
                       <Zap size={15} />
-                      测试连接
-                    </MenuAction>
+                      {t("testConnection")}</MenuAction>
                     <MenuAction
                       danger
                       onClick={() =>
@@ -556,23 +549,22 @@ export default function ProvidersPage() {
                       }
                     >
                       <Trash2 size={15} />
-                      删除服务
-                    </MenuAction>
+                      {t("deleteProvider")}</MenuAction>
                   </ActionMenu>
                 </div>
               </header>
               <div className="provider-overview">
                 <span className={`admin-state${provider.enabled ? " is-enabled" : ""}`}>
-                  <i />{provider.enabled ? "已启用" : "已停用"}
+                  <i />{provider.enabled ? t("enabled") : t("disabled")}
                 </span>
                 <span>{provider.protocol === "openai-responses" ? "Responses" : "Chat Completions"}</span>
-                <span>{provider.has_api_key ? "Key 已配置" : "无 Key"}</span>
+                <span>{provider.has_api_key ? t("keyConfigured") : t("noKey")}</span>
               </div>
               <div className="model-list-toolbar">
                 <div className="search-input">
                   <Search size={16} />
                   <input
-                    placeholder="搜索模型"
+                    placeholder={t("searchModels")}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                   />
@@ -583,8 +575,7 @@ export default function ProvidersPage() {
                     checked={onlyEnabled}
                     onChange={(event) => setOnlyEnabled(event.target.checked)}
                   />
-                  已启用
-                </label>
+                  {t("enabled")}</label>
                 <button
                   className="secondary-button"
                   disabled={
@@ -596,12 +587,11 @@ export default function ProvidersPage() {
                     className={busy === "sync" ? "spin" : ""}
                     size={15}
                   />
-                  同步
-                </button>
+                  {t("sync")}</button>
                 <button
                   className="icon-button"
-                  aria-label="更新模型元数据"
-                  title="更新元数据"
+                  aria-label={t("updateModelMetadata")}
+                  title={t("updateMetadata")}
                   disabled={busy === "metadata"}
                   onClick={() => void refreshMetadata()}
                 >
@@ -609,8 +599,8 @@ export default function ProvidersPage() {
                 </button>
                 <button
                   className="icon-button"
-                  aria-label="自定义模型"
-                  title="自定义模型"
+                  aria-label={t("customModel")}
+                  title={t("customModel")}
                   onClick={() => editModel()}
                 >
                   <Plus size={18} />
@@ -637,46 +627,43 @@ export default function ProvidersPage() {
                       <div>
                         <span className="model-name-line">
                           <strong>{model.name || model.model}</strong>
-                          {model.is_default && <span className="model-default">默认</span>}
+                          {model.is_default && <span className="model-default">{t("default")}</span>}
                         </span>
                         {model.name && model.name !== model.model && (
                           <small>{model.model}</small>
                         )}
                         {model.available === false && (
-                          <small className="danger">远端不可用</small>
+                          <small className="danger">{t("remoteUnavailable")}</small>
                         )}
                         <span className="model-row-meta">
-                          {model.context_window > 0 && <span className="model-context">{Math.round(model.context_window / 1000)}k 上下文</span>}
+                          {model.context_window > 0 && <span className="model-context">{t("contextCount", { count: Math.round(model.context_window / 1000) })}</span>}
                           <span className="model-capability-icons">
-                            {model.supports_image_generation && <span title="图像生成"><ImagePlus size={14} /></span>}
-                            {model.metadata_known?.supports_vision && model.supports_vision && <span title="图像理解"><Image size={14} /></span>}
-                            {model.metadata_known?.supports_tools && model.supports_tools && <span title="工具调用"><Wrench size={14} /></span>}
-                            {model.reasoning_kind && !["none", "unknown"].includes(model.reasoning_kind) && <span title={model.efforts?.length ? model.efforts.join(", ") : "思考"}><Brain size={14} /></span>}
+                            {model.supports_image_generation && <span title={t("imageGeneration")}><ImagePlus size={14} /></span>}
+                            {model.metadata_known?.supports_vision && model.supports_vision && <span title={t("imageUnderstanding")}><Image size={14} /></span>}
+                            {model.metadata_known?.supports_tools && model.supports_tools && <span title={t("toolCalling")}><Wrench size={14} /></span>}
+                            {model.reasoning_kind && !["none", "unknown"].includes(model.reasoning_kind) && <span title={model.efforts?.length ? model.efforts.join(", ") : t("reasoning")}><Brain size={14} /></span>}
                           </span>
                         </span>
                       </div>
                     </button>
-                    <InlineSwitch title={`启用 ${model.name}`} value={model.enabled}
+                    <InlineSwitch title={t("enableNamed", { name: model.name })} value={model.enabled}
                       updating={busy === model.id} onChange={(enabled) => void publish(model, enabled)} />
                     <ActionMenu
                       trigger={<MoreHorizontal size={18} />}
-                      label="模型操作"
+                      label={t("modelActions")}
                     >
                       <MenuAction onClick={() => editModel(model)}>
                         <Settings2 size={15} />
-                        编辑能力
-                      </MenuAction>
+                        {t("editCapabilities")}</MenuAction>
                       <MenuAction onClick={() => void openCatalog(model)}>
                         <Database size={15} />
-                        参考目录
-                      </MenuAction>
+                        {t("browseCatalog")}</MenuAction>
                       <MenuAction onClick={() => {
                         setBusy(model.id);
-                        void adminApi.autoMatchModel(model.id).then(() => refresh()).then(() => setNotice("已自动匹配")).catch((reason: Error) => setError(reason.message)).finally(() => setBusy(""));
+                        void adminApi.autoMatchModel(model.id).then(() => refresh()).then(() => setNotice(t("autoMatched"))).catch((reason: Error) => setError(reason.message)).finally(() => setBusy(""));
                       }}>
                         <RefreshCw size={15} />
-                        自动匹配
-                      </MenuAction>
+                        {t("autoMatch")}</MenuAction>
                       <MenuAction
                         onClick={() =>
                           void test(
@@ -689,8 +676,7 @@ export default function ProvidersPage() {
                         }
                       >
                         <Zap size={15} />
-                        测试模型
-                      </MenuAction>
+                        {t("testModel")}</MenuAction>
                       <MenuAction
                         danger
                         onClick={() =>
@@ -702,12 +688,11 @@ export default function ProvidersPage() {
                         }
                       >
                         <Trash2 size={15} />
-                        删除
-                      </MenuAction>
+                        {t("delete")}</MenuAction>
                     </ActionMenu>
                   </article>
                 ))}
-                {!filtered.length && <div className="empty-page">暂无模型</div>}
+                {!filtered.length && <div className="empty-page">{t("noModels")}</div>}
               </div>
             </section>
           )}
@@ -716,7 +701,7 @@ export default function ProvidersPage() {
       {providerEditor && (
         <Modal
           className="ochi-admin-modal"
-          title={providerEditor.id ? "编辑 Provider" : "添加 Provider"}
+          title={providerEditor.id ? t("editProviderDialog") : t("addProvider")}
           onClose={() => setProviderEditor(null)}
           size="form"
           footer={
@@ -726,16 +711,14 @@ export default function ProvidersPage() {
                 className="secondary-button"
                 onClick={() => setProviderEditor(null)}
               >
-                取消
-              </button>
+                {t("cancel")}</button>
               <button
                 type="submit"
                 form="provider-editor"
                 className="primary-button"
                 disabled={busy === "save-provider"}
               >
-                保存
-              </button>
+                {t("save")}</button>
             </div>
           }
         >
@@ -747,7 +730,7 @@ export default function ProvidersPage() {
               void saveProvider();
             }}
           >
-            <Field title="名称">
+            <Field title={t("name")}>
               <input
                 required
                 autoFocus
@@ -760,9 +743,9 @@ export default function ProvidersPage() {
                 }
               />
             </Field>
-            <Field title="协议">
+            <Field title={t("protocol")}>
               <SelectField
-                label="Provider 协议"
+                label={t("providerProtocol")}
                 value={providerEditor.protocol ?? "openai"}
                 options={[
                   { value: "openai", label: "OpenAI · Chat Completions" },
@@ -795,10 +778,10 @@ export default function ProvidersPage() {
                     }
                     options={[
                       ...(providerEditor.id
-                        ? [{ value: "keep", label: "保留当前密钥" }]
+                        ? [{ value: "keep", label: t("keepCurrentKey") }]
                         : []),
-                      { value: "replace", label: "设置新密钥" },
-                      { value: "delete", label: "删除密钥" },
+                      { value: "replace", label: t("setNewKey") },
+                      { value: "delete", label: t("deleteKey") },
                     ]}
                   />
                 ) : (
@@ -823,7 +806,7 @@ export default function ProvidersPage() {
               </Field>
               {providerEditor.id &&
                 providerEditor.api_key_action === "replace" && (
-                  <Field title="新密钥">
+                  <Field title={t("newKey")}>
                     <input
                       type="password"
                       autoComplete="new-password"
@@ -840,15 +823,15 @@ export default function ProvidersPage() {
                 )}
             </div>
             <Toggle
-              title="启用"
+              title={t("enable")}
               value={providerEditor.enabled ?? true}
               onChange={(enabled) =>
                 setProviderEditor({ ...providerEditor, enabled })
               }
             />
             <details className="advanced-section">
-              <summary>高级设置</summary>
-              <Field title="超时（秒）">
+              <summary>{t("advancedSettings")}</summary>
+              <Field title={t("timeoutSeconds")}>
                 <input
                   type="number"
                   min={10}
@@ -861,7 +844,7 @@ export default function ProvidersPage() {
                   }
                 />
               </Field>
-              <Field title="目录 Provider ID">
+              <Field title={t("catalogProviderID")}>
                 <input
                   value={providerEditor.catalog_provider_id ?? ""}
                   onChange={(event) =>
@@ -873,14 +856,14 @@ export default function ProvidersPage() {
                 />
               </Field>
               <Toggle
-                title="发现远端模型"
+                title={t("discoverRemoteModels")}
                 value={providerEditor.discover_models ?? true}
                 onChange={(discover_models) =>
                   setProviderEditor({ ...providerEditor, discover_models })
                 }
               />
               <Toggle
-                title="允许无密钥"
+                title={t("allowWithoutKey")}
                 value={providerEditor.allow_no_key ?? false}
                 onChange={(allow_no_key) =>
                   setProviderEditor({
@@ -895,7 +878,7 @@ export default function ProvidersPage() {
                 }
               />
               <div className="form-field">
-                <span>请求头</span>
+                <span>{t("requestHeaders")}</span>
                 <KeyValueEditor
                   rows={headers}
                   onChange={setHeaders}
@@ -913,7 +896,7 @@ export default function ProvidersPage() {
       {modelEditor && !catalogFor && (
         <Modal
           className="ochi-admin-modal"
-          title={modelEditor.id ? "模型能力" : "自定义模型"}
+          title={modelEditor.id ? t("modelCapabilities") : t("customModel")}
           onClose={() => setModelEditor(null)}
           size="large"
           footer={
@@ -923,8 +906,7 @@ export default function ProvidersPage() {
                 className="secondary-button"
                 onClick={() => setModelEditor(null)}
               >
-                取消
-              </button>
+                {t("cancel")}</button>
               <button
                 type="submit"
                 form="model-editor"
@@ -935,8 +917,7 @@ export default function ProvidersPage() {
                   !modelEditor.model.trim()
                 }
               >
-                保存
-              </button>
+                {t("save")}</button>
             </div>
           }
         >
@@ -952,11 +933,11 @@ export default function ProvidersPage() {
               void saveModel();
             }}
           >
-            <div className="segmented-control" aria-label="模型配置分类">
+            <div className="segmented-control" aria-label={t("modelConfigSections")}>
               {[
-                { id: "basic", label: "基础" },
-                ...(modelEditor.kind === "image" ? [{ id: "image", label: "生图" }] : modelEditor.kind !== "embedding" ? [{ id: "reasoning", label: "思考" }] : []),
-                { id: "metadata", label: "元数据" },
+                { id: "basic", label: t("general") },
+                ...(modelEditor.kind === "image" ? [{ id: "image", label: t("image") }] : modelEditor.kind !== "embedding" ? [{ id: "reasoning", label: t("reasoning") }] : []),
+                { id: "metadata", label: t("metadata") },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -971,9 +952,9 @@ export default function ProvidersPage() {
             </div>
             <div className="metadata-preview">
               <BrandIcon src={modelEditor.icon} size={17} />
-              <span>{matching ? "匹配中" : matchStatus || modelEditor.metadata_source || "未匹配"}</span>
+              <span>{matching ? t("matching") : matchStatus || modelEditor.metadata_source || t("notMatched")}</span>
               {modelEditor.catalog_provider_id && <span>{modelEditor.catalog_provider_id}/{modelEditor.catalog_model_id}</span>}
-              {modelEditor.metadata_overrides && Object.keys(modelEditor.metadata_overrides).length > 0 && <span>手动覆盖 {Object.keys(modelEditor.metadata_overrides).length}</span>}
+              {modelEditor.metadata_overrides && Object.keys(modelEditor.metadata_overrides).length > 0 && <span>{t("manualOverrides")}{Object.keys(modelEditor.metadata_overrides).length}</span>}
             </div>
             <div className="toolbar-actions">
               <button
@@ -983,8 +964,7 @@ export default function ProvidersPage() {
                 onClick={() => void autoMatchModel()}
               >
                 <RefreshCw size={14} className={matching ? "spin" : ""} />
-                自动匹配
-              </button>
+                {t("autoMatch")}</button>
               {modelEditor.id && (
                 <button
                   type="button"
@@ -992,14 +972,13 @@ export default function ProvidersPage() {
                   onClick={() => void openCatalog(modelEditor)}
                 >
                   <Database size={14} />
-                  参考目录
-                </button>
+                  {t("browseCatalog")}</button>
               )}
             </div>
             {modelSection === "basic" ? (
               <section className="model-editor-section">
                 <div className="form-grid">
-                  <Field title="显示名称">
+                  <Field title={t("displayName")}>
                     <input
                       required
                       name="model-name"
@@ -1012,7 +991,7 @@ export default function ProvidersPage() {
                       }
                     />
                   </Field>
-                  <Field title="模型 ID">
+                  <Field title={t("modelID")}>
                     <input
                       required
                       name="model-id"
@@ -1027,7 +1006,7 @@ export default function ProvidersPage() {
                   </Field>
                 </div>
                 <div className="form-grid">
-                  <Field title="类型">
+                  <Field title={t("type")}>
                     <SelectField
                       value={
                         (modelEditor as Model & { kind?: string }).kind ??
@@ -1040,14 +1019,14 @@ export default function ProvidersPage() {
                         ...(kind === "embedding" ? { is_default: false } : {}),
                       } as Model)}
                       options={[
-                        { value: "chat", label: "聊天模型" },
-                        { value: "image", label: "生图模型" },
-                        { value: "embedding", label: "Embedding" },
+                        { value: "chat", label: t("chatModel") },
+                        { value: "image", label: t("imageModel") },
+                        { value: "embedding", label: t("embeddingModel") },
                       ]}
                     />
                   </Field>
                   <Toggle
-                    title="启用"
+                    title={t("enable")}
                     value={modelEditor.enabled}
                     onChange={(enabled) =>
                       setModelEditor({ ...modelEditor, enabled })
@@ -1055,7 +1034,7 @@ export default function ProvidersPage() {
                   />
                 </div>
                 {modelEditor.kind !== "image" && <div className="form-grid">
-                  <Field title="上下文长度">
+                  <Field title={t("contextWindow")}>
                     <input
                       type="number"
                       min={0}
@@ -1068,11 +1047,11 @@ export default function ProvidersPage() {
                       }
                     />
                   </Field>
-                  {modelEditor.kind !== "embedding" && <Field title="输出能力上限（0 = 未知）">
+                  {modelEditor.kind !== "embedding" && <Field title={t("maxOutputCapability")}>
                     <input
                       type="number"
                       min={0}
-                      title="模型支持的最大输出 tokens，包含思考与正文。用于能力校验和辅助任务预算，不是聊天生成限额；常规聊天不发送输出额度，由服务商决定。"
+                      title={t("maxOutputHint")}
                       value={modelEditor.max_output_tokens ?? 0}
                       onChange={(event) =>
                         setModelEditor({
@@ -1085,28 +1064,28 @@ export default function ProvidersPage() {
                 </div>}
                 <div className="form-grid">
                   {modelEditor.kind !== "image" && modelEditor.kind !== "embedding" && <Toggle
-                    title={modelEditor.metadata_known?.supports_tools ? "工具调用" : "工具调用 · 未确认"}
+                    title={modelEditor.metadata_known?.supports_tools ? t("toolCalling") : t("toolCallingUnknown")}
                     value={modelEditor.supports_tools}
                     onChange={(supports_tools) =>
                       setModelEditor({ ...modelEditor, supports_tools })
                     }
                   />}
                   {modelEditor.kind !== "image" && modelEditor.kind !== "embedding" && <Toggle
-                    title={modelEditor.metadata_known?.supports_vision ? "图像理解" : "图像理解 · 未确认"}
+                    title={modelEditor.metadata_known?.supports_vision ? t("imageUnderstanding") : t("visionUnknown")}
                     value={modelEditor.supports_vision}
                     onChange={(supports_vision) =>
                       setModelEditor({ ...modelEditor, supports_vision })
                     }
                   />}
                   {modelEditor.kind !== "image" && modelEditor.kind !== "embedding" && <Toggle
-                    title={modelEditor.metadata_known?.structured_output ? "结构化输出" : "结构化输出 · 未确认"}
+                    title={modelEditor.metadata_known?.structured_output ? t("structuredOutput") : t("structuredOutputUnknown")}
                     value={modelEditor.structured_output ?? false}
                     onChange={(structured_output) =>
                       setModelEditor({ ...modelEditor, structured_output })
                     }
                   />}
                   {modelEditor.kind !== "image" && modelEditor.kind !== "embedding" && <Toggle
-                    title="默认模型"
+                    title={t("defaultModel")}
                     value={modelEditor.is_default}
                     onChange={(is_default) =>
                       setModelEditor({
@@ -1121,44 +1100,44 @@ export default function ProvidersPage() {
             ) : modelSection === "image" ? (
               <section className="model-editor-section">
                 <div className="form-grid">
-                  <Field title="尺寸">
+                  <Field title={t("size")}>
                     <input
                       value={modelEditor.image_config?.size ?? ""}
-                      placeholder="服务默认"
+                      placeholder={t("providerDefault")}
                       onChange={(event) => setModelEditor({ ...modelEditor, image_config: { ...modelEditor.image_config, size: event.target.value } })}
                     />
                   </Field>
-                  <Field title="质量">
+                  <Field title={t("quality")}>
                     <input
                       value={modelEditor.image_config?.quality ?? ""}
-                      placeholder="服务默认"
+                      placeholder={t("providerDefault")}
                       onChange={(event) => setModelEditor({ ...modelEditor, image_config: { ...modelEditor.image_config, quality: event.target.value } })}
                     />
                   </Field>
-                  <Field title="输出格式">
+                  <Field title={t("outputFormat")}>
                     <SelectField
                       value={modelEditor.image_config?.output_format ?? ""}
-                      options={[{ value: "", label: "服务默认" }, ...["png", "jpeg", "webp"].map((value) => ({ value, label: value.toUpperCase() }))]}
+                      options={[{ value: "", label: t("providerDefault") }, ...["png", "jpeg", "webp"].map((value) => ({ value, label: value.toUpperCase() }))]}
                       onChange={(value) => setModelEditor({ ...modelEditor, image_config: { ...modelEditor.image_config, output_format: value as NonNullable<Model["image_config"]>["output_format"] } })}
                     />
                   </Field>
-                  <Field title="背景">
+                  <Field title={t("background")}>
                     <SelectField
                       value={modelEditor.image_config?.background ?? ""}
-                      options={[{ value: "", label: "服务默认" }, { value: "auto", label: "自动" }, { value: "opaque", label: "不透明" }, { value: "transparent", label: "透明" }]}
+                      options={[{ value: "", label: t("providerDefault") }, { value: "auto", label: t("automatic") }, { value: "opaque", label: t("opaque") }, { value: "transparent", label: t("transparent") }]}
                       onChange={(value) => setModelEditor({ ...modelEditor, image_config: { ...modelEditor.image_config, background: value as NonNullable<Model["image_config"]>["background"] } })}
                     />
                   </Field>
                 </div>
                 <Toggle
-                  title="支持参考图编辑"
+                  title={t("referenceImageEditing")}
                   value={modelEditor.image_config?.supports_edit ?? false}
                   onChange={(supports_edit) => setModelEditor({ ...modelEditor, image_config: { ...modelEditor.image_config, supports_edit } })}
                 />
               </section>
             ) : modelSection === "reasoning" ? (
               <section className="model-editor-section">
-                <Field title="思考方式">
+                <Field title={t("reasoningMode")}>
                   <SelectField
                     value={modelEditor.reasoning_kind ?? "unknown"}
                     options={[
@@ -1170,7 +1149,11 @@ export default function ProvidersPage() {
                       "always",
                     ].map((value) => ({
                       value,
-                      label: value === "unknown" ? "服务默认" : value,
+                      label: {
+                        unknown: t("providerDefault"), none: t("reasoningNone"),
+                        effort: t("reasoningEffort"), toggle: t("reasoningToggle"),
+                        budget: t("reasoningBudget"), always: t("reasoningAlways"),
+                      }[value]!,
                     }))}
                     onChange={(value) => {
                       setModelTouched(true);
@@ -1210,7 +1193,7 @@ export default function ProvidersPage() {
                   modelEditor.reasoning_kind ?? "unknown",
                 ) && (
                   <div className="form-grid">
-                    <Field title="思考参数">
+                    <Field title={t("reasoningParameter")}>
                       <input
                         value={modelEditor.effort_parameter ?? ""}
                         onChange={(event) =>
@@ -1223,7 +1206,7 @@ export default function ProvidersPage() {
                       />
                     </Field>
                     {modelEditor.reasoning_kind !== "budget" && (
-                      <Field title="支持档位">
+                      <Field title={t("supportedLevels")}>
                         <input
                           placeholder="none, low, high, max"
                           value={effortsText}
@@ -1238,16 +1221,16 @@ export default function ProvidersPage() {
                 {["effort", "toggle"].includes(
                   modelEditor.reasoning_kind ?? "unknown",
                 ) && (
-                  <Field title="默认档位">
+                  <Field title={t("defaultLevel")}>
                     <SelectField
                       value={modelEditor.default_effort ?? ""}
                       options={[
-                        { value: "", label: "服务默认" },
+                        { value: "", label: t("providerDefault") },
                         ...effortsText
                           .split(",")
                           .map((value) => value.trim())
                           .filter(Boolean)
-                          .map((value) => ({ value, label: value })),
+                          .map((value) => ({ value, label: effortLabel(value) })),
                       ]}
                       onChange={(default_effort) =>
                         setModelEditor({ ...modelEditor, default_effort })
@@ -1258,7 +1241,7 @@ export default function ProvidersPage() {
                 {modelEditor.reasoning_kind === "budget" && (
                   <div className="form-grid">
                     {(["min", "max", "default"] as const).map((name) => (
-                      <Field title={`Budget ${name}`} key={name}>
+                      <Field title={t(({ min: "budgetMinimum", max: "budgetMaximum", default: "budgetDefault" } as const)[name])} key={name}>
                         <input
                           type="number"
                           min={0}
@@ -1279,7 +1262,7 @@ export default function ProvidersPage() {
               </section>
             ) : (
               <section className="model-editor-section">
-                <Field title="参数映射">
+                <Field title={t("parameterMapping")}>
                   <textarea
                     className="code-input"
                     rows={5}
@@ -1288,13 +1271,13 @@ export default function ProvidersPage() {
                   />
                 </Field>
                 <div className="metadata-strip">
-                  <span>{modelEditor.source ?? "custom"}</span>
-                  <span>{modelEditor.metadata_source || "unknown"}</span>
+                  <span>{t(({ custom: "sourceCustom", remote: "sourceRemote", catalog: "sourceCatalog" } as const)[modelEditor.source ?? "custom"])}</span>
+                  <span>{modelEditor.metadata_source || t("unknown")}</span>
                   {modelEditor.metadata_updated_at && (
                     <time>
                       {new Date(
                         modelEditor.metadata_updated_at,
-                      ).toLocaleString()}
+                      ).toLocaleString(getLocale())}
                     </time>
                   )}
                 </div>
@@ -1310,18 +1293,19 @@ export default function ProvidersPage() {
                   </div>
                 ) : null}
                 {modelEditor.last_test && (
-                  <span
+                  <div
                     className={
                       modelEditor.last_test.ok ? "form-success" : "form-error"
                     }
                   >
                     {modelEditor.last_test.ok
-                      ? "测试通过"
-                      : modelEditor.last_test.error}
+                      ? t("testPassed")
+                      : translateError(modelEditor.last_test.error_code, modelEditor.last_test.error_params) ?? modelEditor.last_test.error}
                     {modelEditor.last_test.checked_at
-                      ? ` · ${new Date(modelEditor.last_test.checked_at).toLocaleString()}`
+                      ? ` · ${new Date(modelEditor.last_test.checked_at).toLocaleString(getLocale())}`
                       : ""}
-                  </span>
+                    {modelEditor.last_test.detail && <details className="technical-details"><summary>{t("details")}</summary><pre>{modelEditor.last_test.detail}</pre></details>}
+                  </div>
                 )}
               </section>
             )}
@@ -1332,16 +1316,16 @@ export default function ProvidersPage() {
       {catalogFor && (
         <Modal
           className="ochi-admin-modal"
-          title="参考模型目录"
+          title={t("modelCatalog")}
           onClose={() => setCatalogFor(null)}
           size="large"
         >
           <div className="admin-form">
             <SelectField
-              label="目录 Provider"
+              label={t("catalogProvider")}
               value={catalogProvider}
               options={[
-                { value: "", label: "选择 Provider" },
+                { value: "", label: t("chooseProvider") },
                 ...catalogProviders.map((item) => ({
                   value: item.id,
                   label: item.name,
@@ -1352,7 +1336,7 @@ export default function ProvidersPage() {
             <div className="search-input">
               <Search size={16} />
               <input
-                placeholder="搜索模型"
+                placeholder={t("searchModels")}
                 value={catalogQuery}
                 onChange={(event) => setCatalogQuery(event.target.value)}
               />
@@ -1370,7 +1354,7 @@ export default function ProvidersPage() {
                         setCatalogFor(null);
                         if (modelEditor?.id === value.id) editModel(value);
                         void refresh();
-                        setNotice("目录已应用");
+                        setNotice(t("catalogApplied"));
                       })
                       .catch((reason: Error) => setError(reason.message))
                       .finally(() => setBusy(""));
@@ -1396,7 +1380,7 @@ export default function ProvidersPage() {
       {deleting && (
         <Modal
           className="ochi-admin-modal"
-          title="删除配置？"
+          title={t("deleteConfigQuestion")}
           onClose={() => setDeleting(null)}
           size="small"
           footer={
@@ -1405,8 +1389,7 @@ export default function ProvidersPage() {
                 className="secondary-button"
                 onClick={() => setDeleting(null)}
               >
-                取消
-              </button>
+                {t("cancel")}</button>
               <button
                 className="danger-button"
                 disabled={busy === "delete"}
@@ -1422,8 +1405,7 @@ export default function ProvidersPage() {
                     .finally(() => setBusy(""));
                 }}
               >
-                删除
-              </button>
+                {t("delete")}</button>
             </div>
           }
         >

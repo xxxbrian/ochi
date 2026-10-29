@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { Check, ChevronRight, CircleAlert, Square } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import type { ProcessEntry, RunStatus, WaitingInput } from "../lib/types";
@@ -24,6 +25,7 @@ type SummaryProps = {
 };
 
 export const ProcessSummary = memo(function ProcessSummary({ active, status, waitingKind, resource, timeline, hasOutput = false, expanded, onExpandedChange, createdAt, updatedAt, compact = false }: SummaryProps) {
+  useI18n();
   const entries = useMemo(() => orderedProcessEntries(timeline), [timeline]);
   const steps = entries.flatMap((entry) => entry.step ? [entry.step] : []);
   const completed = steps.filter((step) => step.status === "completed").length;
@@ -33,17 +35,17 @@ export const ProcessSummary = memo(function ProcessSummary({ active, status, wai
   const failed = status === "failed" || status === "interrupted";
   const stopped = status === "cancelled";
   const thinking = working && latest?.kind === "reasoning" && !latest.reasoning?.done;
-  const label = compact ? steps.length ? "处理过程" : entries.every((entry) => entry.reasoning?.kind === "summary") ? "思考摘要" : "思考过程"
-    : failed ? "未完成" : stopped ? "已停止" : status === "cancelling" ? "正在停止"
-      : status === "queued" ? "排队中" : status === "waiting_resource" ? resource?.includes("desktop") || resource?.includes("computer") ? "等待电脑" : "等待项目工作区"
-        : status === "waiting_user" ? waitingKind === "computer_permission" ? "等待授权" : "等待回复"
-          : working && tool ? `正在${toolInfo(tool.name).label}` : thinking ? "思考中" : active ? hasOutput ? "正在回复" : "正在处理" : status === "completed" ? "已完成" : "处理过程";
+  const label = compact ? steps.length ? t("process.title") : entries.every((entry) => entry.reasoning?.kind === "summary") ? t("process.reasoningSummary") : t("process.reasoning")
+    : failed ? t("status.failed") : stopped ? t("status.stopped") : status === "cancelling" ? t("status.stopping")
+      : status === "queued" ? t("status.queued") : status === "waiting_resource" ? resource?.includes("desktop") || resource?.includes("computer") ? t("process.waitComputer") : t("process.waitProject")
+        : status === "waiting_user" ? waitingKind === "computer_permission" ? t("status.awaitingPermission") : t("status.awaitingReply")
+          : working && tool ? t("process.activeTool", { tool: toolInfo(tool.name).label }) : thinking ? t("process.thinking") : active ? hasOutput ? t("process.replying") : t("status.processing") : status === "completed" ? t("status.completed") : t("process.title");
   const contents = <>
     <span className="process-title">
       {!compact && (active ? <OchiActivityMark working={working} /> : failed ? <CircleAlert size={14} /> : stopped ? <Square size={13} /> : <Check size={14} />)}
       <span className={`ochi-status-label${working && !compact ? " is-working" : ""}`}>{label}</span>
     </span>
-    {steps.length ? <span className="process-meta">{status === "completed" ? `${steps.length} 步` : `· 已完成 ${completed} 步`}</span> : null}
+    {steps.length ? <span className="process-meta">{status === "completed" ? t("process.steps", { count: steps.length }) : `· ${t("process.completedSteps", { count: completed })}`}</span> : null}
     {!compact && <ProcessElapsed createdAt={createdAt} updatedAt={updatedAt} active={active} />}
     {onExpandedChange ? <ChevronRight size={16} className="process-chevron" /> : null}
   </>;
@@ -57,6 +59,7 @@ export const ProcessDetails = memo(function ProcessDetails({
   hasOutput = false, expanded, onExpandedChange, createdAt, updatedAt,
   compact = false, bounded = true,
 }: SummaryProps & { beforeOutput?: boolean; error?: string; bounded?: boolean }) {
+  useI18n();
   const [localOpen, setLocalOpen] = useState(false);
   const open = expanded ?? localOpen;
   function toggle(next: boolean) {

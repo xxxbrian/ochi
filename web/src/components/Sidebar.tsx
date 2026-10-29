@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { lazy, Suspense, useEffect, useState } from "react";
 import {
   ChevronRight,
@@ -21,6 +22,7 @@ import type { Project, Session, User } from "../lib/types";
 import { Modal } from "./Modal";
 import { ActionMenu, MenuAction } from "./ui/Menu";
 import { isActiveStatus } from "../lib/api";
+import { statusLabel } from "../lib/router";
 import "./sidebar.css";
 const SessionSearch = lazy(() => import("./SessionSearch").then((module) => ({ default: module.SessionSearch })));
 
@@ -77,6 +79,7 @@ export function Sidebar({
   moreLoading,
   onLoadMore,
 }: Props) {
+  useI18n();
   const [searching, setSearching] = useState(false);
   const [editing, setEditing] = useState<Session | null>(null);
   const [deleting, setDeleting] = useState<Session | null>(null);
@@ -101,14 +104,14 @@ export function Sidebar({
       />
       <aside
         className={`sidebar ochi-sidebar ${open ? "is-open" : ""} ${collapsed ? "is-collapsed" : ""}`}
-        aria-label="会话列表"
+        aria-label={t("sidebar.conversationList")}
       >
         <div className="sidebar-top">
           <span className="sidebar-brand">Ochi</span>
           <button
             className="icon-button sidebar-collapse"
             onClick={onCollapse}
-            aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
+            aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
           >
             {collapsed ? (
               <PanelLeftOpen size={20} />
@@ -118,7 +121,7 @@ export function Sidebar({
           </button>
           <button
             className="icon-button close-sidebar"
-            aria-label="关闭侧栏"
+            aria-label={t("sidebar.close")}
             onClick={onClose}
           >
             <X size={20} />
@@ -128,35 +131,35 @@ export function Sidebar({
           className="sidebar-nav new-session"
           onClick={onCreate}
           disabled={disabled}
-          title="新对话"
+          title={t("chat.newConversation")}
         >
           <SquarePen size={19} />
-          <span>新对话</span>
+          <span>{t("chat.newConversation")}</span>
         </button>
         <button
           className="sidebar-nav"
           onClick={() => setSearching(true)}
-          title="搜索对话"
+          title={t("search.conversations")}
         >
           <Search size={19} />
-          <span>搜索对话</span>
+          <span>{t("search.conversations")}</span>
         </button>
-        <button className="sidebar-nav" onClick={() => { onClose(); onComputer(); }} title="电脑">
+        <button className="sidebar-nav" onClick={() => { onClose(); onComputer(); }} title={t("computer.title")}>
           <Monitor size={19} />
-          <span>电脑</span>
+          <span>{t("computer.title")}</span>
         </button>
-        <button className="sidebar-nav" onClick={onSchedules} title="定时任务">
+        <button className="sidebar-nav" onClick={onSchedules} title={t("tasks.title")}>
           <Clock3 size={19} />
-          <span>定时任务</span>
+          <span>{t("tasks.title")}</span>
         </button>
-        <button className="sidebar-nav ochi-sidebar__projects-shortcut" onClick={() => { onClose(); onProjects?.(); }} title="项目">
+        <button className="sidebar-nav ochi-sidebar__projects-shortcut" onClick={() => { onClose(); onProjects?.(); }} title={t("projects.title")}>
           <Folder size={19} />
-          <span>项目</span>
+          <span>{t("projects.title")}</span>
         </button>
-        <nav className="session-list" aria-label="对话">
+        <nav className="session-list" aria-label={t("chat.conversations")}>
           <div className="ochi-sidebar__project-section">
             <button className="ochi-sidebar__section-heading" onClick={() => { onClose(); onProjects?.(); }}>
-              <span>项目</span>
+              <span>{t("projects.title")}</span>
               <ChevronRight size={13} />
             </button>
             {projects.map((project) => (
@@ -172,7 +175,7 @@ export function Sidebar({
               </button>
             ))}
           </div>
-          <div className="rail-section-label">最近对话</div>
+          <div className="rail-section-label">{t("sidebar.recent")}</div>
           {sessions.map((session) => (
             <div
               className={`session-item ${selectedId === session.id ? "selected" : ""}`}
@@ -186,18 +189,18 @@ export function Sidebar({
                 disabled={disabled}
                 aria-current={selectedId === session.id ? "page" : undefined}
               >
-                {session.title || "新对话"}
+                {session.title || t("chat.newConversation")}
               </button>
               {isActiveStatus(session.run_status) && (
                 <span
                   className={`session-activity ${session.run_status === "queued" ? "queued" : ""}`}
-                  title={session.run_status}
+                  title={statusLabel(session.run_status)}
                 />
               )}
               <div className="session-more">
                 <ActionMenu
                   trigger={<MoreHorizontal size={17} />}
-                  label={`管理 ${session.title}`}
+                  label={t("chat.manage", { name: session.title || t("chat.newConversation") })}
                 >
                   <MenuAction
                     onClick={() => {
@@ -206,11 +209,11 @@ export function Sidebar({
                     }}
                   >
                     <Pencil size={15} />
-                    重命名
+                    {t("common.rename")}
                   </MenuAction>
                   <MenuAction danger onClick={() => setDeleting(session)}>
                     <Trash2 size={15} />
-                    删除
+                    {t("common.delete")}
                   </MenuAction>
                 </ActionMenu>
               </div>
@@ -218,36 +221,36 @@ export function Sidebar({
           ))}
           {moreAvailable && <button className="sidebar-nav session-list-more" disabled={moreLoading} onClick={onLoadMore}>
             {moreLoading ? <LoaderCircle size={15} className="spin" /> : <Clock3 size={15} />}
-            <span>{moreLoading ? "加载中" : "更早的对话"}</span>
+            <span>{moreLoading ? t("status.loading") : t("sidebar.earlier")}</span>
           </button>}
         </nav>
         <div className="sidebar-bottom">
-          <ActionMenu className="sidebar-account" popupClassName="action-menu-account" align="start" label="账户菜单" side="top" trigger={<>
+          <ActionMenu className="sidebar-account" popupClassName="action-menu-account" align="start" label={t("sidebar.accountMenu")} side="top" trigger={<>
             <span className="account-avatar">{(user.display_name || user.username).slice(0, 1).toUpperCase()}</span>
             <span className="account-name">{user.display_name || user.username}</span>
             <MoreHorizontal size={17} />
           </>}>
             <div className="ochi-account-menu__identity">{user.display_name || user.username}</div>
-            <MenuAction onClick={() => { onClose(); onSettings(); }}><Settings size={16} />设置</MenuAction>
-            {user.role === "admin" && <MenuAction onClick={() => { onClose(); onAdmin(); }}><Shield size={16} />管理后台</MenuAction>}
+            <MenuAction onClick={() => { onClose(); onSettings(); }}><Settings size={16} />{t("settings.title")}</MenuAction>
+            {user.role === "admin" && <MenuAction onClick={() => { onClose(); onAdmin(); }}><Shield size={16} />{t("sidebar.admin")}</MenuAction>}
             <div className="ochi-account-menu__divider" role="separator" />
-            <MenuAction onClick={onLogout}><LogOut size={16} />退出登录</MenuAction>
+            <MenuAction onClick={onLogout}><LogOut size={16} />{t("login.signOut")}</MenuAction>
           </ActionMenu>
         </div>
       </aside>
       {searching && <Suspense fallback={null}><SessionSearch onClose={() => setSearching(false)} onSelect={onSelect} /></Suspense>}
       {editing && (
         <Modal
-          title="重命名对话"
+          title={t("chat.rename")}
           size="small"
           onClose={() => setEditing(null)}
           footer={
             <>
               <button type="button" className="secondary-button" onClick={() => setEditing(null)}>
-                取消
+                {t("common.cancel")}
               </button>
               <button className="primary-button" type="submit" form="rename-session" disabled={saving || !title.trim()}>
-                保存
+                {t("common.save")}
               </button>
             </>
           }
@@ -265,7 +268,7 @@ export function Sidebar({
             <input
               className="field-input"
               autoFocus
-              aria-label="对话名称"
+              aria-label={t("chat.name")}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
@@ -273,13 +276,13 @@ export function Sidebar({
         </Modal>
       )}
       {deleting && (
-        <Modal title="删除对话？" size="small" onClose={() => setDeleting(null)} footer={
+        <Modal title={t("chat.deleteConfirm")} size="small" onClose={() => setDeleting(null)} footer={
           <>
             <button
               className="secondary-button"
               onClick={() => setDeleting(null)}
             >
-              取消
+              {t("common.cancel")}
             </button>
             <button
               className="danger-button"
@@ -291,7 +294,7 @@ export function Sidebar({
                   .finally(() => setSaving(false));
               }}
             >
-              删除
+              {t("common.delete")}
             </button>
           </>
         }>
@@ -303,10 +306,11 @@ export function Sidebar({
 }
 
 export function MobileMenuButton({ onClick }: { onClick: () => void }) {
+  useI18n();
   return (
     <button
       className="icon-button mobile-menu"
-      aria-label="打开侧栏"
+      aria-label={t("sidebar.open")}
       onClick={onClick}
     >
       <PanelLeftOpen size={21} />

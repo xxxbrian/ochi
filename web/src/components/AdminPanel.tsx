@@ -1,3 +1,4 @@
+import { t, useAdminI18n } from "../pages/admin/i18n";
 import { lazy, Suspense } from "react";
 import {
   Activity,
@@ -21,16 +22,16 @@ import { DebugPage } from "../pages/admin/RequestDiagnostics";
 const ProvidersPage = lazy(() => import("../pages/admin/ProvidersPage"));
 const SearchPage = lazy(() => import("../pages/admin/SearchPage"));
 const PluginsPage = lazy(() => import("../pages/admin/PluginsPage"));
-const tabs = [
-  { id: "providers", title: "模型服务", icon: Plug },
-  { id: "search", title: "网页搜索", icon: Search },
-  { id: "plugins", title: "插件", icon: Puzzle },
-  { id: "users", title: "用户", icon: Users },
-  { id: "workspaces", title: "工作区", icon: Cpu },
-  { id: "runs", title: "运行记录", icon: Activity },
-  { id: "debug", title: "请求诊断", icon: Bug },
-  { id: "settings", title: "系统", icon: Settings2 },
-];
+function adminTabs() { return [
+  { id: "providers", title: t("modelProviders"), icon: Plug },
+  { id: "search", title: t("webSearch"), icon: Search },
+  { id: "plugins", title: t("plugins"), icon: Puzzle },
+  { id: "users", title: t("users"), icon: Users },
+  { id: "workspaces", title: t("workspaces"), icon: Cpu },
+  { id: "runs", title: t("runRecords"), icon: Activity },
+  { id: "debug", title: t("requestDiagnostics"), icon: Bug },
+  { id: "settings", title: t("system"), icon: Settings2 },
+]; }
 export default function AdminPanel({
   section,
   onNavigate,
@@ -42,6 +43,7 @@ export default function AdminPanel({
   onBack: () => void;
   currentUserID: string;
 }) {
+  useAdminI18n();
   return (
     <main className="admin-app">
       <aside className="admin-sidebar">
@@ -49,17 +51,17 @@ export default function AdminPanel({
           <button
             className="icon-button"
             onClick={onBack}
-            aria-label="返回聊天"
+            aria-label={t("backToChat")}
           >
             <ArrowLeft size={18} />
           </button>
           <div className="admin-brand">
             <h1>Ochi</h1>
-            <span>管理后台</span>
+            <span>{t("adminConsole")}</span>
           </div>
         </header>
-        <nav aria-label="后台导航">
-          {tabs.map((item) => (
+        <nav aria-label={t("adminNavigation")}>
+          {adminTabs().map((item) => (
             <button
               key={item.id}
               className={`${section === item.id || (item.id === "plugins" && (section === "skills" || section === "mcp")) ? "selected" : ""}${item.id === "users" ? " admin-nav-group-start" : ""}`}

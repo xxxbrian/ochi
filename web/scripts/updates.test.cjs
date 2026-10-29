@@ -4,6 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const ts = require('typescript');
+const { createI18nHarness } = require('./i18n-harness.cjs');
 
 const root = path.resolve(__dirname, '..');
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
@@ -19,10 +20,16 @@ const build = (revision = '11111111aaaa') => ({ version: '0.1.0', revision, buil
 const initial = (patch = {}) => ({ current: build(), supported: true, available: false, phase: 'idle', downloaded_bytes: 0, total_bytes: 0, ...patch });
 
 function evaluate(source, imports = {}, globals = {}) {
+  const i18n = createI18nHarness();
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(output, { module, exports: module.exports, AbortController, Date, Error, JSON, Promise, Intl, ...globals,
-    require(name) { if (name in imports) return imports[name]; throw new Error(`Unexpected import: ${name}`); },
+  vm.runInNewContext(output, { module, exports: module.exports, AbortController, Date, Error, JSON, Promise, Intl, ...i18n.web, ...i18n.errors, ...globals,
+    require(name) {
+      if (name in imports) return imports[name];
+      const locale = i18n.resolve(name, 'admin');
+      if (locale) return locale;
+      throw new Error(`Unexpected import: ${name}`);
+    },
   });
   return module.exports;
 }
@@ -41,7 +48,8 @@ function clock() {
   };
 }
 
-function harness(transport = {}, { storage = new Map(), component = false } = {}) {
+function harness(transport = {}, { storage = new Map(), component = false, language = 'zh-CN' } = {}) {
+  const i18n = createI18nHarness(language);
   const slots = [], effects = [], time = clock(), calls = [];
   let cursor = 0, dirty = false, value, mounted = true, lateWrites = 0;
   const different = (a, b) => !a || !b || a.length !== b.length || a.some((item, index) => !Object.is(item, b[index]));
@@ -75,6 +83,7 @@ function harness(transport = {}, { storage = new Map(), component = false } = {}
     react, 'react/jsx-runtime': { jsx, jsxs: jsx },
     'lucide-react': new Proxy({}, { get: (_target, key) => String(key) }),
     '../../components/Modal': { Modal: 'Modal' }, '../../lib/api': { adminApi: api },
+    './i18n': { ...i18n.admin, ...i18n.errors, useAdminI18n: i18n.admin.useI18n },
   }, { Date: FakeDate, setTimeout: time.setTimeout, clearTimeout: time.clearTimeout,
     sessionStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: (key) => storage.delete(key) },
     window: { location: { reload() { calls.push({ name: 'reload' }); } } },
@@ -82,7 +91,7 @@ function harness(transport = {}, { storage = new Map(), component = false } = {}
   const render = () => { cursor = 0; dirty = false; value = component ? module.UpdateCard() : module.controller(); effects.splice(0).forEach((effect) => effect()); };
   const settle = async () => { for (let index = 0; index < 40; index++) { await Promise.resolve(); if (dirty && mounted) render(); } };
   render();
-  return { time, storage, calls, render, settle, get value() { return value; }, get lateWrites() { return lateWrites; },
+  return { time, storage, calls, render, settle, locale: i18n.runtime, get value() { return value; }, get lateWrites() { return lateWrites; },
     nodes: () => walk(value), find: (label) => walk(value).find((node) => node.type === 'button' && text(node) === label),
     unmount() { mounted = false; slots.forEach((slot) => slot?.cleanup?.()); },
   };
@@ -272,4 +281,28 @@ test('the update section sits outside the system settings form', () => {
     ts.forEachChild(node, visit);
   }
   visit(source); assert.equal(found, 1);
+});
+
+test('stored update error codes and parameters relocalize without a request or a state reset', async () => {
+  const status = initial({ phase: 'failed', error: 'fallback marker', error_code: 'update_http_error', error_params: { status: 522 } });
+  const h = harness({ updates: async () => status }, { component: true, language: 'en' });
+  await h.settle();
+  assert.match(text(h.value), /update source returned HTTP 522/);
+  h.locale.setLanguage('zh-TW'); h.render();
+  const localized = createI18nHarness('zh-TW').errors.translateError('update_http_error', { status: 522 });
+  assert.ok(text(h.value).includes(localized));
+  assert.ok(!text(h.value).includes('fallback marker'));
+  assert.equal(h.calls.length, 1);
+  h.unmount();
+});
+
+test('local timeout notices relocalize in place while keeping the retry controls', async () => {
+  const h = harness({ updates: (signal) => new Promise((_resolve, reject) =>
+    signal.addEventListener('abort', () => reject(new Error('aborted')))) }, { language: 'en' });
+  h.time.tick(8000); await h.settle();
+  assert.match(h.value.error, /Checking update status timed out/);
+  h.locale.setLanguage('zh-CN'); h.render();
+  assert.match(h.value.error, /获取更新状态超时/);
+  assert.equal(h.calls.length, 1);
+  h.unmount();
 });

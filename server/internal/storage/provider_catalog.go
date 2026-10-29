@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/product"
 )
 
@@ -90,7 +92,7 @@ func FetchModelCatalog(ctx context.Context) (map[string]CatalogProvider, error) 
 		if catalogCache.Providers != nil {
 			return catalogCache.Providers, nil
 		}
-		return nil, errors.New("模型能力目录暂时不可用")
+		return nil, i18n.New("catalog_unavailable")
 	}
 	defer resp.Body.Close()
 	var raw map[string]struct {
@@ -105,7 +107,7 @@ func FetchModelCatalog(ctx context.Context) (map[string]CatalogProvider, error) 
 		if catalogCache.Providers != nil {
 			return catalogCache.Providers, nil
 		}
-		return nil, errors.New("模型能力目录响应无效")
+		return nil, i18n.New("catalog_invalid")
 	}
 	providers := make(map[string]CatalogProvider, len(raw))
 	for id, entry := range raw {
@@ -288,6 +290,11 @@ func SanitizeProviderError(provider Provider, err error) string {
 		return ""
 	}
 	message := err.Error()
+	for cause, depth := errors.Unwrap(err), 0; cause != nil && depth < 4; cause, depth = errors.Unwrap(cause), depth+1 {
+		if detail := cause.Error(); detail != "" && !strings.Contains(message, detail) {
+			message += ": " + detail
+		}
+	}
 	for _, secret := range append([]string{provider.APIKey}, headerValues(provider.Headers)...) {
 		if secret != "" {
 			message = strings.ReplaceAll(message, secret, "[redacted]")

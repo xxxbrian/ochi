@@ -1,3 +1,5 @@
+import { errorForDisplay, localizedError, type DisplayError } from "../lib/errors";
+import { t, useI18n, getLocale } from "../lib/i18n";
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
@@ -38,19 +40,20 @@ import {
 } from "../components/SettingsChrome";
 
 export function MemoriesScreen() {
+  useI18n();
   const { colors, preferences, refreshPreferences } = useApp();
   const [items, setItems] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [memoryBusy, setMemoryBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       setItems(await api.memories(undefined, query));
       setError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "加载失败");
+      setError(errorForDisplay(reason, "error.load"));
     } finally {
       setLoading(false);
     }
@@ -67,23 +70,23 @@ export function MemoriesScreen() {
       await api.updatePreferences({ memory_enabled: enabled });
       await refreshPreferences();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(errorForDisplay(reason, "error.save"));
     } finally {
       setMemoryBusy(false);
     }
   }
   function remove(memory: Memory) {
-    Alert.alert("删除记忆？", memory.content, [
-      { text: "取消", style: "cancel" },
+    Alert.alert(t("memory.deleteConfirm"), memory.content, [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "删除",
+        text: t("common.delete"),
         style: "destructive",
         onPress: () =>
           void api
             .deleteMemory(memory.id)
             .then(refresh)
             .catch((reason) =>
-              setError(reason instanceof Error ? reason.message : "删除失败"),
+              setError(errorForDisplay(reason, "error.delete")),
             ),
       },
     ]);
@@ -91,11 +94,11 @@ export function MemoriesScreen() {
   return (
     <SettingsPage>
       <SettingsHeader
-        title="记忆"
+        title={t("memory.title")}
         right={
           <IconButton
             icon={Plus}
-            label="添加记忆"
+            label={t("memory.add")}
             variant="glass"
             size={42}
             onPress={() => router.push("/settings/memory/new")}
@@ -119,9 +122,9 @@ export function MemoriesScreen() {
                   backgroundColor: colors.raised,
                 }}
               >
-                <SettingRow icon={Brain} title="保存记忆" last>
+                <SettingRow icon={Brain} title={t("process.saveMemory")} last>
                   <Switch
-                    accessibilityLabel="保存记忆"
+                    accessibilityLabel={t("process.saveMemory")}
                     value={preferences?.memory_enabled ?? true}
                     disabled={memoryBusy}
                     onValueChange={(enabled) => void toggle(enabled)}
@@ -131,10 +134,10 @@ export function MemoriesScreen() {
                 </SettingRow>
               </Surface>
               <Field
-                label="搜索记忆"
+                label={t("memory.search")}
                 value={query}
                 onChangeText={setQuery}
-                placeholder="搜索"
+                placeholder={t("common.search")}
               />
               <ErrorNotice error={error} retry={() => void refresh()} />
             </View>
@@ -149,30 +152,30 @@ export function MemoriesScreen() {
                 <AppText size={15}>{item.content}</AppText>
                 <AppText muted size={12}>
                   {item.source === "user"
-                    ? "手动添加"
+                    ? t("memory.manual")
                     : item.kind === "project_summary"
-                      ? "项目总结"
+                      ? t("memory.projectSummary")
                       : item.kind === "session_summary"
-                        ? "对话总结"
-                        : "记忆"}
+                        ? t("memory.chatSummary")
+                        : t("memory.title")}
                   {" · "}
                   {new Date(
                     item.updated_at ?? item.created_at,
-                  ).toLocaleDateString("zh-CN")}
+                  ).toLocaleDateString(getLocale())}
                 </AppText>
               </Pressable>
               <MenuTrigger
-                label="记忆选项"
+                label={t("memory.options")}
                 items={[
                   {
                     key: "rename",
-                    title: "编辑",
+                    title: t("common.edit"),
                     icon: Pencil,
                     onPress: () => router.push(`/settings/memory/${item.id}`),
                   },
                   {
                     key: "delete",
-                    title: "删除",
+                    title: t("common.delete"),
                     icon: Trash2,
                     danger: true,
                     onPress: () => remove(item),
@@ -189,7 +192,7 @@ export function MemoriesScreen() {
             !loading ? (
               <EmptyState
                 icon={Brain}
-                text={query ? "没有找到记忆" : "暂无记忆"}
+                text={query ? t("memory.noResults") : t("memory.none")}
               />
             ) : null
           }
@@ -200,11 +203,12 @@ export function MemoriesScreen() {
 }
 
 export function MemoryEditorScreen() {
+  useI18n();
   const { memoryId } = useLocalSearchParams<{ memoryId: string }>();
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(memoryId !== "new");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   useEffect(() => {
     if (memoryId === "new") return;
     let disposed = false;
@@ -213,12 +217,12 @@ export function MemoryEditorScreen() {
       .then((items) => {
         if (disposed) return;
         const memory = items.find((item) => item.id === memoryId);
-        if (!memory) throw new Error("记忆不存在");
+        if (!memory) throw localizedError("error.memoryMissing");
         setContent(memory.content);
       })
       .catch((reason) => {
         if (!disposed)
-          setError(reason instanceof Error ? reason.message : "加载失败");
+          setError(errorForDisplay(reason, "error.load"));
       })
       .finally(() => {
         if (!disposed) setLoading(false);
@@ -236,14 +240,14 @@ export function MemoryEditorScreen() {
       else await api.updateMemory(memoryId, content.trim());
       router.back();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(errorForDisplay(reason, "error.save"));
     } finally {
       setBusy(false);
     }
   }
   return (
     <SettingsPage>
-      <SettingsHeader title={memoryId === "new" ? "添加记忆" : "编辑记忆"} />
+      <SettingsHeader title={memoryId === "new" ? t("memory.add") : t("memory.edit")} />
       {loading ? (
         <LoadingState />
       ) : (
@@ -254,7 +258,7 @@ export function MemoryEditorScreen() {
           contentContainerStyle={settingsStyles.content}
         >
           <Field
-            label="内容"
+            label={t("common.content")}
             value={content}
             onChangeText={setContent}
             multiline
@@ -267,8 +271,7 @@ export function MemoryEditorScreen() {
             disabled={!content.trim()}
             onPress={() => void save()}
           >
-            保存
-          </Button>
+            {t("common.save")}</Button>
         </KeyboardAwareScrollView>
       )}
     </SettingsPage>

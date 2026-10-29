@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { t, useI18n, getLocale, type LanguagePreference } from "../lib/i18n";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ArrowLeft,
@@ -20,21 +21,28 @@ import { SelectField } from "./ui/Select";
 import { UserPlugins } from "./UserPlugins";
 import "./settings.css";
 
-const kinds = [
-  { value: "fact", label: "事实" },
-  { value: "preference", label: "偏好" },
-  { value: "session_summary", label: "会话摘要" },
-  { value: "project_summary", label: "项目摘要" },
-];
+
 export default function UserSettings({
   onClose,
   projects = [],
   onNavigate,
+  onLanguage,
 }: {
   onClose: () => void;
   projects?: Project[];
   onNavigate?: (path: string) => void;
+  onLanguage: (language: LanguagePreference) => Promise<void>;
 }) {
+  const { language } = useI18n();
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const kinds = [
+  { value: "fact", label: t("memory.fact") },
+  { value: "preference", label: t("memory.preference") },
+  { value: "session_summary", label: t("memory.sessionSummary") },
+  { value: "project_summary", label: t("memory.projectSummary") },
+];
+  const [languageSaving, setLanguageSaving] = useState(false);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [editing, setEditing] = useState<Partial<Memory> | null>(null);
@@ -100,7 +108,7 @@ export default function UserSettings({
       );
       setEditing(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "保存失败");
+      setError(reason instanceof Error ? reason.message : t("error.save"));
     } finally {
       setBusy(false);
     }
@@ -110,7 +118,7 @@ export default function UserSettings({
       await api.deleteMemory(id);
       setMemories((current) => current.filter((item) => item.id !== id));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "删除失败");
+      setError(reason instanceof Error ? reason.message : t("error.delete"));
     }
   }
   function setColor(value: string) {
@@ -125,7 +133,7 @@ export default function UserSettings({
   }
   return (
     <Modal
-      title="设置"
+      title={t("settings.title")}
       onClose={onClose}
       size="large"
       className="ochi-settings-modal"
@@ -137,7 +145,7 @@ export default function UserSettings({
               className="secondary-button"
               onClick={() => setEditing(null)}
             >
-              取消
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
@@ -146,14 +154,14 @@ export default function UserSettings({
               disabled={busy || !editing.content?.trim()}
             >
               {busy && <LoaderCircle className="spin" size={15} />}
-              保存
+              {t("common.save")}
             </button>
           </div>
         ) : undefined
       }
     >
       <div className="ochi-settings">
-        <nav className="ochi-settings__rail" aria-label="设置分类">
+        <nav className="ochi-settings__rail" aria-label={t("settings.categories")}>
           <button
             type="button"
             aria-current={section === "appearance" ? "page" : undefined}
@@ -161,7 +169,7 @@ export default function UserSettings({
             onClick={() => setSection("appearance")}
           >
             <Paintbrush size={16} />
-            外观
+            {t("settings.appearance")}
           </button>
           <button
             type="button"
@@ -170,7 +178,7 @@ export default function UserSettings({
             onClick={() => setSection("memory")}
           >
             <Brain size={16} />
-            记忆
+            {t("memory.title")}
           </button>
           <button
             type="button"
@@ -179,43 +187,66 @@ export default function UserSettings({
             onClick={() => setSection("plugins")}
           >
             <Puzzle size={16} />
-            插件
+            {t("plugins.title")}
           </button>
         </nav>
         <div className="ochi-settings__content" key={section}>
           {section === "appearance" ? (
-            <section className="ochi-settings__panel ochi-settings__appearance" id="settings-appearance" aria-label="外观">
-              <h3>外观</h3>
+            <section className="ochi-settings__panel ochi-settings__appearance" id="settings-appearance" aria-label={t("settings.appearance")}>
+              <h3>{t("settings.appearance")}</h3>
               <div className="ochi-settings__row">
-                <strong>主题</strong>
+                <strong>{t("settings.theme")}</strong>
                 <SelectField
                   value={theme}
                   onChange={setColor}
-                  label="主题"
+                  label={t("settings.theme")}
                   options={[
-                    { value: "light", label: "浅色" },
-                    { value: "dark", label: "深色" },
+                    { value: "light", label: t("settings.light") },
+                    { value: "dark", label: t("settings.dark") },
+                  ]}
+                />
+              </div>
+              <div className="ochi-settings__row">
+                <strong>{t("settings.language")}</strong>
+                <SelectField
+                  value={language}
+                  label={t("settings.language")}
+                  disabled={languageSaving}
+                  onChange={(value) => {
+                    setLanguageSaving(true);
+                    setError("");
+                    void onLanguage(value as LanguagePreference).catch((reason: unknown) => {
+                      if (mounted.current) setError(reason instanceof Error ? reason.message : t("error.save"));
+                    }).finally(() => {
+                      if (mounted.current) setLanguageSaving(false);
+                    });
+                  }}
+                  options={[
+                    { value: "system", label: t("settings.systemLanguage") },
+                    { value: "en", label: t("settings.languageEnglish") },
+                    { value: "zh-CN", label: t("settings.languageSimplified") },
+                    { value: "zh-TW", label: t("settings.languageTraditional") },
                   ]}
                 />
               </div>
             </section>
           ) : section === "plugins" ? <UserPlugins /> : (
-            <section className="ochi-settings__panel ochi-settings__memory" id="settings-memory" aria-label="记忆">
+            <section className="ochi-settings__panel ochi-settings__memory" id="settings-memory" aria-label={t("memory.title")}>
               <div className="ochi-settings__heading">
                 {editing ? <div className="ochi-settings__edit-heading">
                   <button
                     className="icon-button"
-                    aria-label="返回记忆"
+                    aria-label={t("memory.back")}
                     onClick={() => setEditing(null)}
                   >
                     <ArrowLeft size={17} />
                   </button>
-                  <h3>{editing.id ? "编辑记忆" : "添加记忆"}</h3>
-                </div> : <h3><Brain size={16} />记忆 <span>{memories.length}</span></h3>}
-                {!editing && <label className="ochi-settings__switch" title="启用记忆"><input
+                  <h3>{editing.id ? t("memory.edit") : t("memory.add")}</h3>
+                </div> : <h3><Brain size={16} />{t("memory.title")} <span>{memories.length}</span></h3>}
+                {!editing && <label className="ochi-settings__switch" title={t("memory.enable")}><input
                   type="checkbox"
                   role="switch"
-                  aria-label="启用记忆"
+                  aria-label={t("memory.enable")}
                   checked={enabled}
                   disabled={loading || preferenceUpdating}
                   onChange={async (event) => {
@@ -226,7 +257,7 @@ export default function UserSettings({
                       const preferences = await api.updatePreferences({ memory_enabled: value });
                       setEnabled(preferences.memory_enabled);
                     } catch (reason) {
-                      setError(reason instanceof Error ? reason.message : "保存失败");
+                      setError(reason instanceof Error ? reason.message : t("error.save"));
                     } finally {
                       setPreferenceUpdating(false);
                     }
@@ -243,7 +274,7 @@ export default function UserSettings({
                 }}
               >
                 <label className="form-field">
-                  <span>内容</span>
+                  <span>{t("common.content")}</span>
                   <textarea
                     autoFocus
                     rows={5}
@@ -255,9 +286,9 @@ export default function UserSettings({
                 </label>
                 <div className="form-grid">
                   <label className="form-field">
-                    <span>类型</span>
+                    <span>{t("common.type")}</span>
                     <SelectField
-                      label="记忆类型"
+                      label={t("memory.kind")}
                       value={editing.kind ?? "fact"}
                       onChange={(value) =>
                         setEditing({
@@ -269,15 +300,15 @@ export default function UserSettings({
                     />
                   </label>
                   <label className="form-field">
-                    <span>范围</span>
+                    <span>{t("memory.scope")}</span>
                     <SelectField
-                      label="记忆范围"
+                      label={t("memory.scopeLabel")}
                       value={editing.project_id ?? ""}
                       onChange={(project_id) =>
                         setEditing({ ...editing, project_id })
                       }
                       options={[
-                        { value: "", label: "个人" },
+                        { value: "", label: t("memory.personal") },
                         ...projects.map((project) => ({
                           value: project.id,
                           label: project.name,
@@ -294,11 +325,11 @@ export default function UserSettings({
                   <input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="搜索记忆"
-                    aria-label="搜索记忆"
+                    placeholder={t("memory.search")}
+                    aria-label={t("memory.search")}
                   />
                 </div>
-                  <button type="button" className={`icon-button ochi-settings__filter${filtering ? " is-active" : ""}`} aria-label="筛选记忆" title="筛选记忆" aria-expanded={filtering} aria-controls="memory-filters" onClick={() => setFiltering((value) => !value)}>
+                  <button type="button" className={`icon-button ochi-settings__filter${filtering ? " is-active" : ""}`} aria-label={t("memory.filter")} title={t("memory.filter")} aria-expanded={filtering} aria-controls="memory-filters" onClick={() => setFiltering((value) => !value)}>
                     <ListFilter size={17} />
                     {(scope !== "all" || kind !== "all") && <span className="ochi-settings__filter-indicator" />}
                   </button>
@@ -307,23 +338,23 @@ export default function UserSettings({
                   onClick={() => setEditing({ content: "", kind: "fact" })}
                 >
                   <Plus size={16} />
-                  添加
+                  {t("common.add")}
                 </button>
               </div>
               {filtering && <div id="memory-filters" className="ochi-settings__filter-options">
                 <SelectField
                   value={scope}
                   onChange={setScope}
-                  label="记忆范围"
+                  label={t("memory.scopeLabel")}
                   options={[
-                    { value: "all", label: "全部范围" },
-                    { value: "user", label: "个人" },
+                    { value: "all", label: t("memory.allScopes") },
+                    { value: "user", label: t("memory.personal") },
                     ...projects.map((project) => ({ value: project.id, label: project.name })),
                   ]}
                 />
-                <SelectField value={kind} onChange={setKind} label="记忆类型"
-                  options={[{ value: "all", label: "全部类型" }, ...kinds]} />
-                <button className="text-button" type="button" onClick={() => { setScope("all"); setKind("all"); }}>重置</button>
+                <SelectField value={kind} onChange={setKind} label={t("memory.kind")}
+                  options={[{ value: "all", label: t("memory.allKinds") }, ...kinds]} />
+                <button className="text-button" type="button" onClick={() => { setScope("all"); setKind("all"); }}>{t("common.reset")}</button>
               </div>}
               {loading ? (
                 <div className="panel-loading">
@@ -337,21 +368,21 @@ export default function UserSettings({
                         <div className="ochi-settings__metadata">
                           <span>
                             {kinds.find((item) => item.value === memory.kind)
-                              ?.label ?? "事实"}
+                              ?.label ?? t("memory.fact")}
                           </span>
                           <span>
                             {memory.project_id
                               ? (projects.find(
                                   (project) => project.id === memory.project_id,
-                                )?.name ?? "项目")
-                              : "个人"}
+                                )?.name ?? t("projects.title"))
+                              : t("memory.personal")}
                           </span>
                           <span>
                             {memory.source === "automatic"
-                              ? "自动"
+                              ? t("common.automatic")
                               : memory.source === "agent"
-                                ? "Agent"
-                                : "手动"}
+                                ? t("memory.assistant")
+                                : t("common.manual")}
                           </span>
                         </div>
                         <p>{memory.content}</p>
@@ -359,7 +390,7 @@ export default function UserSettings({
                           <time>
                             {new Date(
                               memory.updated_at ?? memory.created_at,
-                            ).toLocaleDateString("zh-CN", {
+                            ).toLocaleDateString(getLocale(), {
                               month: "short",
                               day: "numeric",
                             })}
@@ -372,7 +403,7 @@ export default function UserSettings({
                                 onNavigate?.(`/c/${memory.source_session_id}`);
                               }}
                             >
-                              来源对话
+                              {t("memory.sourceConversation")}
                               <ArrowUpRight size={13} />
                             </button>
                           )}
@@ -380,7 +411,7 @@ export default function UserSettings({
                         {memory.source_excerpt && (
                           <details className="ochi-settings__excerpt">
                             <summary>
-                              来源片段
+                              {t("memory.sourceExcerpt")}
                               <ChevronDown size={13} />
                             </summary>
                             <blockquote>{memory.source_excerpt}</blockquote>
@@ -391,14 +422,14 @@ export default function UserSettings({
                         <button
                           className="icon-button"
                           onClick={() => setEditing(memory)}
-                          aria-label="编辑记忆"
+                          aria-label={t("memory.edit")}
                         >
                           <Pencil size={15} />
                         </button>
                         <button
                           className="icon-button danger"
                           onClick={() => void remove(memory.id)}
-                          aria-label="删除记忆"
+                          aria-label={t("memory.delete")}
                         >
                           <Trash2 size={15} />
                         </button>
@@ -406,7 +437,7 @@ export default function UserSettings({
                     </article>
                   ))}
                   {!filtered.length && (
-                    <div className="ochi-settings__empty">{query || kind !== "all" || scope !== "all" ? "没有找到记忆" : "暂无记忆"}</div>
+                    <div className="ochi-settings__empty">{query || kind !== "all" || scope !== "all" ? t("memory.noResults") : t("memory.empty")}</div>
                   )}
                 </div>
               )}

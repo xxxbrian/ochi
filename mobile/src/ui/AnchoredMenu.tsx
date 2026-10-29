@@ -1,3 +1,4 @@
+import { t, useI18n } from "../lib/i18n";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { OverKeyboardView, useWindowDimensions as useOverlayDimensions } from 'react-native-keyboard-controller';
@@ -23,6 +24,7 @@ export function AnchoredMenu({ visible, onClose, anchor, items, width = 260, ali
   visible: boolean; onClose: () => void; anchor: AnchorRect | null;
   items: MenuItem[]; width?: number; align?: 'start' | 'end'; preview?: ReactNode; preserveKeyboard?: boolean;
 }) {
+  useI18n();
   const { colors, fonts } = useTheme();
   const window = useWindowDimensions();
   const overlayWindow = useOverlayDimensions();
@@ -97,7 +99,7 @@ export function AnchoredMenu({ visible, onClose, anchor, items, width = 260, ali
 
   const content = (
     <View style={StyleSheet.absoluteFill} collapsable={false} pointerEvents={visible && anchorValid ? 'auto' : 'none'} accessibilityViewIsModal onAccessibilityEscape={close}>
-      <Animated.View style={[StyleSheet.absoluteFill, motion.backdrop]}><MenuPressable style={[StyleSheet.absoluteFill, { backgroundColor: preview ? '#00000066' : '#0000000d' }]} onPress={close} accessibilityLabel="关闭菜单" /></Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, motion.backdrop]}><MenuPressable style={[StyleSheet.absoluteFill, { backgroundColor: preview ? '#00000066' : '#0000000d' }]} onPress={close} accessibilityLabel={t("menu.close")} /></Animated.View>
       {preview && anchorValid && <Animated.View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[{ position: 'absolute', left: safe.left, top: safe.top, width: safe.width, height: safe.height, overflow: 'hidden' }, motion.backdrop]}>
         <View style={{ position: 'absolute', left: rect.x - safe.left, top: rect.y - safe.top, width: rect.width }}>{preview}</View>
       </Animated.View>}

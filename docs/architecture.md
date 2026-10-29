@@ -14,8 +14,10 @@ describe local contracts; `docs/design.md` covers presentation.
 | `server/internal/runtime` | Run state, event publication and subscriptions |
 | `server/internal/workspace` | Docker provisioning and private bridge access |
 | `server/internal/webui` | Embedded production Web assets and SPA routing |
+| `server/internal/i18n` | Public error identities, translations and HTTP language negotiation |
 | `web/src` | Browser routing, state and rendering |
 | `mobile/app`, `mobile/src` | Native routing, state and rendering |
+| `shared/i18n` | Client locale resolution, interpolation and process messages |
 | `workspace/` | Scoped Linux shell/files, browser, desktop and extensions |
 
 The Go API and PostgreSQL are shared by all clients. No Redis, separate worker
@@ -30,6 +32,44 @@ temporary updater service participates. GitHub publishes images and a rolling
 update manifest but never triggers an installation update. PostgreSQL and
 Computer images remain independently managed. See [Deployment](deployment.md)
 for the writable-layer/recreation boundary and schema maintenance rules.
+
+## Interface Languages
+
+Web, native clients and public API errors support English (`en`), Simplified
+Chinese (`zh-CN`) and Traditional Chinese (`zh-TW`). The account preference is
+`system` or one of those explicit locales. Before login, each client restores
+its local preference; after login, the account preference is authoritative.
+`system` resolves the browser/device language list, including Hans/Hant and
+regional aliases, with English as the unsupported-language fallback.
+
+Translations use semantic keys and complete three-language catalogs. Client
+formatting and subscriptions live in `shared/i18n`; each client owns storage
+and React integration. Changing language updates mounted content without
+recreating the composer, discarding drafts or restarting a run. Dates, numbers
+and durations use the resolved interface locale. Native permission prompts use
+the platform's app/system language and have resources for all three languages.
+User text, model output, provider identifiers and technical tool/diagnostic
+payloads are not translation keys. Interface language is not a model response
+language instruction and is never inserted into the agent's prompt.
+
+HTTP clients send the resolved locale in `Accept-Language`. The API negotiates
+each request independently and returns `Content-Language` and
+`Vary: Accept-Language`. Public failures have `{ error, code, params? }`, with
+safe localized text and stable machine-readable identity. Internal causes
+remain available for diagnosis, rather than becoming translated messages or
+being returned indiscriminately to users.
+
+Runs, completed messages, schedules and update state retain public error codes
+separately from safe fallback text. Viewers translate those codes in their
+current locale, including after reconnect or a language change. The clients
+read the same JSON error catalog embedded by Go; there is no manually maintained
+second copy. Browser EventSource retains its current transport and renders
+locale-independent error/status identities. Empty new-conversation titles stay
+empty in storage; clients supply the localized label until a real title exists.
+
+The native Computer viewer receives its initial resolved locale through its
+dedicated route and subsequent changes through a validated event. It does not
+reload the desktop or write a separate browser/account language preference.
 
 ## Conversation And Run Lifetime
 

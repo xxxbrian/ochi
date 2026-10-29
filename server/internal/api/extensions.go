@@ -3,12 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/workspace"
 )
 
@@ -36,7 +36,7 @@ func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/admin/")
 	segments := strings.Split(path, "/")
 	if len(segments) == 0 || (segments[0] != "skills" && segments[0] != "mcp") {
-		writeError(w, http.StatusBadRequest, errors.New("unknown extension"))
+		writeError(w, http.StatusBadRequest, i18n.New("extension_unknown"))
 		return
 	}
 	if r.Method == http.MethodDelete && len(segments) == 2 {
@@ -48,7 +48,7 @@ func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if owner != "" {
-			writeError(w, http.StatusConflict, errors.New("请先从插件中移除此组件"))
+			writeError(w, http.StatusConflict, i18n.New("extension_in_plugin"))
 			return
 		}
 	}
@@ -59,13 +59,13 @@ func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if active {
-			writeError(w, http.StatusConflict, errors.New("请等待当前任务结束后修改扩展配置"))
+			writeError(w, http.StatusConflict, i18n.New("extension_busy"))
 			return
 		}
 	}
 	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4*1024*1024))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("configuration is too large"))
+		writeError(w, http.StatusBadRequest, i18n.New("configuration_too_large"))
 		return
 	}
 	userID := "__admin__"
@@ -174,7 +174,7 @@ func (s *Server) workspaceManager() (managedWorkspace, error) {
 			return value, nil
 		}
 	}
-	return nil, errors.New("workspace manager is unavailable")
+	return nil, i18n.New("computer_unavailable")
 }
 
 func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +212,7 @@ func (s *Server) manageWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if status != "" {
-		writeError(w, http.StatusConflict, errors.New("workspace has an active task"))
+		writeError(w, http.StatusConflict, i18n.New("workspace_busy"))
 		return
 	}
 	manager, err := s.workspaceManager()

@@ -1,0 +1,4 @@
+NSCameraUsageDescription = "拍摄照片并添加到对话。";
+NSPhotoLibraryUsageDescription = "选择照片并添加到对话。";
+NSLocalNetworkUsageDescription = "连接你的 Ochi 服务。";
+NSFaceIDUsageDescription = "使用面容 ID 访问你的 Ochi 登录凭据。";

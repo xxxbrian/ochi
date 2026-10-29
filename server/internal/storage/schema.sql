@@ -302,6 +302,7 @@ CREATE TABLE runs (
     session_id uuid NOT NULL,
     status text NOT NULL,
     error text,
+    error_code text DEFAULT ''::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     output text DEFAULT ''::text NOT NULL,
@@ -329,6 +330,7 @@ CREATE TABLE schedule_executions (
     session_id uuid,
     status text DEFAULT 'queued'::text NOT NULL,
     error text DEFAULT ''::text NOT NULL,
+    error_code text DEFAULT ''::text NOT NULL,
     started_at timestamp with time zone DEFAULT now() NOT NULL,
     finished_at timestamp with time zone
 );
@@ -345,6 +347,7 @@ CREATE TABLE schedules (
     last_run_at timestamp with time zone,
     last_run_id uuid,
     last_error text DEFAULT ''::text NOT NULL,
+    last_error_code text DEFAULT ''::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     recurrence text DEFAULT 'interval'::text NOT NULL,
     timezone text DEFAULT 'Asia/Shanghai'::text NOT NULL,
@@ -381,7 +384,7 @@ CREATE TABLE session_tasks (
 
 CREATE TABLE sessions (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    title text DEFAULT '新对话'::text NOT NULL,
+    title text DEFAULT ''::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     user_id text NOT NULL,
@@ -411,7 +414,9 @@ CREATE TABLE user_preferences (
     memory_enabled boolean DEFAULT true NOT NULL,
     memory_revision bigint DEFAULT 0 NOT NULL,
     computer_default boolean DEFAULT false NOT NULL,
-    preferred_model_id text DEFAULT ''::text NOT NULL
+    preferred_model_id text DEFAULT ''::text NOT NULL,
+    language text DEFAULT 'system'::text NOT NULL,
+    CONSTRAINT user_preferences_language_check CHECK (language IN ('system', 'en', 'zh-CN', 'zh-TW'))
 );
 
 CREATE TABLE users (

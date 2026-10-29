@@ -1,3 +1,4 @@
+const { testI18n } = require('./helpers/i18n.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -34,6 +35,8 @@ async function surface({ platform = 'android', dark = true, target = true, reduc
     vm.runInNewContext(output, {
       module, exports: module.exports,
       require(name) {
+        const translated = testI18n.importFor(name); if (translated) return translated;
+
         if (name === 'react') return react;
         if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };
         if (name === 'react-native') return {

@@ -1,3 +1,5 @@
+import { errorForDisplay, localizedError, type DisplayError } from "../lib/errors";
+import { t, useI18n, getLocale, thinkingLevelLabel } from "../lib/i18n";
 import { memo, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -105,6 +107,7 @@ export const Composer = memo(function Composer({
   onCancelEdit,
   availableHeight,
 }: Props) {
+  useI18n();
   const { colors, fonts, dark } = useTheme();
   const computerTrack = dark
     ? { false: "#474b52", true: "#808690" }
@@ -129,7 +132,7 @@ export const Composer = memo(function Composer({
   const [posting, setPosting] = useState(false);
   const [uploadOperation, setUploadOperation] = useState<{ scope: string; id: number } | null>(null);
   const uploading = uploadOperation?.scope === inputScope;
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [menu, setMenu] = useState<"attachments" | "models" | "efforts" | null>(
     null,
   );
@@ -306,7 +309,7 @@ export const Composer = memo(function Composer({
             : await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!isCurrent()) return;
         if (!permission.granted) {
-          setError(kind === "camera" ? "请允许使用相机" : "请允许访问照片");
+          setError(kind === "camera" ? t("error.cameraPermission") : t("error.photosPermission"));
           return;
         }
         const result =
@@ -328,13 +331,13 @@ export const Composer = memo(function Composer({
       }
       for (const file of chosen) {
         if (file.size && file.size > 32 * 1024 * 1024)
-          throw new Error("文件太大，请选择 32 MB 以内的文件");
+          throw localizedError("error.fileTooLarge");
         const uploaded = await api.upload(file);
         if (!isCurrent()) return;
         changeFiles((current) => [...current, uploaded]);
       }
     } catch (reason) {
-      if (isCurrent()) setError(reason instanceof Error ? reason.message : "上传失败");
+      if (isCurrent()) setError(errorForDisplay(reason, "error.upload"));
     } finally {
       // A draft upload must not lock editing or clear a newer upload's busy state.
       setUploadOperation((current) => current?.id === operation.id ? null : current);
@@ -387,7 +390,7 @@ export const Composer = memo(function Composer({
       }
     } catch (reason) {
       if (mounted.current && version === draftVersion.current && currentInputScope.current === inputScope)
-        setError(reason instanceof Error ? reason.message : "发送失败");
+        setError(errorForDisplay(reason, "error.send"));
     } finally {
       if (mounted.current && version === draftVersion.current) setPosting(false);
     }
@@ -410,19 +413,19 @@ export const Composer = memo(function Composer({
       ? [
           {
             key: "camera",
-            title: "相机",
+            title: t("attachment.camera"),
             icon: Camera,
             onPress: () => void pick("camera"),
           },
           {
             key: "photos",
-            title: "照片或视频",
+            title: t("attachment.photos"),
             icon: ImageIcon,
             onPress: () => void pick("photos"),
           },
           {
             key: "files",
-            title: "文件",
+            title: t("attachment.file"),
             icon: File,
             onPress: () => void pick("files"),
           },
@@ -442,7 +445,7 @@ export const Composer = memo(function Composer({
         : [
             {
               key: "default",
-              title: "默认",
+              title: t("common.default"),
               selected: !effort,
               onPress: () => {
                 onEffort("");
@@ -451,7 +454,7 @@ export const Composer = memo(function Composer({
             },
             ...effortValues.map((value) => ({
               key: value,
-              title: value,
+              title: thinkingLevelLabel(value),
               selected: effort === value,
               onPress: () => {
                 onEffort(value);
@@ -462,21 +465,21 @@ export const Composer = memo(function Composer({
   const attachments = [
     {
       key: "camera",
-      title: "相机",
+      title: t("attachment.camera"),
       icon: Camera,
       disabled: busy,
       onPress: () => void pick("camera"),
     },
     {
       key: "photos",
-      title: "照片或视频",
+      title: t("attachment.photos"),
       icon: ImageIcon,
       disabled: busy,
       onPress: () => void pick("photos"),
     },
     {
       key: "files",
-      title: "文件",
+      title: t("attachment.file"),
       icon: File,
       disabled: busy,
       onPress: () => void pick("files"),
@@ -491,8 +494,8 @@ export const Composer = memo(function Composer({
       >
         {editingMessage && (
           <View style={[styles.editHeading, { borderBottomColor: colors.border }]}>
-            <AppText muted size={12}>编辑消息</AppText>
-            <ActionIcon icon={X} label="取消编辑" size={17} disabled={posting || uploading} onPress={onCancelEdit ?? (() => undefined)} style={{ width: 36, height: 32 }} />
+            <AppText muted size={12}>{t("chat.editMessage")}</AppText>
+            <ActionIcon icon={X} label={t("chat.cancelEdit")} size={17} disabled={posting || uploading} onPress={onCancelEdit ?? (() => undefined)} style={{ width: 36, height: 32 }} />
           </View>
         )}
         {displayedFiles.length > 0 && (
@@ -509,10 +512,10 @@ export const Composer = memo(function Composer({
         <View style={[styles.entry, shortViewport && styles.entryCompact]}>
         <TextInput
           ref={inputRef}
-          accessibilityLabel={editingMessage ? "编辑消息" : "消息"}
+          accessibilityLabel={editingMessage ? t("chat.editMessage") : t("chat.message")}
           testID="chat-input"
-          placeholder={supplementAvailable ? "补充内容…" : "问点什么…"}
-          accessibilityHint={supplementAvailable ? "可补充当前任务，或将新消息加入队列" : undefined}
+          placeholder={supplementAvailable ? t("chat.supplementPlaceholder") : t("chat.placeholder")}
+          accessibilityHint={supplementAvailable ? t("chat.busyHint") : undefined}
           placeholderTextColor={colors.subtle}
           selectionColor={colors.text}
           textBreakStrategy="simple"
@@ -566,7 +569,7 @@ export const Composer = memo(function Composer({
           </View>
         )}
         <View style={[styles.toolbar, shortViewport && styles.toolbarCompact]}>
-          <MenuTrigger items={attachments} label="添加附件">
+          <MenuTrigger items={attachments} label={t("attachment.add")}>
             <View
               style={{
                 width: 44,
@@ -582,7 +585,7 @@ export const Composer = memo(function Composer({
             <Pressable
               onPress={() => openMenu("models", modelRef)}
               accessibilityRole="button"
-              accessibilityLabel={`模型 ${model?.name ?? "选择模型"}`}
+              accessibilityLabel={t("model.current", { name: model?.name ?? t("model.select") })}
               disabled={busy}
               hitSlop={2}
               style={({ pressed }) => [
@@ -599,7 +602,7 @@ export const Composer = memo(function Composer({
                     numberOfLines={1}
                     style={{ maxWidth: 88, minWidth: 0, flexShrink: 1 }}
                   >
-                    {model?.name ?? "模型"}
+                    {model?.name ?? t("model.label")}
                   </AppText>
                   <ChevronDown size={12} color={colors.muted} />
                 </>
@@ -616,7 +619,7 @@ export const Composer = memo(function Composer({
                   } else openMenu("efforts", effortRef);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel={`思考程度 ${effort || "默认"}`}
+                accessibilityLabel={t("model.currentThinkingLevel", { level: thinkingLevelLabel(effort) })}
                 disabled={busy}
                 hitSlop={2}
                 style={styles.effortTrigger}
@@ -624,8 +627,8 @@ export const Composer = memo(function Composer({
                 <Brain size={17} color={colors.muted} />
                 {!compactSupplementTools && <AppText size={12} muted>
                   {model?.reasoning_kind === "budget"
-                    ? Number(budgetValue).toLocaleString()
-                    : effort || "默认"}
+                    ? Number(budgetValue).toLocaleString(getLocale())
+                    : thinkingLevelLabel(effort)}
                 </AppText>}
               </Pressable>
             </View>
@@ -636,7 +639,7 @@ export const Composer = memo(function Composer({
             <View style={styles.switchTarget}>
               <Switch
                 testID="computer-toggle"
-                accessibilityLabel="允许使用电脑"
+                accessibilityLabel={t("permission.allowComputer")}
                 value={computerEnabled}
                 disabled={computerBusy || Boolean(unavailable)}
                 onValueChange={onComputer}
@@ -649,13 +652,13 @@ export const Composer = memo(function Composer({
             </View>
           </View>
           {supplementAvailable && (
-            <Pressable accessibilityRole="button" accessibilityLabel="补充当前任务要求"
-              accessibilityHint={displayedFiles.length ? "补充要求暂不支持附件" : undefined}
+            <Pressable accessibilityRole="button" accessibilityLabel={t("chat.addInstructions")}
+              accessibilityHint={displayedFiles.length ? t("chat.instructionsNoAttachments") : undefined}
               accessibilityState={{ disabled: !displayedDraft.trim() || displayedFiles.length > 0 || busy }}
               disabled={!displayedDraft.trim() || displayedFiles.length > 0 || busy}
               onPress={() => void supplement()} style={({ pressed }) => [styles.supplement,
                 { backgroundColor: pressed ? colors.hover : "transparent", opacity: !displayedDraft.trim() || displayedFiles.length || busy ? 0.4 : 1 }]}>
-              <AppText muted size={12} numberOfLines={1}>补充</AppText>
+              <AppText muted size={12} numberOfLines={1}>{t("chat.addDetails")}</AppText>
             </Pressable>
           )}
           {posting || uploading ? (
@@ -665,7 +668,7 @@ export const Composer = memo(function Composer({
           ) : displayedDraft.trim() || displayedFiles.length ? (
             <IconButton
               icon={ArrowUp}
-              label={editingMessage ? "重新发送" : running ? "加入队列" : "发送"}
+              label={editingMessage ? t("chat.resend") : running ? t("chat.queue") : t("common.send")}
               size={40}
               iconSize={21}
               variant="filled"
@@ -680,7 +683,7 @@ export const Composer = memo(function Composer({
             ) : (
               <IconButton
                 icon={Square}
-                label="停止"
+                label={t("common.stop")}
                 size={40}
                 iconSize={16}
                 variant="filled"
@@ -705,13 +708,13 @@ export const Composer = memo(function Composer({
       />
       <Sheet
         visible={budgetOpen}
-        title="思考预算"
+        title={t("model.thinkingBudget")}
         onClose={() => setBudgetOpen(false)}
         height={280}
       >
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20 }}>
           <Field
-            label="Tokens"
+            label={t("model.tokens")}
             value={budget}
             onChangeText={setBudget}
             keyboardType="number-pad"
@@ -729,8 +732,7 @@ export const Composer = memo(function Composer({
               setBudgetOpen(false);
             }}
           >
-            完成
-          </Button>
+            {t("common.done")}</Button>
         </ScrollView>
       </Sheet>
     </View>

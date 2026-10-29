@@ -1,0 +1,1472 @@
+{
+  "internal_error": {
+    "en": "The service could not complete the request. Please try again.",
+    "zh-CN": "服务暂时无法完成请求，请重试。",
+    "zh-TW": "服務暫時無法完成請求，請重試。"
+  },
+  "bad_request": {
+    "en": "Please check the request and try again.",
+    "zh-CN": "请检查请求后重试。",
+    "zh-TW": "請檢查請求後重試。"
+  },
+  "unauthenticated": {
+    "en": "Please sign in again.",
+    "zh-CN": "请重新登录。",
+    "zh-TW": "請重新登入。"
+  },
+  "invalid_credentials": {
+    "en": "The username or password is incorrect.",
+    "zh-CN": "账号或密码不正确。",
+    "zh-TW": "帳號或密碼不正確。"
+  },
+  "forbidden": {
+    "en": "You do not have access to this content.",
+    "zh-CN": "无法访问此内容。",
+    "zh-TW": "無法存取此內容。"
+  },
+  "admin_required": {
+    "en": "Administrator access is required.",
+    "zh-CN": "需要管理员权限。",
+    "zh-TW": "需要管理員權限。"
+  },
+  "not_found": {
+    "en": "The requested content was not found.",
+    "zh-CN": "内容不存在。",
+    "zh-TW": "內容不存在。"
+  },
+  "conflict": {
+    "en": "This operation conflicts with the current state. Please try again.",
+    "zh-CN": "当前操作发生冲突，请重试。",
+    "zh-TW": "目前操作發生衝突，請重試。"
+  },
+  "payload_too_large": {
+    "en": "Choose a file no larger than 32 MB.",
+    "zh-CN": "请选择 32 MB 以内的文件。",
+    "zh-TW": "請選擇 32 MB 以內的檔案。"
+  },
+  "rate_limited": {
+    "en": "Too many requests. Please try again later.",
+    "zh-CN": "请求过于频繁，请稍后再试。",
+    "zh-TW": "請求過於頻繁，請稍後再試。"
+  },
+  "service_unavailable": {
+    "en": "The service is temporarily unavailable.",
+    "zh-CN": "服务暂时不可用。",
+    "zh-TW": "服務暫時無法使用。"
+  },
+  "request_failed": {
+    "en": "The request failed. Please try again.",
+    "zh-CN": "请求失败，请重试。",
+    "zh-TW": "請求失敗，請重試。"
+  },
+  "unsupported_media_type": {
+    "en": "The request must use application/json.",
+    "zh-CN": "请求必须使用 application/json 格式。",
+    "zh-TW": "請求必須使用 application/json 格式。"
+  },
+  "invalid_json": {
+    "en": "The JSON request is invalid.",
+    "zh-CN": "请求 JSON 格式无效。",
+    "zh-TW": "請求 JSON 格式無效。"
+  },
+  "invalid_language": {
+    "en": "Choose English, Simplified Chinese, Traditional Chinese, or system language.",
+    "zh-CN": "请选择英文、简体中文、繁体中文或跟随系统。",
+    "zh-TW": "請選擇英文、簡體中文、繁體中文或跟隨系統。"
+  },
+  "login_failed": {
+    "en": "Unable to sign in. Please try again.",
+    "zh-CN": "无法登录，请重试。",
+    "zh-TW": "無法登入，請重試。"
+  },
+  "invalid_preview_url": {
+    "en": "The preview address is invalid.",
+    "zh-CN": "预览地址无效。",
+    "zh-TW": "預覽位址無效。"
+  },
+  "session_busy": {
+    "en": "This conversation is still running.",
+    "zh-CN": "此对话正在运行。",
+    "zh-TW": "此對話正在執行。"
+  },
+  "invalid_resource_id": {
+    "en": "The conversation or run ID is invalid.",
+    "zh-CN": "对话或运行 ID 无效。",
+    "zh-TW": "對話或執行 ID 無效。"
+  },
+  "conversation_storage_failed": {
+    "en": "Unable to read or save this conversation.",
+    "zh-CN": "无法读取或保存对话。",
+    "zh-TW": "無法讀取或儲存對話。"
+  },
+  "invalid_title": {
+    "en": "The title must contain 1–120 characters.",
+    "zh-CN": "标题应为 1 到 120 个字符。",
+    "zh-TW": "標題應為 1 到 120 個字元。"
+  },
+  "message_required": {
+    "en": "Enter a message first.",
+    "zh-CN": "请先输入消息。",
+    "zh-TW": "請先輸入訊息。"
+  },
+  "reply_required": {
+    "en": "Enter a reply first.",
+    "zh-CN": "请先输入回复。",
+    "zh-TW": "請先輸入回覆。"
+  },
+  "permission_choice_required": {
+    "en": "Choose a permission option.",
+    "zh-CN": "请选择权限选项。",
+    "zh-TW": "請選擇權限選項。"
+  },
+  "run_not_waiting": {
+    "en": "This run is not waiting for input.",
+    "zh-CN": "当前任务不在等待输入。",
+    "zh-TW": "目前工作並未等待輸入。"
+  },
+  "runner_unconfigured": {
+    "en": "No model runner is configured.",
+    "zh-CN": "尚未配置可用的模型服务。",
+    "zh-TW": "尚未設定可用的模型服務。"
+  },
+  "edit_retry_conflict": {
+    "en": "Editing and retrying cannot be combined.",
+    "zh-CN": "修改和重试不能同时进行。",
+    "zh-TW": "編輯和重試不能同時進行。"
+  },
+  "stop_before_edit": {
+    "en": "Stop the current turn before editing or retrying.",
+    "zh-CN": "请先停止当前轮次后再修改或重试。",
+    "zh-TW": "請先停止目前回合後再編輯或重試。"
+  },
+  "edit_latest_only": {
+    "en": "Only the most recent message can be edited or retried.",
+    "zh-CN": "只能修改或重新运行最近的一条消息。",
+    "zh-TW": "只能編輯或重新執行最近一則訊息。"
+  },
+  "queued_input_started": {
+    "en": "This message has already started running.",
+    "zh-CN": "消息已开始执行。",
+    "zh-TW": "訊息已開始執行。"
+  },
+  "image_input_too_large": {
+    "en": "Resize the image to 8 MB or less before uploading.",
+    "zh-CN": "图像超过 8 MB，请缩小后上传。",
+    "zh-TW": "圖片超過 8 MB，請縮小後上傳。"
+  },
+  "streaming_unavailable": {
+    "en": "Streaming is unavailable. Please reconnect.",
+    "zh-CN": "流式连接暂不可用，请重新连接。",
+    "zh-TW": "串流連線暫時無法使用，請重新連線。"
+  },
+  "model_unavailable": {
+    "en": "The model is temporarily unavailable. Please try again.",
+    "zh-CN": "模型暂时不可用，请重试。",
+    "zh-TW": "模型暫時無法使用，請重試。"
+  },
+  "model_selection_invalid": {
+    "en": "Choose an available model.",
+    "zh-CN": "请选择可用的模型。",
+    "zh-TW": "請選擇可用的模型。"
+  },
+  "model_order_changed": {
+    "en": "The model list changed. Reopen model ordering.",
+    "zh-CN": "模型列表已变化，请重新打开排序。",
+    "zh-TW": "模型清單已變更，請重新開啟排序。"
+  },
+  "reasoning_unsupported": {
+    "en": "This model does not support the selected reasoning level.",
+    "zh-CN": "当前模型不支持该思考程度。",
+    "zh-TW": "目前模型不支援此思考程度。"
+  },
+  "provider_disabled": {
+    "en": "This model's provider is not enabled.",
+    "zh-CN": "当前模型的服务尚未启用。",
+    "zh-TW": "目前模型的服務尚未啟用。"
+  },
+  "history_requires_vision": {
+    "en": "This conversation contains images. Choose a model that supports images, or start a new conversation.",
+    "zh-CN": "此对话包含图像，请选择支持图像的模型，或新建对话。",
+    "zh-TW": "此對話包含圖片，請選擇支援圖片的模型，或建立新對話。"
+  },
+  "history_requires_tools": {
+    "en": "This conversation contains tool calls. Choose a model that supports tools, or start a new conversation.",
+    "zh-CN": "此对话包含工具操作，请选择支持工具的模型，或新建对话。",
+    "zh-TW": "此對話包含工具操作，請選擇支援工具的模型，或建立新對話。"
+  },
+  "project_invalid": {
+    "en": "Check the project name and instructions length.",
+    "zh-CN": "项目名称或说明长度不正确。",
+    "zh-TW": "專案名稱或說明長度不正確。"
+  },
+  "search_too_long": {
+    "en": "The search query is too long.",
+    "zh-CN": "搜索内容过长。",
+    "zh-TW": "搜尋內容過長。"
+  },
+  "invalid_pagination": {
+    "en": "The pagination parameters are invalid.",
+    "zh-CN": "分页参数无效。",
+    "zh-TW": "分頁參數無效。"
+  },
+  "file_required": {
+    "en": "Choose a file first.",
+    "zh-CN": "请选择文件。",
+    "zh-TW": "請選擇檔案。"
+  },
+  "attachments_limit": {
+    "en": "Too many attachments were selected.",
+    "zh-CN": "选择的附件过多。",
+    "zh-TW": "選擇的附件過多。"
+  },
+  "computer_unavailable": {
+    "en": "The computer is temporarily unavailable.",
+    "zh-CN": "电脑暂不可用。",
+    "zh-TW": "電腦暫時無法使用。"
+  },
+  "computer_wait_cancelled": {
+    "en": "Waiting for the computer was cancelled.",
+    "zh-CN": "等待电脑已取消。",
+    "zh-TW": "等待電腦已取消。"
+  },
+  "websocket_required": {
+    "en": "A WebSocket connection is required.",
+    "zh-CN": "需要 WebSocket 连接。",
+    "zh-TW": "需要 WebSocket 連線。"
+  },
+  "computer_takeover_required": {
+    "en": "Take control of the computer first.",
+    "zh-CN": "请先接管电脑。",
+    "zh-TW": "請先接管電腦。"
+  },
+  "computer_connection_failed": {
+    "en": "The remote desktop connection failed.",
+    "zh-CN": "远程桌面连接失败。",
+    "zh-TW": "遠端桌面連線失敗。"
+  },
+  "computer_connection_unavailable": {
+    "en": "The remote desktop connection is unavailable.",
+    "zh-CN": "远程桌面连接不可用。",
+    "zh-TW": "遠端桌面連線無法使用。"
+  },
+  "computer_takeover_ended": {
+    "en": "Control of the computer has ended.",
+    "zh-CN": "电脑接管已结束。",
+    "zh-TW": "電腦接管已結束。"
+  },
+  "computer_permission_required": {
+    "en": "Allow this conversation to use the computer first.",
+    "zh-CN": "请先允许此对话使用电脑。",
+    "zh-TW": "請先允許此對話使用電腦。"
+  },
+  "invalid_run_status": {
+    "en": "The run status is invalid.",
+    "zh-CN": "运行状态无效。",
+    "zh-TW": "執行狀態無效。"
+  },
+  "invalid_start_time": {
+    "en": "The start time is invalid.",
+    "zh-CN": "开始时间无效。",
+    "zh-TW": "開始時間無效。"
+  },
+  "invalid_end_time": {
+    "en": "The end time is invalid.",
+    "zh-CN": "结束时间无效。",
+    "zh-TW": "結束時間無效。"
+  },
+  "date_range_too_large": {
+    "en": "The date range cannot exceed 90 days.",
+    "zh-CN": "时间范围需在 90 天以内。",
+    "zh-TW": "時間範圍須在 90 天以內。"
+  },
+  "invalid_page_limit": {
+    "en": "The page size must be between 1 and 100.",
+    "zh-CN": "每页数量需在 1 到 100 之间。",
+    "zh-TW": "每頁數量須在 1 到 100 之間。"
+  },
+  "invalid_page_offset": {
+    "en": "The page offset must be a non-negative integer.",
+    "zh-CN": "分页位置必须为非负整数。",
+    "zh-TW": "分頁位置必須為非負整數。"
+  },
+  "debug_mode_invalid": {
+    "en": "Debug mode must be a boolean.",
+    "zh-CN": "Debug 模式必须为布尔值。",
+    "zh-TW": "Debug 模式必須為布林值。"
+  },
+  "plugin_enabled_required": {
+    "en": "Specify whether the plugin is enabled.",
+    "zh-CN": "请指定插件是否启用。",
+    "zh-TW": "請指定外掛是否啟用。"
+  },
+  "plugin_unavailable": {
+    "en": "Plugin components are temporarily unavailable. Please try again.",
+    "zh-CN": "插件组件暂时不可用，请重试。",
+    "zh-TW": "外掛元件暫時無法使用，請重試。"
+  },
+  "plugin_id_immutable": {
+    "en": "A plugin ID cannot be changed.",
+    "zh-CN": "插件 ID 不能修改。",
+    "zh-TW": "外掛 ID 不能修改。"
+  },
+  "plugin_locked": {
+    "en": "This plugin is enabled by the administrator and cannot be disabled.",
+    "zh-CN": "此插件由管理员默认启用，无法关闭。",
+    "zh-TW": "此外掛由管理員預設啟用，無法關閉。"
+  },
+  "plugin_conflict": {
+    "en": "A plugin or component with this ID already exists.",
+    "zh-CN": "此 ID 的插件或组件已存在。",
+    "zh-TW": "此 ID 的外掛或元件已存在。"
+  },
+  "plugin_id_invalid": {
+    "en": "A plugin ID must use 1–64 lowercase letters, digits, hyphens, or underscores.",
+    "zh-CN": "插件 ID 应为 1 到 64 位小写字母、数字、连字符或下划线。",
+    "zh-TW": "外掛 ID 應為 1 到 64 個小寫字母、數字、連字號或底線。"
+  },
+  "plugin_name_invalid": {
+    "en": "A plugin name must contain 1–100 characters.",
+    "zh-CN": "插件名称应为 1 到 100 个字符。",
+    "zh-TW": "外掛名稱應為 1 到 100 個字元。"
+  },
+  "plugin_description_invalid": {
+    "en": "A plugin description cannot exceed 4000 bytes.",
+    "zh-CN": "插件描述不能超过 4000 字节。",
+    "zh-TW": "外掛描述不能超過 4000 位元組。"
+  },
+  "plugin_components_invalid": {
+    "en": "A plugin must contain 1–64 components.",
+    "zh-CN": "插件应包含 1 到 64 个组件。",
+    "zh-TW": "外掛應包含 1 到 64 個元件。"
+  },
+  "plugin_component_id_invalid": {
+    "en": "Plugin component IDs must be unique and use 1–64 letters, digits, hyphens, or underscores.",
+    "zh-CN": "插件组件 ID 必须唯一，且为 1 到 64 位字母、数字、连字符或下划线。",
+    "zh-TW": "外掛元件 ID 必須唯一，且為 1 到 64 個字母、數字、連字號或底線。"
+  },
+  "plugin_component_unknown": {
+    "en": "The selected plugin component is unavailable.",
+    "zh-CN": "所选插件组件不可用。",
+    "zh-TW": "所選外掛元件無法使用。"
+  },
+  "extension_unknown": {
+    "en": "The extension was not found.",
+    "zh-CN": "扩展不存在。",
+    "zh-TW": "擴充功能不存在。"
+  },
+  "extension_in_plugin": {
+    "en": "Remove this component from its plugin first.",
+    "zh-CN": "请先从插件中移除此组件。",
+    "zh-TW": "請先從外掛中移除此元件。"
+  },
+  "extension_busy": {
+    "en": "Wait for the current task to finish before changing extensions.",
+    "zh-CN": "请等待当前任务结束后修改扩展配置。",
+    "zh-TW": "請等待目前工作結束後再修改擴充功能設定。"
+  },
+  "configuration_too_large": {
+    "en": "The configuration is too large.",
+    "zh-CN": "配置过大。",
+    "zh-TW": "設定過大。"
+  },
+  "workspace_busy": {
+    "en": "The workspace has an active task.",
+    "zh-CN": "工作空间有正在执行的任务。",
+    "zh-TW": "工作空間有正在執行的工作。"
+  },
+  "api_key_required": {
+    "en": "Enter a new API key.",
+    "zh-CN": "请输入新的密钥。",
+    "zh-TW": "請輸入新的金鑰。"
+  },
+  "api_key_action_invalid": {
+    "en": "The API key action is invalid.",
+    "zh-CN": "密钥操作无效。",
+    "zh-TW": "金鑰操作無效。"
+  },
+  "headers_invalid": {
+    "en": "The request headers are invalid.",
+    "zh-CN": "请求头格式无效。",
+    "zh-TW": "請求標頭格式無效。"
+  },
+  "provider_timeout_invalid": {
+    "en": "The request timeout must be between 5 and 1800 seconds.",
+    "zh-CN": "请求超时应在 5 到 1800 秒之间。",
+    "zh-TW": "請求逾時應在 5 到 1800 秒之間。"
+  },
+  "provider_configuration_invalid": {
+    "en": "Enter a name, valid provider address, and API key. Keyless services must be explicitly enabled.",
+    "zh-CN": "请填写名称、有效服务地址和密钥；无密钥服务需显式开启。",
+    "zh-TW": "請填寫名稱、有效服務位址和金鑰；無金鑰服務須明確啟用。"
+  },
+  "provider_protocol_invalid": {
+    "en": "Choose OpenAI Chat Completions or Responses.",
+    "zh-CN": "请选择 OpenAI Chat Completions 或 Responses 协议。",
+    "zh-TW": "請選擇 OpenAI Chat Completions 或 Responses 協定。"
+  },
+  "provider_connection_failed": {
+    "en": "Connection failed. Check the provider address and network.",
+    "zh-CN": "连接失败，请检查服务地址和网络。",
+    "zh-TW": "連線失敗，請檢查服務位址和網路。"
+  },
+  "provider_model_list_rejected": {
+    "en": "The provider rejected the model list request (HTTP {status}).",
+    "zh-CN": "服务拒绝了模型列表请求（HTTP {status}）。",
+    "zh-TW": "服務拒絕了模型清單請求（HTTP {status}）。"
+  },
+  "provider_model_list_invalid": {
+    "en": "The provider did not return a valid model list.",
+    "zh-CN": "服务响应不是有效模型列表。",
+    "zh-TW": "服務回應不是有效的模型清單。"
+  },
+  "provider_sync_failed": {
+    "en": "The model list could not be synced. Please sync it again.",
+    "zh-CN": "模型列表未同步，请重新同步。",
+    "zh-TW": "模型清單未同步，請重新同步。"
+  },
+  "provider_discovery_disabled": {
+    "en": "Model discovery is not enabled for this provider.",
+    "zh-CN": "此服务未开启模型发现。",
+    "zh-TW": "此服務未啟用模型探索。"
+  },
+  "provider_request_failed": {
+    "en": "The provider request failed. Check the provider connection and configuration.",
+    "zh-CN": "服务请求失败，请检查服务连接和配置。",
+    "zh-TW": "服務請求失敗，請檢查服務連線和設定。"
+  },
+  "model_configuration_invalid": {
+    "en": "The model configuration is invalid.",
+    "zh-CN": "模型配置格式无效。",
+    "zh-TW": "模型設定格式無效。"
+  },
+  "model_fields_required": {
+    "en": "Enter a model name, ID, provider, and valid context length.",
+    "zh-CN": "请填写模型名称、标识、服务与有效上下文长度。",
+    "zh-TW": "請填寫模型名稱、識別碼、服務與有效上下文長度。"
+  },
+  "default_model_disabled": {
+    "en": "The default model must be enabled.",
+    "zh-CN": "默认模型必须启用。",
+    "zh-TW": "預設模型必須啟用。"
+  },
+  "default_model_unavailable": {
+    "en": "The default model must be available from its provider.",
+    "zh-CN": "默认模型必须在服务中可用。",
+    "zh-TW": "預設模型必須可由服務使用。"
+  },
+  "reasoning_path_invalid": {
+    "en": "The reasoning parameter path is invalid.",
+    "zh-CN": "思考参数路径无效。",
+    "zh-TW": "思考參數路徑無效。"
+  },
+  "reasoning_type_invalid": {
+    "en": "The reasoning type is invalid.",
+    "zh-CN": "思考类型无效。",
+    "zh-TW": "思考類型無效。"
+  },
+  "model_kind_invalid": {
+    "en": "The model type is invalid.",
+    "zh-CN": "模型类型无效。",
+    "zh-TW": "模型類型無效。"
+  },
+  "chat_model_required": {
+    "en": "This model does not output chat text and cannot be enabled for this chat protocol.",
+    "zh-CN": "此模型不输出聊天文本，当前聊天协议不能启用图像或音频生成模型。",
+    "zh-TW": "此模型不輸出聊天文字，目前聊天協定無法啟用圖片或音訊生成模型。"
+  },
+  "default_chat_model_required": {
+    "en": "Only a chat model can be the default chat model.",
+    "zh-CN": "只有聊天模型可以作为默认聊天模型。",
+    "zh-TW": "只有聊天模型可以設為預設聊天模型。"
+  },
+  "image_generation_required": {
+    "en": "Image models must have image generation enabled.",
+    "zh-CN": "图像模型需要启用生图能力。",
+    "zh-TW": "圖片模型須啟用圖片生成能力。"
+  },
+  "reasoning_configuration_required": {
+    "en": "Configure the reasoning parameters supported by the provider.",
+    "zh-CN": "请配置服务支持的思考参数。",
+    "zh-TW": "請設定服務支援的思考參數。"
+  },
+  "default_reasoning_invalid": {
+    "en": "The default reasoning level is not in the available options.",
+    "zh-CN": "默认思考程度不在可用选项中。",
+    "zh-TW": "預設思考程度不在可用選項中。"
+  },
+  "token_range_invalid": {
+    "en": "The token range is invalid.",
+    "zh-CN": "Token 范围无效。",
+    "zh-TW": "Token 範圍無效。"
+  },
+  "reasoning_budget_invalid": {
+    "en": "The reasoning budget is out of range.",
+    "zh-CN": "思考预算超出范围。",
+    "zh-TW": "思考預算超出範圍。"
+  },
+  "reasoning_option_required": {
+    "en": "Reasoning options cannot be empty.",
+    "zh-CN": "思考选项不能为空。",
+    "zh-TW": "思考選項不可為空。"
+  },
+  "reasoning_mapping_required": {
+    "en": "Enter a provider-supported JSON mapping for each reasoning option.",
+    "zh-CN": "请为每个思考选项填写服务支持的 JSON 映射。",
+    "zh-TW": "請為每個思考選項填寫服務支援的 JSON 對應。"
+  },
+  "reasoning_mapping_invalid": {
+    "en": "The reasoning mapping must be valid JSON.",
+    "zh-CN": "思考映射必须是有效 JSON 值。",
+    "zh-TW": "思考對應必須是有效的 JSON 值。"
+  },
+  "default_provider_disabled": {
+    "en": "The default model's provider must be enabled.",
+    "zh-CN": "默认模型的服务必须启用。",
+    "zh-TW": "預設模型的服務必須啟用。"
+  },
+  "user_not_found": {
+    "en": "The user was not found.",
+    "zh-CN": "用户不存在。",
+    "zh-TW": "使用者不存在。"
+  },
+  "username_reserved": {
+    "en": "This username is reserved by the system.",
+    "zh-CN": "此用户名为系统保留名称。",
+    "zh-TW": "此使用者名稱為系統保留名稱。"
+  },
+  "user_fields_required": {
+    "en": "Enter a username, display name, role, and a password of at least six characters.",
+    "zh-CN": "请填写用户名、显示名称、角色和至少六位密码。",
+    "zh-TW": "請填寫使用者名稱、顯示名稱、角色及至少六個字元的密碼。"
+  },
+  "username_immutable": {
+    "en": "The username cannot be changed.",
+    "zh-CN": "用户名不能修改。",
+    "zh-TW": "使用者名稱不能修改。"
+  },
+  "password_too_short": {
+    "en": "The password must contain at least six characters.",
+    "zh-CN": "密码至少六位。",
+    "zh-TW": "密碼至少須有六個字元。"
+  },
+  "password_too_long": {
+    "en": "The password is too long.",
+    "zh-CN": "密码过长。",
+    "zh-TW": "密碼過長。"
+  },
+  "last_admin_required": {
+    "en": "Keep at least one enabled administrator.",
+    "zh-CN": "请至少保留一位可用的管理员。",
+    "zh-TW": "請至少保留一位可用的管理員。"
+  },
+  "tool_round_limit_invalid": {
+    "en": "The tool round limit must be between 1 and 200.",
+    "zh-CN": "操作上限应在 1 到 200 之间。",
+    "zh-TW": "操作上限應在 1 到 200 之間。"
+  },
+  "auxiliary_model_not_found": {
+    "en": "The auxiliary model was not found.",
+    "zh-CN": "辅助模型不存在。",
+    "zh-TW": "輔助模型不存在。"
+  },
+  "auxiliary_model_invalid": {
+    "en": "The auxiliary model has the wrong type or an unavailable provider.",
+    "zh-CN": "辅助模型类型不符或服务不可用。",
+    "zh-TW": "輔助模型類型不符或服務無法使用。"
+  },
+  "image_model_disabled": {
+    "en": "Enable the image generation model first.",
+    "zh-CN": "生图模型需要先启用。",
+    "zh-TW": "須先啟用圖片生成模型。"
+  },
+  "catalog_provider_not_found": {
+    "en": "This provider was not found in the capability catalog.",
+    "zh-CN": "能力目录中没有此服务。",
+    "zh-TW": "能力目錄中沒有此服務。"
+  },
+  "catalog_model_not_found": {
+    "en": "Matching model capabilities were not found.",
+    "zh-CN": "未找到对应模型能力。",
+    "zh-TW": "找不到對應的模型能力。"
+  },
+  "catalog_unavailable": {
+    "en": "The model capability catalog is temporarily unavailable.",
+    "zh-CN": "模型能力目录暂时不可用。",
+    "zh-TW": "模型能力目錄暫時無法使用。"
+  },
+  "catalog_invalid": {
+    "en": "The model capability catalog response is invalid.",
+    "zh-CN": "模型能力目录响应无效。",
+    "zh-TW": "模型能力目錄回應無效。"
+  },
+  "memory_content_invalid": {
+    "en": "Memory content must contain 1–6000 bytes.",
+    "zh-CN": "记忆内容应为 1 到 6000 个字节。",
+    "zh-TW": "記憶內容應為 1 到 6000 個位元組。"
+  },
+  "memory_kind_invalid": {
+    "en": "The memory type is invalid.",
+    "zh-CN": "无效的记忆类型。",
+    "zh-TW": "記憶類型無效。"
+  },
+  "search_api_key_required": {
+    "en": "Enter a new search API key.",
+    "zh-CN": "请输入新的搜索 API 密钥。",
+    "zh-TW": "請輸入新的搜尋 API 金鑰。"
+  },
+  "search_arguments_invalid": {
+    "en": "The search parameters are invalid.",
+    "zh-CN": "搜索参数无效。",
+    "zh-TW": "搜尋參數無效。"
+  },
+  "search_configuration_unavailable": {
+    "en": "Search configuration is temporarily unavailable.",
+    "zh-CN": "暂时无法读取搜索配置。",
+    "zh-TW": "暫時無法讀取搜尋設定。"
+  },
+  "image_model_unconfigured": {
+    "en": "No available image generation model is configured.",
+    "zh-CN": "尚未配置可用的生图模型。",
+    "zh-TW": "尚未設定可用的圖片生成模型。"
+  },
+  "image_model_unavailable": {
+    "en": "The image generation model is disabled or unavailable.",
+    "zh-CN": "生图模型未启用或不可用。",
+    "zh-TW": "圖片生成模型未啟用或無法使用。"
+  },
+  "image_provider_unavailable": {
+    "en": "The image generation provider is disabled or unavailable.",
+    "zh-CN": "生图服务未启用或不可用。",
+    "zh-TW": "圖片生成服務未啟用或無法使用。"
+  },
+  "image_arguments_invalid": {
+    "en": "The image generation parameters are invalid.",
+    "zh-CN": "图片生成参数无效。",
+    "zh-TW": "圖片生成參數無效。"
+  },
+  "reference_images_limit": {
+    "en": "You can use up to eight reference images.",
+    "zh-CN": "参考图片最多为 8 张。",
+    "zh-TW": "參考圖片最多為 8 張。"
+  },
+  "image_edit_unsupported": {
+    "en": "This image model does not support image editing.",
+    "zh-CN": "当前生图模型不支持图片编辑。",
+    "zh-TW": "目前圖片生成模型不支援圖片編輯。"
+  },
+  "reference_image_unavailable": {
+    "en": "The reference image does not exist or is inaccessible.",
+    "zh-CN": "参考图片不存在或不可访问。",
+    "zh-TW": "參考圖片不存在或無法存取。"
+  },
+  "reference_image_invalid": {
+    "en": "Reference files must be images no larger than 32 MB.",
+    "zh-CN": "参考文件需要是 32 MB 以内的图片。",
+    "zh-TW": "參考檔案須為 32 MB 以內的圖片。"
+  },
+  "reference_image_read_failed": {
+    "en": "Unable to read the reference image.",
+    "zh-CN": "无法读取参考图片。",
+    "zh-TW": "無法讀取參考圖片。"
+  },
+  "generated_image_save_failed": {
+    "en": "The image was generated but could not be saved. Do not generate it again.",
+    "zh-CN": "图片已生成，但保存失败；请勿重新生成。",
+    "zh-TW": "圖片已生成，但儲存失敗；請勿重新生成。"
+  },
+  "schedule_fields_required": {
+    "en": "Enter a task name and instructions.",
+    "zh-CN": "请填写任务名称和指令。",
+    "zh-TW": "請填寫工作名稱和指令。"
+  },
+  "timezone_invalid": {
+    "en": "The time zone is invalid.",
+    "zh-CN": "无效的时区。",
+    "zh-TW": "時區無效。"
+  },
+  "schedule_context_invalid": {
+    "en": "The task context is invalid.",
+    "zh-CN": "无效的任务上下文。",
+    "zh-TW": "工作上下文無效。"
+  },
+  "schedule_interval_invalid": {
+    "en": "The interval must be between 1 and 525600 minutes.",
+    "zh-CN": "间隔应为 1 到 525600 分钟。",
+    "zh-TW": "間隔應為 1 到 525600 分鐘。"
+  },
+  "schedule_time_required": {
+    "en": "Choose an execution time.",
+    "zh-CN": "请选择执行时间。",
+    "zh-TW": "請選擇執行時間。"
+  },
+  "schedule_time_invalid": {
+    "en": "The time must use HH:MM format.",
+    "zh-CN": "时间应为 HH:MM。",
+    "zh-TW": "時間應為 HH:MM。"
+  },
+  "schedule_weekdays_required": {
+    "en": "Choose at least one day of the week.",
+    "zh-CN": "请选择星期。",
+    "zh-TW": "請選擇星期。"
+  },
+  "schedule_weekday_invalid": {
+    "en": "Days of the week must be between 1 and 7.",
+    "zh-CN": "星期应为 1 到 7。",
+    "zh-TW": "星期應為 1 到 7。"
+  },
+  "schedule_recurrence_invalid": {
+    "en": "The recurrence type is invalid.",
+    "zh-CN": "无效的重复方式。",
+    "zh-TW": "重複方式無效。"
+  },
+  "schedule_next_run_failed": {
+    "en": "Unable to calculate the next execution time.",
+    "zh-CN": "无法计算下一次执行时间。",
+    "zh-TW": "無法計算下次執行時間。"
+  },
+  "schedule_future_required": {
+    "en": "Choose a future execution time.",
+    "zh-CN": "请选择将来的执行时间。",
+    "zh-TW": "請選擇未來的執行時間。"
+  },
+  "schedule_project_mismatch": {
+    "en": "The selected conversation does not belong to this project.",
+    "zh-CN": "所选对话不属于此项目。",
+    "zh-TW": "所選對話不屬於此專案。"
+  },
+  "account_disabled": {
+    "en": "This account is not enabled.",
+    "zh-CN": "账号未启用。",
+    "zh-TW": "帳號未啟用。"
+  },
+  "schedule_session_failed": {
+    "en": "Unable to create the execution conversation.",
+    "zh-CN": "创建执行会话失败。",
+    "zh-TW": "建立執行對話失敗。"
+  },
+  "schedule_execution_failed": {
+    "en": "Unable to create the execution record.",
+    "zh-CN": "创建执行记录失败。",
+    "zh-TW": "建立執行記錄失敗。"
+  },
+  "run_failed": {
+    "en": "The task could not be completed. Please try again.",
+    "zh-CN": "任务未能完成，请重试。",
+    "zh-TW": "工作未能完成，請重試。"
+  },
+  "run_interrupted": {
+    "en": "The task was interrupted. Please try again.",
+    "zh-CN": "任务已中断，请重试。",
+    "zh-TW": "工作已中斷，請重試。"
+  },
+  "run_timeout": {
+    "en": "The response timed out. Please try again.",
+    "zh-CN": "响应超时，请重试。",
+    "zh-TW": "回應逾時，請重試。"
+  },
+  "run_save_failed": {
+    "en": "Unable to save the result. Please try again.",
+    "zh-CN": "无法保存结果，请重试。",
+    "zh-TW": "無法儲存結果，請重試。"
+  },
+  "context_read_failed": {
+    "en": "Unable to read the conversation context.",
+    "zh-CN": "无法读取对话上下文。",
+    "zh-TW": "無法讀取對話上下文。"
+  },
+  "model_output_limit": {
+    "en": "The provider's output limit was reached before the reply finished.",
+    "zh-CN": "模型达到上游输出上限，回复尚未完成。",
+    "zh-TW": "模型達到上游輸出上限，回覆尚未完成。"
+  },
+  "model_context": {
+    "en": "Unable to continue this conversation. Please try again.",
+    "zh-CN": "暂时无法继续这段对话，请重试。",
+    "zh-TW": "暫時無法繼續此對話，請重試。"
+  },
+  "model_authentication": {
+    "en": "The model provider could not authenticate. Contact the administrator.",
+    "zh-CN": "模型服务鉴权失败，请联系管理员。",
+    "zh-TW": "模型服務驗證失敗，請聯絡管理員。"
+  },
+  "model_permission": {
+    "en": "The model provider denied access. Contact the administrator.",
+    "zh-CN": "模型服务拒绝访问，请联系管理员。",
+    "zh-TW": "模型服務拒絕存取，請聯絡管理員。"
+  },
+  "model_configuration": {
+    "en": "The model configuration is invalid. Contact the administrator.",
+    "zh-CN": "模型配置有误，请联系管理员。",
+    "zh-TW": "模型設定有誤，請聯絡管理員。"
+  },
+  "model_billing": {
+    "en": "The model provider's usage or credit limit was reached.",
+    "zh-CN": "模型服务额度或余额已用尽。",
+    "zh-TW": "模型服務額度或餘額已用盡。"
+  },
+  "model_rate_limit": {
+    "en": "The model provider is receiving too many requests. Try again later.",
+    "zh-CN": "模型服务请求过于频繁，请稍后重试。",
+    "zh-TW": "模型服務請求過於頻繁，請稍後重試。"
+  },
+  "model_connection": {
+    "en": "Unable to connect to the model provider. Please try again.",
+    "zh-CN": "无法连接模型服务，请重试。",
+    "zh-TW": "無法連線至模型服務，請重試。"
+  },
+  "model_stream": {
+    "en": "The model reply was interrupted before completion. Please try again.",
+    "zh-CN": "模型回复未完成，请重试。",
+    "zh-TW": "模型回覆未完成，請重試。"
+  },
+  "model_tool_protocol": {
+    "en": "The model returned an incomplete tool call. Please try again.",
+    "zh-CN": "模型返回了不完整的工具调用，请重试。",
+    "zh-TW": "模型傳回不完整的工具呼叫，請重試。"
+  },
+  "model_content_filter": {
+    "en": "The provider stopped the reply because of its content policy.",
+    "zh-CN": "上游服务因内容策略停止了回复。",
+    "zh-TW": "上游服務因內容政策停止了回覆。"
+  },
+  "run_not_steerable": {
+    "en": "This run no longer accepts additional instructions.",
+    "zh-CN": "此任务已不再接受补充内容。",
+    "zh-TW": "此工作已不再接受補充內容。"
+  },
+  "instruction_invalid": {
+    "en": "Enter bounded content and a stable client key.",
+    "zh-CN": "请提供有效长度的补充内容和稳定的客户端标识。",
+    "zh-TW": "請提供有效長度的補充內容和穩定的用戶端識別碼。"
+  },
+  "instruction_conflict": {
+    "en": "This client key was already used for different content.",
+    "zh-CN": "此客户端标识已用于其他内容。",
+    "zh-TW": "此用戶端識別碼已用於其他內容。"
+  },
+  "instruction_limit": {
+    "en": "This run has reached its additional-input limit.",
+    "zh-CN": "此任务的补充内容已达上限。",
+    "zh-TW": "此工作的補充內容已達上限。"
+  },
+  "update_uninitialized": {
+    "en": "The update manager is not initialized.",
+    "zh-CN": "更新管理器尚未初始化。",
+    "zh-TW": "更新管理員尚未初始化。"
+  },
+  "update_choose_build": {
+    "en": "Check for updates, then choose a checked build.",
+    "zh-CN": "请先检查更新，再选择已检查的构建。",
+    "zh-TW": "請先檢查更新，再選擇已檢查的建置。"
+  },
+  "update_conflict": {
+    "en": "An update is in progress or waiting for a restart.",
+    "zh-CN": "更新操作正在进行，或有等待重启的版本。",
+    "zh-TW": "更新正在進行，或有等待重新啟動的版本。"
+  },
+  "update_unsupported": {
+    "en": "This deployment does not support in-app updates.",
+    "zh-CN": "当前部署不支持应用内更新。",
+    "zh-TW": "目前部署不支援應用程式內更新。"
+  },
+  "update_platform_unsupported": {
+    "en": "In-app updates require a Linux amd64 or arm64 release build.",
+    "zh-CN": "应用内更新仅支持 Linux amd64 / arm64 发布包。",
+    "zh-TW": "應用程式內更新僅支援 Linux amd64 / arm64 發行套件。"
+  },
+  "update_development_build": {
+    "en": "Development builds do not support in-app updates. Use a release image with the Web app included.",
+    "zh-CN": "开发构建不支持应用内更新，请使用包含网页的正式发布镜像。",
+    "zh-TW": "開發建置不支援應用程式內更新，請使用包含網頁的正式發行映像檔。"
+  },
+  "update_identity_missing": {
+    "en": "The current build has no valid release identity.",
+    "zh-CN": "当前构建缺少有效的发布身份。",
+    "zh-TW": "目前建置缺少有效的發行識別資訊。"
+  },
+  "update_path_unavailable": {
+    "en": "Unable to determine the current executable path.",
+    "zh-CN": "无法确定当前程序的文件路径。",
+    "zh-TW": "無法確定目前程式的檔案路徑。"
+  },
+  "update_state_unreadable": {
+    "en": "Unable to read update state. Check the deployment files.",
+    "zh-CN": "更新状态无法读取，请检查部署文件。",
+    "zh-TW": "無法讀取更新狀態，請檢查部署檔案。"
+  },
+  "update_schema_changed": {
+    "en": "The new build changes the database schema. Perform maintenance and deploy an image instead.",
+    "zh-CN": "新构建包含数据库结构变更，需要人工维护后通过镜像部署，不能直接应用内更新。",
+    "zh-TW": "新建置包含資料庫結構變更，需要人工維護後透過映像檔部署，無法直接在應用程式內更新。"
+  },
+  "update_backup_missing": {
+    "en": "There is no executable backup to roll back to.",
+    "zh-CN": "没有可回退的程序备份。",
+    "zh-TW": "沒有可回復的程式備份。"
+  },
+  "update_backup_schema_changed": {
+    "en": "The backup uses a different database schema and cannot be restored directly.",
+    "zh-CN": "备份的数据库结构不同，不能直接回退程序。",
+    "zh-TW": "備份的資料庫結構不同，無法直接回復程式。"
+  },
+  "update_backup_invalid": {
+    "en": "The executable backup failed verification and cannot be restored.",
+    "zh-CN": "程序备份校验失败，不能回退。",
+    "zh-TW": "程式備份驗證失敗，無法回復。"
+  },
+  "update_redirect_limit": {
+    "en": "The update download redirected too many times.",
+    "zh-CN": "更新下载重定向过多。",
+    "zh-TW": "更新下載重新導向次數過多。"
+  },
+  "update_manifest_read_failed": {
+    "en": "The update manifest could not be read or exceeded the size limit.",
+    "zh-CN": "更新清单读取失败或超出大小限制。",
+    "zh-TW": "更新資訊清單讀取失敗或超過大小限制。"
+  },
+  "update_manifest_invalid": {
+    "en": "The update manifest is invalid.",
+    "zh-CN": "更新清单格式无效。",
+    "zh-TW": "更新資訊清單格式無效。"
+  },
+  "update_asset_missing": {
+    "en": "The update manifest has no package for this platform.",
+    "zh-CN": "更新清单没有当前平台的程序包。",
+    "zh-TW": "更新資訊清單沒有目前平台的程式套件。"
+  },
+  "update_asset_metadata_invalid": {
+    "en": "The update package has no valid SHA-256 or size information.",
+    "zh-CN": "更新程序包缺少有效的 SHA-256 或大小信息。",
+    "zh-TW": "更新程式套件缺少有效的 SHA-256 或大小資訊。"
+  },
+  "update_url_invalid": {
+    "en": "The update download address is invalid.",
+    "zh-CN": "更新下载地址无效。",
+    "zh-TW": "更新下載位址無效。"
+  },
+  "update_connection_failed": {
+    "en": "Unable to connect to the update source. Try again later.",
+    "zh-CN": "无法连接更新源，请稍后重试。",
+    "zh-TW": "無法連線至更新來源，請稍後重試。"
+  },
+  "update_http_error": {
+    "en": "The update source returned HTTP {status}.",
+    "zh-CN": "更新源返回 HTTP {status}。",
+    "zh-TW": "更新來源傳回 HTTP {status}。"
+  },
+  "update_https_required": {
+    "en": "Update sources and packages must use HTTPS URLs without credentials or fragments.",
+    "zh-CN": "更新源和程序包必须使用不含账号或片段的 HTTPS 地址。",
+    "zh-TW": "更新來源和程式套件須使用不含帳號或片段的 HTTPS 位址。"
+  },
+  "update_build_invalid": {
+    "en": "The update manifest's build identity is invalid.",
+    "zh-CN": "更新清单的构建身份无效。",
+    "zh-TW": "更新資訊清單的建置識別資訊無效。"
+  },
+  "update_state_invalid": {
+    "en": "The update state file is invalid.",
+    "zh-CN": "更新状态文件格式无效。",
+    "zh-TW": "更新狀態檔案格式無效。"
+  },
+  "update_state_build_invalid": {
+    "en": "The update state file contains an invalid build identity.",
+    "zh-CN": "更新状态文件中的构建身份无效。",
+    "zh-TW": "更新狀態檔案中的建置識別資訊無效。"
+  },
+  "update_pending_mismatch": {
+    "en": "The pending build does not match the running executable. Redeploy using an image.",
+    "zh-CN": "待重启版本与当前程序不一致，请通过镜像重新部署。",
+    "zh-TW": "待重新啟動版本與目前程式不一致，請透過映像檔重新部署。"
+  },
+  "update_backup_failed": {
+    "en": "Unable to back up the current executable.",
+    "zh-CN": "备份当前程序失败。",
+    "zh-TW": "備份目前程式失敗。"
+  },
+  "update_checksum_read_failed": {
+    "en": "Unable to read the current executable checksum.",
+    "zh-CN": "读取当前程序校验值失败。",
+    "zh-TW": "讀取目前程式驗證值失敗。"
+  },
+  "update_backup_prepare_failed": {
+    "en": "Unable to prepare the executable backup.",
+    "zh-CN": "准备程序备份失败。",
+    "zh-TW": "準備程式備份失敗。"
+  },
+  "update_backup_preserve_failed": {
+    "en": "Unable to preserve the previous executable backup.",
+    "zh-CN": "保留原程序备份失败。",
+    "zh-TW": "保留原程式備份失敗。"
+  },
+  "update_backup_check_failed": {
+    "en": "Unable to inspect the previous executable backup.",
+    "zh-CN": "检查原程序备份失败。",
+    "zh-TW": "檢查原程式備份失敗。"
+  },
+  "update_recovery_failed": {
+    "en": "Unable to restore update state after a failed update.",
+    "zh-CN": "恢复更新状态失败。",
+    "zh-TW": "回復更新狀態失敗。"
+  },
+  "update_backup_save_failed": {
+    "en": "Unable to save the executable backup.",
+    "zh-CN": "保存程序备份失败。",
+    "zh-TW": "儲存程式備份失敗。"
+  },
+  "update_state_save_failed": {
+    "en": "Unable to save update state.",
+    "zh-CN": "保存更新状态失败。",
+    "zh-TW": "儲存更新狀態失敗。"
+  },
+  "update_replace_failed": {
+    "en": "Unable to replace the executable.",
+    "zh-CN": "替换程序失败。",
+    "zh-TW": "取代程式失敗。"
+  },
+  "update_package_size_mismatch": {
+    "en": "The update package size does not match the manifest.",
+    "zh-CN": "更新程序包大小与清单不符。",
+    "zh-TW": "更新程式套件大小與資訊清單不符。"
+  },
+  "update_temp_failed": {
+    "en": "Unable to create a temporary update file.",
+    "zh-CN": "无法创建更新临时文件。",
+    "zh-TW": "無法建立更新暫存檔案。"
+  },
+  "update_download_interrupted": {
+    "en": "The update package download was interrupted.",
+    "zh-CN": "更新程序包下载中断。",
+    "zh-TW": "更新程式套件下載中斷。"
+  },
+  "update_package_save_failed": {
+    "en": "Unable to save the update package.",
+    "zh-CN": "保存更新程序包失败。",
+    "zh-TW": "儲存更新程式套件失敗。"
+  },
+  "update_package_size_invalid": {
+    "en": "The update package failed size verification.",
+    "zh-CN": "更新程序包大小校验失败。",
+    "zh-TW": "更新程式套件大小驗證失敗。"
+  },
+  "update_package_hash_invalid": {
+    "en": "The update package failed SHA-256 verification. The current executable is unchanged.",
+    "zh-CN": "更新程序包 SHA-256 校验失败，当前程序未改变。",
+    "zh-TW": "更新程式套件 SHA-256 驗證失敗，目前程式未變更。"
+  },
+  "update_gzip_invalid": {
+    "en": "The update package is not a valid gzip file.",
+    "zh-CN": "更新程序包不是有效的 gzip 文件。",
+    "zh-TW": "更新程式套件不是有效的 gzip 檔案。"
+  },
+  "update_archive_invalid": {
+    "en": "The update package must contain only a top-level regular ochi-server executable.",
+    "zh-CN": "更新程序包必须只包含顶层 ochi-server 常规程序文件。",
+    "zh-TW": "更新程式套件只能包含頂層 ochi-server 一般程式檔案。"
+  },
+  "update_extract_failed": {
+    "en": "Unable to extract the update executable.",
+    "zh-CN": "解压更新程序失败。",
+    "zh-TW": "解壓縮更新程式失敗。"
+  },
+  "update_archive_extra": {
+    "en": "The update package contains extra or damaged files.",
+    "zh-CN": "更新程序包含有额外或损坏的文件。",
+    "zh-TW": "更新程式套件含有額外或損毀的檔案。"
+  },
+  "update_archive_checksum_failed": {
+    "en": "The update archive failed compression verification.",
+    "zh-CN": "更新程序包压缩校验失败。",
+    "zh-TW": "更新程式套件壓縮驗證失敗。"
+  },
+  "update_executable_invalid": {
+    "en": "The update is not a valid Linux executable.",
+    "zh-CN": "更新程序不是有效的 Linux 可执行文件。",
+    "zh-TW": "更新程式不是有效的 Linux 執行檔。"
+  },
+  "update_architecture_mismatch": {
+    "en": "The update's CPU architecture or executable format does not match.",
+    "zh-CN": "更新程序的 CPU 架构或可执行格式不匹配。",
+    "zh-TW": "更新程式的 CPU 架構或執行檔格式不符。"
+  },
+  "update_file_invalid": {
+    "en": "The executable's file type or size is invalid.",
+    "zh-CN": "程序文件类型或大小无效。",
+    "zh-TW": "程式檔案類型或大小無效。"
+  },
+  "update_file_checksum_failed": {
+    "en": "The executable failed checksum verification.",
+    "zh-CN": "程序文件校验失败。",
+    "zh-TW": "程式檔案驗證失敗。"
+  },
+  "image_size_invalid": {
+    "en": "Image size must be auto or width×height, such as 1024x1024.",
+    "zh-CN": "图片尺寸应为 auto 或 宽x高，例如 1024x1024。",
+    "zh-TW": "圖片尺寸應為 auto 或寬x高，例如 1024x1024。"
+  },
+  "image_size_too_large": {
+    "en": "The image dimensions are too large.",
+    "zh-CN": "图片尺寸过大。",
+    "zh-TW": "圖片尺寸過大。"
+  },
+  "image_quality_invalid": {
+    "en": "The image quality option is invalid.",
+    "zh-CN": "图片质量选项无效。",
+    "zh-TW": "圖片品質選項無效。"
+  },
+  "image_format_invalid": {
+    "en": "The image format must be png, jpeg, or webp.",
+    "zh-CN": "图片格式应为 png、jpeg 或 webp。",
+    "zh-TW": "圖片格式應為 png、jpeg 或 webp。"
+  },
+  "image_background_invalid": {
+    "en": "The image background option is invalid.",
+    "zh-CN": "图片背景选项无效。",
+    "zh-TW": "圖片背景選項無效。"
+  },
+  "image_transparency_invalid": {
+    "en": "Transparent backgrounds require png or webp format.",
+    "zh-CN": "透明背景需要 png 或 webp 格式。",
+    "zh-TW": "透明背景需要 png 或 webp 格式。"
+  },
+  "gpt_image_quality_invalid": {
+    "en": "gpt-image-2 quality must be low, medium, high, or auto.",
+    "zh-CN": "gpt-image-2 的图片质量支持 low、medium、high 或 auto。",
+    "zh-TW": "gpt-image-2 的圖片品質支援 low、medium、high 或 auto。"
+  },
+  "gpt_image_size_invalid": {
+    "en": "gpt-image-2 dimensions must be multiples of 16, no side longer than 3840, an aspect ratio up to 3:1, and 655360–8294400 total pixels.",
+    "zh-CN": "gpt-image-2 尺寸需为 16 的倍数、最长边不超过 3840、比例不超过 3:1，总像素为 655360–8294400。",
+    "zh-TW": "gpt-image-2 尺寸須為 16 的倍數、最長邊不超過 3840、比例不超過 3:1，總像素為 655360–8294400。"
+  },
+  "dalle_format_unsupported": {
+    "en": "DALL-E does not support custom output formats or transparent backgrounds.",
+    "zh-CN": "DALL-E 不支持自定义输出格式或透明背景。",
+    "zh-TW": "DALL-E 不支援自訂輸出格式或透明背景。"
+  },
+  "dalle_edit_unsupported": {
+    "en": "DALL-E 3 does not support reference image editing.",
+    "zh-CN": "DALL-E 3 不支持参考图片编辑。",
+    "zh-TW": "DALL-E 3 不支援參考圖片編輯。"
+  },
+  "image_provider_required": {
+    "en": "Configure an available image generation provider first.",
+    "zh-CN": "请先配置可用的生图服务。",
+    "zh-TW": "請先設定可用的圖片生成服務。"
+  },
+  "image_prompt_invalid": {
+    "en": "Enter a valid image description.",
+    "zh-CN": "请提供有效的图片描述。",
+    "zh-TW": "請提供有效的圖片描述。"
+  },
+  "reference_image_format_invalid": {
+    "en": "Reference images must be valid PNG, JPEG, or WebP files no larger than 32 MB.",
+    "zh-CN": "参考图片需为有效的 PNG、JPEG 或 WebP，且不超过 32 MB。",
+    "zh-TW": "參考圖片須為有效的 PNG、JPEG 或 WebP，且不超過 32 MB。"
+  },
+  "image_provider_url_invalid": {
+    "en": "The image generation provider address is invalid.",
+    "zh-CN": "生图服务地址无效。",
+    "zh-TW": "圖片生成服務位址無效。"
+  },
+  "image_provider_connection_failed": {
+    "en": "The image generation connection was interrupted. The request was not retried.",
+    "zh-CN": "生图服务连接中断，未自动重试。",
+    "zh-TW": "圖片生成服務連線中斷，未自動重試。"
+  },
+  "image_provider_http_error": {
+    "en": "The image generation provider returned HTTP {status}.",
+    "zh-CN": "生图服务返回 HTTP {status}。",
+    "zh-TW": "圖片生成服務傳回 HTTP {status}。"
+  },
+  "image_response_invalid": {
+    "en": "The image generation provider did not return a valid image.",
+    "zh-CN": "生图服务未返回有效图片。",
+    "zh-TW": "圖片生成服務未傳回有效圖片。"
+  },
+  "generated_image_too_large": {
+    "en": "The generated image exceeds 50 MB.",
+    "zh-CN": "生成的图片超过 50 MB。",
+    "zh-TW": "生成的圖片超過 50 MB。"
+  },
+  "image_content_missing": {
+    "en": "The image generation provider did not return image content.",
+    "zh-CN": "生图服务未返回图片内容。",
+    "zh-TW": "圖片生成服務未傳回圖片內容。"
+  },
+  "image_download_failed": {
+    "en": "Unable to download the generated image. It was not generated again.",
+    "zh-CN": "生成图片下载失败，未重新生成。",
+    "zh-TW": "生成圖片下載失敗，未重新生成。"
+  },
+  "image_content_invalid": {
+    "en": "The generated image content is invalid.",
+    "zh-CN": "生成的图片内容无效。",
+    "zh-TW": "生成的圖片內容無效。"
+  },
+  "image_response_format_invalid": {
+    "en": "The provider did not return a valid PNG, JPEG, or WebP image.",
+    "zh-CN": "生图服务返回的内容不是有效的 PNG、JPEG 或 WebP 图片。",
+    "zh-TW": "圖片生成服務傳回的內容不是有效的 PNG、JPEG 或 WebP 圖片。"
+  },
+  "model_configuration_required": {
+    "en": "Configure an available model in the administrator settings first.",
+    "zh-CN": "请先在管理后台配置可用模型。",
+    "zh-TW": "請先在管理後台設定可用模型。"
+  },
+  "search_provider_invalid": {
+    "en": "Choose Exa, Brave, or SearXNG.",
+    "zh-CN": "请选择 Exa、Brave 或 SearXNG。",
+    "zh-TW": "請選擇 Exa、Brave 或 SearXNG。"
+  },
+  "search_result_limit_invalid": {
+    "en": "The search result limit must be between 1 and 20.",
+    "zh-CN": "搜索结果上限须为 1 至 20。",
+    "zh-TW": "搜尋結果上限須為 1 至 20。"
+  },
+  "search_timeout_invalid": {
+    "en": "The search timeout must be between 3 and 60 seconds.",
+    "zh-CN": "搜索超时须为 3 至 60 秒。",
+    "zh-TW": "搜尋逾時須為 3 至 60 秒。"
+  },
+  "search_url_invalid": {
+    "en": "The search provider address must use HTTP(S) without credentials, query parameters, or fragments.",
+    "zh-CN": "搜索服务地址须为 HTTP(S) 地址，不能包含账号、查询参数或片段。",
+    "zh-TW": "搜尋服務位址須為 HTTP(S) 位址，不可包含帳號、查詢參數或片段。"
+  },
+  "search_url_required": {
+    "en": "Enter the search provider address.",
+    "zh-CN": "请填写搜索服务地址。",
+    "zh-TW": "請填寫搜尋服務位址。"
+  },
+  "search_api_key_unconfigured": {
+    "en": "Configure the search provider API key.",
+    "zh-CN": "请配置搜索服务的 API 密钥。",
+    "zh-TW": "請設定搜尋服務的 API 金鑰。"
+  },
+  "search_api_key_invalid": {
+    "en": "The search API key is invalid.",
+    "zh-CN": "搜索 API 密钥无效。",
+    "zh-TW": "搜尋 API 金鑰無效。"
+  },
+  "search_disabled": {
+    "en": "Web search is not enabled.",
+    "zh-CN": "网页搜索尚未启用。",
+    "zh-TW": "網頁搜尋尚未啟用。"
+  },
+  "search_query_invalid": {
+    "en": "The query must contain 1–600 characters and no more than 75 words.",
+    "zh-CN": "搜索词须为 1 至 600 字符，且不超过 75 个词。",
+    "zh-TW": "搜尋詞須為 1 至 600 個字元，且不超過 75 個詞。"
+  },
+  "search_result_count_invalid": {
+    "en": "The number of search results is invalid.",
+    "zh-CN": "搜索结果数量无效。",
+    "zh-TW": "搜尋結果數量無效。"
+  },
+  "search_timeout": {
+    "en": "The search response timed out. Please try again.",
+    "zh-CN": "搜索响应超时，请重试。",
+    "zh-TW": "搜尋回應逾時，請重試。"
+  },
+  "search_connection_failed": {
+    "en": "Unable to connect to the search provider.",
+    "zh-CN": "暂时无法连接搜索服务。",
+    "zh-TW": "暫時無法連線至搜尋服務。"
+  },
+  "search_authentication_failed": {
+    "en": "Search provider authentication failed. Check the configuration.",
+    "zh-CN": "搜索服务鉴权失败，请检查配置。",
+    "zh-TW": "搜尋服務驗證失敗，請檢查設定。"
+  },
+  "search_quota_exhausted": {
+    "en": "The search provider has insufficient credit.",
+    "zh-CN": "搜索服务额度不足。",
+    "zh-TW": "搜尋服務額度不足。"
+  },
+  "search_rate_limited": {
+    "en": "Too many search requests. Please try again later.",
+    "zh-CN": "搜索服务请求过于频繁，请稍后重试。",
+    "zh-TW": "搜尋服務請求過於頻繁，請稍後重試。"
+  },
+  "search_http_error": {
+    "en": "The search provider is temporarily unavailable (HTTP {status}).",
+    "zh-CN": "搜索服务暂时不可用（HTTP {status}）。",
+    "zh-TW": "搜尋服務暫時無法使用（HTTP {status}）。"
+  },
+  "search_failed": {
+    "en": "The search could not be completed. Please try again.",
+    "zh-CN": "搜索未能完成，请重试。",
+    "zh-TW": "搜尋未能完成，請重試。"
+  },
+  "search_response_too_large": {
+    "en": "Search results exceeded the limit or were not received completely.",
+    "zh-CN": "搜索结果过大或未完整接收。",
+    "zh-TW": "搜尋結果過大或未完整接收。"
+  },
+  "search_response_invalid": {
+    "en": "The search provider returned invalid results.",
+    "zh-CN": "搜索服务返回了无效的结果。",
+    "zh-TW": "搜尋服務傳回無效的結果。"
+  },
+  "update_failed": {
+    "en": "The update could not be completed. Check the deployment logs.",
+    "zh-CN": "更新未能完成，请检查部署日志。",
+    "zh-TW": "更新未能完成，請檢查部署記錄。"
+  },
+  "update_interrupted": {
+    "en": "The previous update was interrupted before replacement. The current version is unchanged; check for updates again.",
+    "zh-CN": "上次更新在替换程序前中断，当前版本未改变，可以重新检查更新。",
+    "zh-TW": "上次更新在取代程式前中斷，目前版本未變更，可以重新檢查更新。"
+  },
+  "update_backup_lost": {
+    "en": "The current executable started, but the backup is missing or invalid. Unavailable rollback information was cleared; check for updates again.",
+    "zh-CN": "当前程序已启动，但程序备份丢失或校验失败，已清除不可用的回退信息，可以重新检查更新。",
+    "zh-TW": "目前程式已啟動，但程式備份遺失或驗證失敗，已清除無法使用的回復資訊，可以重新檢查更新。"
+  },
+  "update_redeploy_required": {
+    "en": "The update failed and its state could not be restored. Redeploy using an image.",
+    "zh-CN": "更新失败且状态恢复未完成，请通过镜像重新部署。",
+    "zh-TW": "更新失敗且狀態回復未完成，請透過映像檔重新部署。"
+  },
+  "schedule_previous_running": {
+    "en": "The previous execution is still running.",
+    "zh-CN": "前一次执行仍在进行。",
+    "zh-TW": "前一次執行仍在進行。"
+  },
+  "schedule_start_interrupted": {
+    "en": "The server stopped before this task started.",
+    "zh-CN": "服务停止于任务启动前。",
+    "zh-TW": "服務在工作啟動前停止。"
+  },
+  "attachments_prompt": {
+    "en": "Please review these attachments.",
+    "zh-CN": "请查看这些附件。",
+    "zh-TW": "請查看這些附件。"
+  },
+  "image_generation_failed": {
+    "en": "Image generation failed. Please try again.",
+    "zh-CN": "图片生成失败，请重试。",
+    "zh-TW": "圖片產生失敗，請重試。"
+  },
+  "task_objective_invalid": {
+    "en": "task objective must contain 1-3000 bytes",
+    "zh-CN": "任务目标长度须为 1 至 3000 字节。",
+    "zh-TW": "任務目標長度須為 1 至 3000 位元組。"
+  },
+  "task_list_too_long": {
+    "en": "task lists are limited to 24 items",
+    "zh-CN": "任务清单最多包含 24 项。",
+    "zh-TW": "任務清單最多包含 24 項。"
+  },
+  "task_item_invalid": {
+    "en": "task items must contain 1-1000 bytes",
+    "zh-CN": "任务清单项目长度须为 1 至 1000 字节。",
+    "zh-TW": "任務清單項目長度須為 1 至 1000 位元組。"
+  },
+  "task_checks_limit": {
+    "en": "task acceptance is limited to 16 checks",
+    "zh-CN": "任务最多包含 16 项验收检查。",
+    "zh-TW": "任務最多包含 16 項驗收檢查。"
+  },
+  "task_check_invalid": {
+    "en": "task check IDs must be unique and targets must be bounded",
+    "zh-CN": "验收检查标识必须唯一，检查目标不得超出长度限制。",
+    "zh-TW": "驗收檢查識別碼必須唯一，檢查目標不得超出長度限制。"
+  },
+  "task_check_unsupported": {
+    "en": "unsupported deterministic task check",
+    "zh-CN": "不支持这种任务验收检查。",
+    "zh-TW": "不支援這種任務驗收檢查。"
+  },
+  "task_record_too_large": {
+    "en": "task record exceeds 18000 bytes",
+    "zh-CN": "任务记录不能超过 18000 字节。",
+    "zh-TW": "任務記錄不能超過 18000 位元組。"
+  },
+  "task_revision_changed": {
+    "en": "task revision changed; read task before updating",
+    "zh-CN": "任务已更新，请重新读取后再修改。",
+    "zh-TW": "任務已更新，請重新讀取後再修改。"
+  },
+  "task_objective_changed": {
+    "en": "task objective changed; use task_read and preserve its objective verbatim when updating progress or constraints; use new_task only when the user starts a different task",
+    "zh-CN": "任务目标已改变。更新进度或约束前请通过 task_read 读取并完整保留目标；仅在用户开始新任务时使用 new_task。",
+    "zh-TW": "任務目標已改變。更新進度或限制前請透過 task_read 讀取並完整保留目標；僅在使用者開始新任務時使用 new_task。"
+  },
+  "task_verification_changed": {
+    "en": "task changed during verification",
+    "zh-CN": "任务在验证期间已更新，请重新检查。",
+    "zh-TW": "任務在驗證期間已更新，請重新檢查。"
+  },
+  "skill_name_invalid": {
+    "en": "skill name must be a lowercase slug of 1-64 letters, digits, hyphens or underscores",
+    "zh-CN": "技能名称须为 1 至 64 个小写英文字母、数字、连字符或下划线。",
+    "zh-TW": "技能名稱須為 1 至 64 個小寫英文字母、數字、連字號或底線。"
+  },
+  "skill_description_invalid": {
+    "en": "skill description must contain 1-1000 bytes",
+    "zh-CN": "技能说明长度须为 1 至 1000 字节。",
+    "zh-TW": "技能說明長度須為 1 至 1000 位元組。"
+  },
+  "skill_body_invalid": {
+    "en": "skill body must contain 1-16384 bytes",
+    "zh-CN": "技能内容长度须为 1 至 16384 字节。",
+    "zh-TW": "技能內容長度須為 1 至 16384 位元組。"
+  },
+  "skill_task_incomplete": {
+    "en": "complete and verify the current task before promoting a skill",
+    "zh-CN": "请完成并验证当前任务后再保存为技能。",
+    "zh-TW": "請完成並驗證目前任務後再儲存為技能。"
+  },
+  "skill_evidence_required": {
+    "en": "skill promotion requires a real passed command, test, file or artifact check from this run",
+    "zh-CN": "保存技能需要本轮真实通过的命令、测试、文件或产物检查。",
+    "zh-TW": "儲存技能需要本輪實際通過的命令、測試、檔案或產出檢查。"
+  },
+  "skill_project_required": {
+    "en": "a project-scoped skill requires a project conversation",
+    "zh-CN": "项目技能必须来自项目中的对话。",
+    "zh-TW": "專案技能必須來自專案中的對話。"
+  },
+  "skill_verified_task_missing": {
+    "en": "no verified task is available to promote",
+    "zh-CN": "没有可保存为技能的已验证任务。",
+    "zh-TW": "沒有可儲存為技能的已驗證任務。"
+  },
+  "skill_id_invalid": {
+    "en": "invalid private skill id",
+    "zh-CN": "私有技能标识无效。",
+    "zh-TW": "私人技能識別碼無效。"
+  },
+  "debug_pagination_invalid": {
+    "en": "invalid provider request debug pagination",
+    "zh-CN": "请求诊断分页参数无效。",
+    "zh-TW": "請求診斷分頁參數無效。"
+  },
+  "memory_source_invalid": {
+    "en": "invalid memory source",
+    "zh-CN": "记忆来源无效。",
+    "zh-TW": "記憶來源無效。"
+  },
+  "memory_changed": {
+    "en": "memory settings or content changed; stale derived work was skipped",
+    "zh-CN": "记忆设置或内容已改变，已跳过过时的处理结果。",
+    "zh-TW": "記憶設定或內容已改變，已略過過時的處理結果。"
+  },
+  "memory_deleted": {
+    "en": "this memory was explicitly forgotten",
+    "zh-CN": "这条记忆已被删除。",
+    "zh-TW": "這則記憶已被刪除。"
+  },
+  "memory_source_unavailable": {
+    "en": "memory source is unavailable or no longer authoritative",
+    "zh-CN": "记忆来源不可用或已失效。",
+    "zh-TW": "記憶來源無法使用或已失效。"
+  },
+  "method_not_allowed": {
+    "en": "This request method is not supported.",
+    "zh-CN": "不支持这种请求方式。",
+    "zh-TW": "不支援這種請求方式。"
+  }
+}

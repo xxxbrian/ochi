@@ -15,11 +15,12 @@ import (
 	"sync"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/runtime"
 	"ochi/server/internal/storage"
 )
 
-var errComputerPermission = errors.New("请先允许此对话使用电脑")
+var errComputerPermission = i18n.New("computer_permission_required")
 
 type computerCall struct {
 	sessionID string

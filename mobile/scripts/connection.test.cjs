@@ -1,3 +1,4 @@
+const { testI18n } = require('./helpers/i18n.cjs');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -14,6 +15,8 @@ function load(file, imports, globals = {}) {
     module, exports: module.exports, URL, URLSearchParams, Intl, FormData, TextEncoder, Uint8Array,
     ...globals,
     require(name) {
+        const translated = testI18n.importFor(name); if (translated) return translated;
+
       if (name in imports) return imports[name];
       throw new Error(`Unexpected import ${name}`);
     },
@@ -123,7 +126,7 @@ function loginHarness(api, { loading = false } = {}) {
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 59, bottom: 34, left: 0, right: 0 }) },
     'react-native-keyboard-controller': { KeyboardAwareScrollView: 'KeyboardAwareScrollView' },
     '../lib/api': api,
-    '../providers/AppProvider': { useApp: () => ({ colors: { canvas: '#fff', muted: '#666' }, loading, authError: '', async signIn(username, password, server) {
+    '../providers/AppProvider': { useApp: () => ({ colors: { canvas: '#fff', muted: '#666' }, loading, authError: '', language: testI18n.native.getLanguage(), selectLanguage: testI18n.native.rememberLanguage, async signIn(username, password, server) {
       calls.push({ username, password, server });
       await api.setAPIBaseURL(server);
       return api.api.login(username, password);

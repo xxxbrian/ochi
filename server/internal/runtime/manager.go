@@ -6,9 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"ochi/server/internal/agent"
+	"log"
+	"net"
 	"sync"
 	"time"
+
+	"ochi/server/internal/agent"
+	"ochi/server/internal/i18n"
 )
 
 var (
@@ -44,6 +48,7 @@ type Snapshot struct {
 	Output          string                `json:"output"`
 	Reasoning       []agent.ReasoningPart `json:"reasoning"`
 	Error           string                `json:"error,omitempty"`
+	ErrorCode       string                `json:"error_code,omitempty"`
 	Seq             uint64                `json:"seq"`
 	CreatedAt       time.Time             `json:"created_at"`
 	UpdatedAt       time.Time             `json:"updated_at"`
@@ -68,6 +73,7 @@ type Event struct {
 	Reasoning       *agent.ReasoningPart `json:"reasoning,omitempty"`
 	Status          string               `json:"status,omitempty"`
 	Error           string               `json:"error,omitempty"`
+	ErrorCode       string               `json:"error_code,omitempty"`
 	Step            *Step                `json:"step,omitempty"`
 	Usage           *agent.Usage         `json:"usage,omitempty"`
 	WaitingInput    *agent.WaitingInput  `json:"waiting_input,omitempty"`
@@ -216,7 +222,7 @@ func (m *Manager) ApplySnapshot(snapshot Snapshot) *Run {
 	run.mu.Lock()
 	if !run.started && snapshot.Seq >= run.snapshot.Seq {
 		run.snapshot = ReconcileTerminal(snapshot)
-		run.publishLocked(Event{Type: "status", RunID: snapshot.RunID, Seq: snapshot.Seq, Status: snapshot.Status, Resource: snapshot.Resource})
+		run.publishLocked(Event{Type: "status", RunID: snapshot.RunID, Seq: snapshot.Seq, Status: snapshot.Status, Error: snapshot.Error, ErrorCode: snapshot.ErrorCode, Resource: snapshot.Resource})
 	}
 	run.mu.Unlock()
 	return run
@@ -493,7 +499,66 @@ func (r *Run) Cancel() bool {
 
 func (r *Run) requestContextCancel() { r.cancel() }
 
-func (r *Run) Finish(status, message string) {
+func FailureCode(err error) string {
+	if err == nil {
+		return ""
+	}
+	if code, params, public := i18n.Details(err); public {
+		// Run history carries a viewer-localized identity, not HTTP parameters.
+		// Keep transport details in diagnostics and use complete run messages.
+		switch code {
+		case "image_provider_http_error":
+			return "image_generation_failed"
+		case "search_http_error":
+			return "search_failed"
+		case "provider_model_list_rejected":
+			return "provider_request_failed"
+		case "update_http_error":
+			return "update_failed"
+		}
+		if len(params) > 0 {
+			return "run_failed"
+		}
+		return code
+	}
+	if errors.Is(err, context.Canceled) {
+		return "run_interrupted"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "run_timeout"
+	}
+	var network net.Error
+	if errors.As(err, &network) && network.Timeout() {
+		return "run_timeout"
+	}
+	var model *agent.ModelError
+	if errors.As(err, &model) {
+		switch model.Class {
+		case "authentication", "permission", "configuration", "billing", "rate_limit", "unavailable", "connection", "context", "output_limit", "content_filter":
+			return "model_" + model.Class
+		case "timeout":
+			return "run_timeout"
+		case "stream", "invalid_stream":
+			return "model_stream"
+		case "tool_protocol":
+			return "model_tool_protocol"
+		}
+	}
+	var budget *agent.ContextBudgetError
+	if errors.As(err, &budget) {
+		return "model_context"
+	}
+	return "run_failed"
+}
+
+func failureText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return i18n.Text(i18n.English, FailureCode(err), nil)
+}
+
+func (r *Run) Finish(status string, failure error) {
 	if !IsTerminal(status) {
 		return
 	}
@@ -514,28 +579,32 @@ func (r *Run) Finish(status, message string) {
 	r.snapshot.WaitingInput = nil
 	r.snapshot.Resource = ""
 	r.snapshot.ComputerGranted = false
-	r.snapshot.Status, r.snapshot.Error = status, message
+	message := failureText(failure)
+	if failure != nil {
+		log.Printf("run %s finished with %s: %v", r.snapshot.RunID, FailureCode(failure), failure)
+	}
+	r.snapshot.Status, r.snapshot.Error, r.snapshot.ErrorCode = status, message, FailureCode(failure)
 	r.public = nil
 	r.snapshot.Seq++
 	r.snapshot.UpdatedAt = time.Now().UTC()
 	grant := false
-	r.publishLocked(Event{Type: "status", RunID: r.snapshot.RunID, Seq: r.snapshot.Seq, Status: status, Error: message, ComputerGranted: &grant, Timeline: r.snapshot.Timeline})
+	r.publishLocked(Event{Type: "status", RunID: r.snapshot.RunID, Seq: r.snapshot.Seq, Status: status, Error: message, ErrorCode: r.snapshot.ErrorCode, ComputerGranted: &grant, Timeline: r.snapshot.Timeline})
 	r.cancel()
 }
 
 // Finalize freezes output while it is committed, then publishes a terminal
 // status. A cancellation racing the commit either wins before this lock or
 // sees the already completed run; it never changes saved completed output.
-func (r *Run) Finalize(status, message string, persist func(Snapshot) error) error {
+func (r *Run) Finalize(status string, failure error, persist func(Snapshot) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if IsTerminal(r.snapshot.Status) {
 		return nil
 	}
 	if r.snapshot.Status == StatusCancelling {
-		status, message = StatusCancelled, ""
+		status, failure = StatusCancelled, nil
 	} else if r.ctx.Err() != nil {
-		status, message = StatusInterrupted, "server stopped before the run completed"
+		status, failure = StatusInterrupted, i18n.New("run_interrupted")
 	}
 	final := cloneSnapshot(r.snapshot)
 	var changedSteps []Step
@@ -558,12 +627,16 @@ func (r *Run) Finalize(status, message string, persist func(Snapshot) error) err
 	final.WaitingInput = nil
 	final.Resource = ""
 	final.ComputerGranted = false
-	final.Status, final.Error = status, message
+	message := failureText(failure)
+	if failure != nil {
+		log.Printf("run %s finished with %s: %v", r.snapshot.RunID, FailureCode(failure), failure)
+	}
+	final.Status, final.Error, final.ErrorCode = status, message, FailureCode(failure)
 	final.Seq += uint64(len(changedSteps)+len(changedReasoning)) + 1
 	final.UpdatedAt = time.Now().UTC()
 	err := persist(cloneSnapshot(final))
 	if err != nil {
-		final.Status, final.Error = StatusFailed, "could not save run result"
+		final.Status, final.Error, final.ErrorCode = StatusFailed, i18n.New("run_save_failed").Error(), "run_save_failed"
 		// The retry keeps live and durable status aligned after a transient DB
 		// failure without introducing a queue or automatic run resumption.
 		_ = persist(cloneSnapshot(final))
@@ -581,7 +654,7 @@ func (r *Run) Finalize(status, message string, persist func(Snapshot) error) err
 		r.publishLocked(Event{Type: "reasoning_delta", RunID: final.RunID, Seq: seq, Reasoning: &delta, TimelineEntry: processEntry(final.Timeline, "reasoning:"+part.ID)})
 	}
 	grant := false
-	r.publishLocked(Event{Type: "status", RunID: final.RunID, Seq: final.Seq, Status: final.Status, Error: final.Error, ComputerGranted: &grant, Timeline: final.Timeline})
+	r.publishLocked(Event{Type: "status", RunID: final.RunID, Seq: final.Seq, Status: final.Status, Error: final.Error, ErrorCode: final.ErrorCode, ComputerGranted: &grant, Timeline: final.Timeline})
 	r.cancel()
 	return err
 }
