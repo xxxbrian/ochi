@@ -187,6 +187,9 @@ func (m *Manager) Check(ctx context.Context) (State, error) {
 	if m.state.Available && manifest.SchemaSHA256 != m.state.Current.SchemaSHA256 {
 		m.state.BlockedReasonCode = "update_schema_changed"
 		m.state.BlockedReason = i18n.New("update_schema_changed").Error()
+	} else if m.state.Available && manifest.WorkspaceContractSHA256 != m.state.Current.WorkspaceContractSHA256 {
+		m.state.BlockedReasonCode = "update_workspace_contract_changed"
+		m.state.BlockedReason = i18n.New("update_workspace_contract_changed").Error()
 	}
 	return m.snapshotLocked(), nil
 }
@@ -204,7 +207,7 @@ func (m *Manager) Apply(revision string) (State, error) {
 		return m.snapshotLocked(), i18n.New("update_choose_build")
 	}
 	if m.state.BlockedReason != "" {
-		return m.snapshotLocked(), i18n.New("update_schema_changed")
+		return m.snapshotLocked(), i18n.New(m.state.BlockedReasonCode)
 	}
 	manifest := *m.manifest
 	asset := manifest.Assets[m.platform]
@@ -253,6 +256,9 @@ func (m *Manager) Rollback() (State, error) {
 	backup := *m.disk.Backup
 	if backup.SchemaSHA256 != m.state.Current.SchemaSHA256 {
 		return m.snapshotLocked(), i18n.New("update_backup_schema_changed")
+	}
+	if backup.WorkspaceContractSHA256 != m.state.Current.WorkspaceContractSHA256 {
+		return m.snapshotLocked(), i18n.New("update_backup_workspace_contract_changed")
 	}
 	path, err := copyBinary(m.backupPath(), filepath.Dir(m.targetPath))
 	if err == nil {
@@ -376,7 +382,8 @@ func validateURL(raw string) error {
 
 func validateBuild(build Build) error {
 	_, err := time.Parse(time.RFC3339, build.BuiltAt)
-	if build.Version == "" || len(build.Version) > 80 || !revisionPattern.MatchString(build.Revision) || !sha256Pattern.MatchString(build.SchemaSHA256) || err != nil {
+	if build.Version == "" || len(build.Version) > 80 || !revisionPattern.MatchString(build.Revision) ||
+		!sha256Pattern.MatchString(build.SchemaSHA256) || !sha256Pattern.MatchString(build.WorkspaceContractSHA256) || err != nil {
 		return i18n.New("update_build_invalid")
 	}
 	return nil

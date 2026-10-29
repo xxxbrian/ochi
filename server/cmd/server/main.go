@@ -67,7 +67,8 @@ func main() {
 	updater := selfupdate.New(selfupdate.Config{
 		Current: selfupdate.Build{
 			Version: product.Version, Revision: product.Revision, BuiltAt: product.BuiltAt,
-			SchemaSHA256: storage.SchemaSHA256(),
+			SchemaSHA256:            storage.SchemaSHA256(),
+			WorkspaceContractSHA256: workspace.ContractSHA256(),
 		},
 		BuildType: product.BuildType, EmbeddedWeb: webui.Embedded,
 		ManifestURL: os.Getenv("OCHI_UPDATE_URL"),

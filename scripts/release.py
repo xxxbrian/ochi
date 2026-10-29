@@ -31,6 +31,7 @@ def source_metadata(root=ROOT):
         "version": version.group(1),
         "built_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "schema_sha256": hashlib.sha256((root / "server/internal/storage/schema.sql").read_bytes()).hexdigest(),
+        "workspace_contract_sha256": hashlib.sha256((root / "server/internal/workspace/contract.json").read_bytes()).hexdigest(),
     }
 
 
@@ -114,6 +115,7 @@ def update_manifest(directory, revision, run_id, attempt, repository, built_at, 
         "revision": revision,
         "built_at": built_at,
         "schema_sha256": metadata["schema_sha256"],
+        "workspace_contract_sha256": metadata["workspace_contract_sha256"],
         "assets": assets,
     }
 

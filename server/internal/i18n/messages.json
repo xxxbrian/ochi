@@ -899,6 +899,16 @@
     "zh-CN": "新构建包含数据库结构变更，需要人工维护后通过镜像部署，不能直接应用内更新。",
     "zh-TW": "新建置包含資料庫結構變更，需要人工維護後透過映像檔部署，無法直接在應用程式內更新。"
   },
+  "update_workspace_contract_changed": {
+    "en": "The new build requires a different workspace image contract. Deploy matching server and workspace images, then rebuild existing workspaces.",
+    "zh-CN": "新构建需要不同的工作区镜像协议。请部署配套的服务端与工作区镜像，并重建已有工作区。",
+    "zh-TW": "新建置需要不同的工作區映像檔協定。請部署配套的伺服器與工作區映像檔，並重建既有工作區。"
+  },
+  "workspace_contract_changed": {
+    "en": "This workspace image does not match the server's bridge contract. Pull the matching image and rebuild this workspace in administration.",
+    "zh-CN": "工作区镜像与服务端的桥接协议不匹配。请拉取配套镜像，并在后台重建此工作区。",
+    "zh-TW": "工作區映像檔與伺服器的橋接協定不符。請拉取配套映像檔，並在後台重建此工作區。"
+  },
   "update_backup_missing": {
     "en": "There is no executable backup to roll back to.",
     "zh-CN": "没有可回退的程序备份。",
@@ -908,6 +918,11 @@
     "en": "The backup uses a different database schema and cannot be restored directly.",
     "zh-CN": "备份的数据库结构不同，不能直接回退程序。",
     "zh-TW": "備份的資料庫結構不同，無法直接回復程式。"
+  },
+  "update_backup_workspace_contract_changed": {
+    "en": "The backup requires a different workspace image contract and cannot be restored directly.",
+    "zh-CN": "备份需要不同的工作区镜像协议，不能直接回退程序。",
+    "zh-TW": "備份需要不同的工作區映像檔協定，無法直接回復程式。"
   },
   "update_backup_invalid": {
     "en": "The executable backup failed verification and cannot be restored.",

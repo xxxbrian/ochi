@@ -190,9 +190,16 @@ artifacts or workspace volumes. Binary recovery does not roll back schema/data,
 base OS packages or the desktop image. This is not an automatic health rollback
 or zero-downtime deployment system.
 
-Application self-update requires the target schema hash to match the running
-schema. A schema change needs a verified backup and explicit one-off maintenance
-before starting the matching image; there is no silent runtime migration chain.
+Application self-update requires both the target schema hash and workspace
+contract hash to match the running build. A schema change needs a verified
+backup and explicit one-off maintenance before starting the matching image;
+there is no silent runtime migration chain. A workspace contract change requires
+matching server and workspace images and explicit workspace maintenance.
+The update page explains which contract blocks binary replacement; rollback
+checks both identities too. `server/internal/workspace/contract.json` is the
+single source of the protocol, semantic image revision and capabilities copied
+into the image and embedded in the server. Bump its revision only when those
+requirements change, not for every implementation edit.
 Database major versions, OS/runtime dependencies, Compose topology and Computer
 images likewise remain explicit maintenance rather than ordinary app updates.
 

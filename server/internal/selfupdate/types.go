@@ -15,10 +15,11 @@ var (
 )
 
 type Build struct {
-	Version      string `json:"version"`
-	Revision     string `json:"revision"`
-	BuiltAt      string `json:"built_at"`
-	SchemaSHA256 string `json:"schema_sha256"`
+	Version                 string `json:"version"`
+	Revision                string `json:"revision"`
+	BuiltAt                 string `json:"built_at"`
+	SchemaSHA256            string `json:"schema_sha256"`
+	WorkspaceContractSHA256 string `json:"workspace_contract_sha256"`
 }
 
 type Asset struct {

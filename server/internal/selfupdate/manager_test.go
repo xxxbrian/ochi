@@ -22,11 +22,12 @@ import (
 	"testing"
 	"time"
 
+	"ochi/server/internal/i18n"
 	"ochi/server/internal/product"
 )
 
 func fixtureBuild(revision string) Build {
-	return Build{Version: "0.1.0", Revision: strings.Repeat(revision, 40), BuiltAt: "2026-01-01T00:00:00Z", SchemaSHA256: strings.Repeat("a", 64)}
+	return Build{Version: "0.1.0", Revision: strings.Repeat(revision, 40), BuiltAt: "2026-01-01T00:00:00Z", SchemaSHA256: strings.Repeat("a", 64), WorkspaceContractSHA256: strings.Repeat("b", 64)}
 }
 
 func fixtureBinary(arch, marker string) []byte {
@@ -211,6 +212,48 @@ func TestSchemaChangeBlocksApplyWithoutTouchingFiles(t *testing.T) {
 	requireFile(t, f.config.TargetPath, f.old)
 	if _, err := os.Stat(f.manager.statePath()); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("schema mismatch wrote update metadata")
+	}
+}
+
+func TestWorkspaceContractChangeBlocksApplyWithoutTouchingFiles(t *testing.T) {
+	f := newUpdateFixture(t, nil)
+	f.manifest.WorkspaceContractSHA256 = strings.Repeat("c", 64)
+	state, err := f.manager.Check(context.Background())
+	if err != nil || !state.Available || state.BlockedReasonCode != "update_workspace_contract_changed" {
+		t.Fatalf("workspace contract change not disclosed: %+v %v", state, err)
+	}
+	_, err = f.manager.Apply(f.manifest.Revision)
+	if code, _, _ := i18n.Details(err); code != state.BlockedReasonCode {
+		t.Fatalf("apply lost the specific block reason: %v", err)
+	}
+	requireFile(t, f.config.TargetPath, f.old)
+	if _, err := os.Stat(f.manager.statePath()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("workspace contract mismatch wrote update metadata")
+	}
+}
+
+func TestWorkspaceContractChangeBlocksRollback(t *testing.T) {
+	f := newUpdateFixture(t, nil)
+	backup := fixtureBuild("0")
+	backup.WorkspaceContractSHA256 = strings.Repeat("c", 64)
+	f.manager.disk.Backup = &binaryBuild{Build: backup, SHA256: strings.Repeat("d", 64)}
+	_, err := f.manager.Rollback()
+	if code, _, _ := i18n.Details(err); code != "update_backup_workspace_contract_changed" {
+		t.Fatalf("rollback accepted a different workspace contract: %v", err)
+	}
+	requireFile(t, f.config.TargetPath, f.old)
+}
+
+func TestUpdateFeedRequiresWorkspaceContractIdentity(t *testing.T) {
+	for _, identity := range []string{"", "unknown"} {
+		t.Run(identity, func(t *testing.T) {
+			f := newUpdateFixture(t, nil)
+			f.manifest.WorkspaceContractSHA256 = identity
+			state, err := f.manager.Check(context.Background())
+			if code, _, _ := i18n.Details(err); code != "update_build_invalid" || state.Available {
+				t.Fatalf("unidentified workspace contract was accepted: %+v %v", state, err)
+			}
+		})
 	}
 }
 

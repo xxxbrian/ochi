@@ -31,8 +31,10 @@ class ReleaseTests(unittest.TestCase):
         self.directory = self.root / "release"
         (self.root / "server/internal/product").mkdir(parents=True)
         (self.root / "server/internal/storage").mkdir(parents=True)
+        (self.root / "server/internal/workspace").mkdir(parents=True)
         (self.root / "server/internal/product/identity.go").write_text('package product\n\nconst Version = "0.1.0"\n')
         (self.root / "server/internal/storage/schema.sql").write_text("-- synthetic schema\n")
+        (self.root / "server/internal/workspace/contract.json").write_text('{"protocol":1,"revision":1}\n')
 
     def package(self, arch):
         binary = self.root / arch
@@ -44,6 +46,7 @@ class ReleaseTests(unittest.TestCase):
             result = release.source_metadata(self.root)
         self.assertEqual(result["version"], "0.1.0")
         self.assertEqual(result["schema_sha256"], hashlib.sha256(b"-- synthetic schema\n").hexdigest())
+        self.assertEqual(result["workspace_contract_sha256"], hashlib.sha256(b'{"protocol":1,"revision":1}\n').hexdigest())
         self.assertRegex(result["built_at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
         self.assertNotIn("must-not-leak", json.dumps(result))
 
@@ -68,6 +71,7 @@ class ReleaseTests(unittest.TestCase):
         value = release.update_manifest(self.directory, REVISION, "123", "2", "example/ochi", BUILT_AT, self.root)
         self.assertEqual(value["revision"], REVISION)
         self.assertEqual(value["built_at"], BUILT_AT)
+        self.assertEqual(value["workspace_contract_sha256"], release.source_metadata(self.root)["workspace_contract_sha256"])
         self.assertEqual(set(value["assets"]), {"linux_amd64", "linux_arm64"})
         for arch, path in (("amd64", amd64), ("arm64", arm64)):
             self.assertEqual(value["assets"][f"linux_{arch}"], {
