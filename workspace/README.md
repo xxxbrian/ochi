@@ -15,7 +15,8 @@ and [deployment](../docs/deployment.md).
   Relative file paths resolve only against the current session/project directory.
 - `/data/published/<run>/<content-hash>/<name>` stores immutable artifact copies.
 - User Python `/data/venv`, npm prefix, and dependency caches survive rebuilding.
-- Shared `/opt/extensions` is writable only in the management workspace.
+- Shared `/opt/extensions` contains only public Skill assets and catalog metadata,
+  writable only by plugin control. Global transport secrets use a different volume.
 - Top-level directory ownership is prepared on image creation/first attach;
   existing files are not recursively re-owned or relocated.
 
@@ -60,7 +61,16 @@ separate from the noVNC live panel.
 
 ## Private Bridge
 
-`GET /health` checks the bridge/X display without launching Chromium.
+`GET /health` checks the bridge/X display without launching Chromium and reports
+the current contract hash, protocol, capabilities and runtime mode. The contract
+has one source, `server/internal/workspace/contract.json`, copied into the image
+from the repository-root Docker build context. A healthy but incompatible bridge
+fails immediately with a rebuild requirement.
+
+Every container has an independently generated private bridge token. The Go
+service recovers it through Docker inspection, never through an unauthenticated
+workspace endpoint. Calls, uploads and management require that token. Only health
+and secret-free catalog reads are public inside the private Docker network.
 `GET /tools` returns intrinsic definitions only. `tool_search` ranks tested,
 enabled MCP metadata by the current query, validates at most 32 candidates, and
 returns at most six relevant schemas (16 KB each, 64 KB total). A scoped run may
@@ -103,8 +113,17 @@ files stay in the workspace; ending a run never scans or publishes them. Later
 source edits require an explicit new publication and cannot change old bytes.
 
 Skills support SKILL.md, Git ref/subdir, archive and inline install, file listing
-and validation. MCP uses official Python SDK stdio/Streamable HTTP, cwd-scoped
+and validation. MCP uses the official Python SDK stdio/Streamable HTTP, scoped
 clients, stable tool names, configuration import and secret preserve/replace/delete.
+The control runtime owns MCP transport and receives the current user's effective
+plugin policy on every call. Its root-owned configuration lives in
+`/var/lib/ochi-control`; that volume is never mounted into user workspaces.
+It exposes no general shell or file access. HTTP headers are injected only at
+transport. Each stdio component runs with its own unprivileged UID, a minimal
+environment containing only that component's configured values, and a private
+per-user/session directory. It cannot access the control token, another
+component's credentials or the user's Computer files. Skill scripts still execute
+in the user's workspace; the two environments are explicit, not interchangeable.
 Connection/tool errors expose bounded, credential-redacted exception details and
 the current RPC's HTTP failure status. HTTP observation never reads response
 bodies or headers and does not change SDK protocol negotiation or retries.

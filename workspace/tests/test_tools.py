@@ -14,10 +14,16 @@ import bridge
 import workspace_mcp
 import workspace_runtime
 import workspace_skills
+import workspace_control
 from workspace_schema import ToolArgumentError, strict_json, validate_arguments
 
 
 class ToolContracts(unittest.TestCase):
+    def setUp(self) -> None:
+        token = patch.object(workspace_control, "BRIDGE_TOKEN", "fixture-token")
+        token.start()
+        self.addCleanup(token.stop)
+
     def test_working_files_publish_only_when_explicit_and_keep_immutable_bytes(self) -> None:
         with tempfile.TemporaryDirectory(prefix="ochi-publication-") as tmp:
             data = Path(tmp)
@@ -154,7 +160,7 @@ class ToolContracts(unittest.TestCase):
 
     def handler(self, path: str, raw: bytes = b"{}") -> tuple[bridge.Handler, list]:
         handler = object.__new__(bridge.Handler)
-        handler.path, handler.headers, handler.rfile = path, {"Content-Length": str(len(raw))}, io.BytesIO(raw)
+        handler.path, handler.headers, handler.rfile = path, {"Content-Length": str(len(raw)), "Authorization": "Bearer fixture-token"}, io.BytesIO(raw)
         outputs = []
         handler._write = lambda payload, status=200: outputs.append((payload, status))
         return handler, outputs

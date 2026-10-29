@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import contextlib
 import subprocess
 import sys
@@ -15,7 +16,9 @@ def launch(urls: list[str]) -> None:
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     for url in urls or [""]:
         suffix = "?" + urllib.parse.urlencode({"url": url}) if url else ""
-        with opener.open("http://127.0.0.1:8080/browser/desktop-launch" + suffix, timeout=50) as response:
+        request = urllib.request.Request("http://127.0.0.1:8080/browser/desktop-launch" + suffix,
+                                         headers={"Authorization": "Bearer " + os.environ.get("OCHI_BRIDGE_TOKEN", "")})
+        with opener.open(request, timeout=50) as response:
             result = json.load(response)
             if result.get("error"):
                 raise RuntimeError(str(result["error"]))

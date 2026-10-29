@@ -124,7 +124,7 @@ class MCPDiagnostics(unittest.TestCase):
         transport.streamable_http_client = lambda url, http_client: http_client
         http = types.ModuleType("httpx2")
         http.AsyncClient = HTTPClient
-        with patch.dict(sys.modules, {"mcp": sdk, "mcp.client": types.ModuleType("mcp.client"),
+        with patch.object(workspace_mcp, "CONTROL_ONLY", True), patch.dict(sys.modules, {"mcp": sdk, "mcp.client": types.ModuleType("mcp.client"),
                                       "mcp.client.streamable_http": transport, "httpx2": http}):
             connection = workspace_mcp.MCPConnection(self.config)
             try:

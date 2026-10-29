@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import base64
 import json
 import re
 import shutil
@@ -100,7 +101,12 @@ def install_skill(args: dict[str, Any]) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="skill-", dir=EXTENSIONS_ROOT) as tmp:
         staged = Path(tmp) / "source"
         version = "local"
-        if isinstance(content, str) and content.strip():
+        if args.get("bundle_base64"):
+            bundle = Path(tmp) / "bundle"
+            bundle.write_bytes(base64.b64decode(args["bundle_base64"], validate=True))
+            _extract_bundle(bundle, staged)
+            source = "bundle"
+        elif isinstance(content, str) and content.strip():
             staged.mkdir()
             (staged / "SKILL.md").write_text(content, encoding="utf-8")
             metadata, _, _ = _skill_content(staged)
@@ -157,6 +163,8 @@ def install_skill(args: dict[str, Any]) -> dict[str, Any]:
                 shutil.rmtree(destination)
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(root, destination, ignore=shutil.ignore_patterns(".git", "node_modules", "__pycache__", ".venv"))
+            for asset in [destination, *destination.rglob("*")]:
+                os.chmod(asset, 0o755 if asset.is_dir() or asset.stat().st_mode & 0o111 else 0o644)
             now = time.time()
             extra_metadata = metadata.get("metadata") if isinstance(metadata.get("metadata"), dict) else {}
             skill = {"id": skill_id, "name": metadata["name"], "description": metadata["description"], "version": extra_metadata.get("version") or version, "source": source, "path": str(destination), "ref": args.get("ref", ""), "subdir": args.get("subdir", ""), "enabled": bool(args.get("enabled", existing.get("enabled", True))), "installed_at": existing.get("installed_at", now), "updated_at": now, "compatibility": metadata.get("compatibility", "")}

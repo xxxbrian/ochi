@@ -38,13 +38,18 @@ func (d *Docker) ensureCompute(ctx context.Context, userID, sessionID string) (s
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	name := computeContainer(userID, sessionID)
-	if address := d.urls[name]; address != "" && d.healthy(ctx, address) {
-		return address, nil
+	if address := d.urls[name]; address != "" {
+		if err := d.healthy(ctx, address); err == nil {
+			return address, nil
+		} else if errors.Is(err, ErrContractMismatch) {
+			return "", err
+		}
 	}
 	delete(d.urls, name)
 	var inspect struct {
-		Image string
-		State struct{ Running bool }
+		Image  string
+		Config struct{ Env []string }
+		State  struct{ Running bool }
 	}
 	status, err := d.request(ctx, http.MethodGet, "/containers/"+name+"/json", nil, &inspect)
 	if err != nil && status != http.StatusNotFound {
@@ -61,8 +66,13 @@ func (d *Docker) ensureCompute(ctx context.Context, userID, sessionID string) (s
 		}
 	}
 	if status == http.StatusNotFound {
+		token, err := newBridgeToken()
+		if err != nil {
+			return "", err
+		}
+		env := []string{"COMPUTE_ONLY=1", "OCHI_BRIDGE_TOKEN=" + token}
 		container := map[string]any{
-			"Image": d.config.Image, "User": "root", "Env": []string{"COMPUTE_ONLY=1"},
+			"Image": d.config.Image, "User": "root", "Env": env,
 			"Labels": map[string]string{"app": "ochi", "scope": "compute", "session": sessionID},
 			"HostConfig": map[string]any{
 				"NetworkMode": d.config.ComputeNetwork, "Memory": 2 * 1024 * 1024 * 1024, "NanoCpus": 2_000_000_000,
@@ -73,6 +83,10 @@ func (d *Docker) ensureCompute(ctx context.Context, userID, sessionID string) (s
 		if _, err = d.request(ctx, http.MethodPost, "/containers/create?name="+name, container, nil); err != nil {
 			return "", fmt.Errorf("create computation: %w", err)
 		}
+		inspect.Config.Env = env
+	}
+	if err := d.rememberBridgeToken(name, inspect.Config.Env); err != nil {
+		return "", err
 	}
 	if !inspect.State.Running {
 		if _, err = d.request(ctx, http.MethodPost, "/containers/"+name+"/start", nil, nil); err != nil {
@@ -85,9 +99,11 @@ func (d *Docker) ensureCompute(ctx context.Context, userID, sessionID string) (s
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		if d.healthy(ready, address) {
+		if err := d.healthy(ready, address); err == nil {
 			d.urls[name] = address
 			return address, nil
+		} else if errors.Is(err, ErrContractMismatch) {
+			return "", err
 		}
 		select {
 		case <-ready.Done():

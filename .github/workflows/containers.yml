@@ -65,17 +65,24 @@ jobs:
           ARCH: ${{ matrix.target.arch }}
           BUILD_ATTEMPT: ${{ needs.check.outputs.attempt }}
         run: |
-          directory="$COMPONENT"
+          directory=.
+          dockerfile=Dockerfile
           if [ "$COMPONENT" = postgres ]; then directory=db; fi
+          if [ "$COMPONENT" = workspace ]; then dockerfile=workspace/Dockerfile; fi
           image="ghcr.io/${GITHUB_REPOSITORY,,}-$COMPONENT"
           if [ "$COMPONENT" = server ]; then
             directory=.
             tag="$image:sha-$GITHUB_SHA-run-$GITHUB_RUN_ID-$BUILD_ATTEMPT-$ARCH"
           else
-            tree="$(git rev-parse "HEAD:$directory")"
+            if [ "$COMPONENT" = workspace ]; then
+              tree="$(git ls-tree HEAD workspace server/internal/workspace/contract.json | git hash-object --stdin)"
+            else
+              tree="$(git rev-parse "HEAD:$directory")"
+            fi
             tag="$image:ctx-$tree-$ARCH"
           fi
           echo "directory=$directory" >> "$GITHUB_OUTPUT"
+          echo "dockerfile=$directory/$dockerfile" >> "$GITHUB_OUTPUT"
           echo "image=$image" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
       - name: Reuse unchanged database or workspace
@@ -97,6 +104,7 @@ jobs:
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./${{ steps.context.outputs.directory }}
+          file: ${{ steps.context.outputs.dockerfile }}
           platforms: linux/${{ matrix.target.arch }}
           tags: ${{ steps.context.outputs.tag }}
           push: true

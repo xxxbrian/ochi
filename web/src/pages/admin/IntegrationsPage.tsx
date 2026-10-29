@@ -543,7 +543,6 @@ export function MCPPage() {
             transport: "stdio",
             command: "",
             url: "",
-            cwd: "",
           },
     );
     setArgs(server?.args ?? []);
@@ -847,14 +846,7 @@ export function MCPPage() {
                 </div>
                 <details className="advanced-section">
                   <summary>{t("advancedSettings")}</summary>
-                  <Field title={t("workingDirectory")}>
-                    <input
-                      value={editor.cwd ?? ""}
-                      onChange={(event) =>
-                        setEditor({ ...editor, cwd: event.target.value })
-                      }
-                    />
-                  </Field>
+                  <p className="field-help">{t("stdioRuntimeHint")}</p>
                   <div className="form-field">
                     <span>{t("environmentVariables")}</span>
                     <KeyValueEditor

@@ -284,10 +284,10 @@
     "zh-CN": "高级设置",
     "zh-TW": "高階設定"
   },
-  "workingDirectory": {
-    "en": "Working directory",
-    "zh-CN": "工作目录",
-    "zh-TW": "工作目錄"
+  "stdioRuntimeHint": {
+    "en": "Runs in a private plugin environment with its own working directory and configured credentials. It cannot access users' Computer files.",
+    "zh-CN": "在独立插件环境中运行，使用自己的工作目录和所配置的凭据，不能访问用户的电脑文件。",
+    "zh-TW": "在獨立外掛環境中執行，使用自己的工作目錄與設定的憑證，無法存取使用者的電腦檔案。"
   },
   "environmentVariables": {
     "en": "Environment variables",
@@ -1488,6 +1488,21 @@
     "en": "Workspaces",
     "zh-CN": "工作区",
     "zh-TW": "工作區"
+  },
+  "pluginControlWorkspace": {
+    "en": "Plugin management workspace",
+    "zh-CN": "插件管理工作区",
+    "zh-TW": "外掛程式管理工作區"
+  },
+  "pluginControlDescription": {
+    "en": "Shared plugin connections and configuration. Rebuilding preserves configuration and installed bundles.",
+    "zh-CN": "共享插件连接与配置。重建会保留配置及已安装的插件包。",
+    "zh-TW": "共用外掛程式連線與設定。重建會保留設定及已安裝的外掛程式套件。"
+  },
+  "workspaceImageUpdateAvailable": {
+    "en": "A newer workspace image is available. Rebuild to apply it.",
+    "zh-CN": "工作区镜像有更新，重建后生效。",
+    "zh-TW": "工作區映像檔有更新，重建後生效。"
   },
   "refresh": {
     "en": "Refresh",

@@ -4,8 +4,9 @@
 !web/
 !web/**
 !shared/
-!shared/i18n/
-!shared/i18n/**
+!shared/**
+!workspace/
+!workspace/**
 **/node_modules/
 **/dist/
 **/build/
@@ -16,3 +17,6 @@
 **/.DS_Store
 **/AGENTS.md
 **/README.md
+**/__pycache__/
+**/*.pyc
+**/*.pyo

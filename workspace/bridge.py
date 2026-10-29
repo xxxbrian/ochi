@@ -47,6 +47,8 @@ from workspace_runtime import (COMPUTE_ONLY, DATA_ROOT, FILES_ROOT, SCREENSHOT_R
     _import_scratch, _cancel_run, _interrupt_operation, _workspace_env,
     _run_command, _image_result)
 from workspace_extensions import EXTENSIONS_ROOT, EXTENSIONS_LOCK, _extension_id, _load_extensions, _save_extensions
+from workspace_control import CONTROL_ONLY, authorize_control
+from workspace_contract import CONTRACT
 from workspace_plugins import set_extension_access
 from workspace_skills import _skill_content, _skill_public, install_skill, tool_skills_list, tool_skills_read, skills_index
 from workspace_mcp import MCP, _mcp_public, save_mcp
@@ -332,6 +334,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def _route(self) -> tuple[str, dict[str, str]]:
+        parsed = urllib.parse.urlsplit(self.path)
+        route = urllib.parse.unquote(parsed.path).rstrip("/") or "/"
+        authorize_control(getattr(self, "command", "GET"), route, self.headers.get("Authorization", ""))
         scope = json.loads(self.headers.get("X-Run-Scope", "{}"))
         if not isinstance(scope, dict):
             raise ValueError("invalid run scope")
@@ -340,8 +345,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("invalid scope id")
         RUN_SCOPE.set(scope)
         set_extension_access(self.headers.get("X-Ochi-Extensions"))
-        parsed = urllib.parse.urlsplit(self.path)
-        return urllib.parse.unquote(parsed.path).rstrip("/") or "/", {key: values[0] for key, values in urllib.parse.parse_qs(parsed.query).items()}
+        return route, {key: values[0] for key, values in urllib.parse.parse_qs(parsed.query).items()}
 
     def _read_body(self, limit: int = MAX_BODY_BYTES) -> bytes:
         try:
@@ -353,7 +357,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.rfile.read(length)
 
     def _read_json(self) -> dict[str, Any]:
-        raw = self._read_body()
+        raw = self._read_body(44 * 1024 * 1024 if CONTROL_ONLY else MAX_BODY_BYTES)
         self._last_json_bytes = raw or b"{}"
         # Validate the raw spelling before normal decoding for handlers/SDKs.
         strict_json(self._last_json_bytes)
@@ -376,6 +380,8 @@ class Handler(BaseHTTPRequestHandler):
         kind = segments[1]
         item_id = _extension_id(segments[2]) if len(segments) > 2 else None
         suffix = segments[3] if len(segments) > 3 else None
+        if not CONTROL_ONLY and not (kind == "skills" and method == "POST" and suffix == "install"):
+            raise PermissionError("extension management belongs to plugin control")
         config = _load_extensions()
         if method == "GET" and item_id is None:
             values = config[kind]
@@ -404,6 +410,8 @@ class Handler(BaseHTTPRequestHandler):
             self._write({"ok": True, "name": metadata["name"], "files": _skill_public(item)["files"], "content_bytes": len(content.encode("utf-8"))})
             return True
         if method == "POST" and kind == "skills" and suffix == "install":
+            if CONTROL_ONLY:
+                raise ValueError("select a user workspace for skill dependency installation")
             dependency_root = DATA_ROOT / "skill-deps" / item_id
             shutil.copytree(item["path"], dependency_root, dirs_exist_ok=True)
             self._write(tool_exec({"command": args.get("command"), "cwd": str(dependency_root), "env": args.get("env"), "timeout_ms": args.get("timeout_ms", 120_000)}))
@@ -438,19 +446,20 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         try:
             route, query = self._route()
-        except (ValueError, TypeError) as exc:
-            self._write(_json_error(str(exc)), HTTPStatus.BAD_REQUEST)
+        except (ValueError, TypeError, PermissionError) as exc:
+            self._write(_json_error(str(exc)), HTTPStatus.FORBIDDEN if isinstance(exc, PermissionError) else HTTPStatus.BAD_REQUEST)
             return
         if route == "/health":
-            if COMPUTE_ONLY:
-                self._write({"status": "ok", "compute_only": True, "browser": False})
+            mode = "control" if CONTROL_ONLY else "compute" if COMPUTE_ONLY else "workspace"
+            if COMPUTE_ONLY or CONTROL_ONLY:
+                self._write({**CONTRACT, "status": "ok", "mode": mode, "browser": False})
                 return
             try:
                 display = _run_command(["xdpyinfo", "-display", os.environ.get("DISPLAY", ":99")], timeout_ms=1_000)
                 status = HTTPStatus.OK if display.returncode == 0 else HTTPStatus.SERVICE_UNAVAILABLE
             except Exception:
                 status = HTTPStatus.SERVICE_UNAVAILABLE
-            self._write({"status": "ok" if status == HTTPStatus.OK else "unavailable", "browser": sync_playwright is not None, "display": os.environ.get("DISPLAY", ":99")}, status)
+            self._write({**CONTRACT, "status": "ok" if status == HTTPStatus.OK else "unavailable", "mode": mode, "browser": sync_playwright is not None, "display": os.environ.get("DISPLAY", ":99")}, status)
             return
         if route == "/tools":
             names = set(query.get("names", "").split(",")) - {""}
@@ -510,8 +519,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         try:
             route, _ = self._route()
-        except (ValueError, TypeError) as exc:
-            self._write(_json_error(str(exc)), HTTPStatus.BAD_REQUEST)
+        except (ValueError, TypeError, PermissionError) as exc:
+            self._write(_json_error(str(exc)), HTTPStatus.FORBIDDEN if isinstance(exc, PermissionError) else HTTPStatus.BAD_REQUEST)
             return
         try:
             if route == "/workspace/import":
@@ -579,8 +588,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_PUT(self) -> None:  # noqa: N802
         try:
             route, query = self._route()
-        except (ValueError, TypeError) as exc:
-            self._write(_json_error(str(exc)), HTTPStatus.BAD_REQUEST)
+        except (ValueError, TypeError, PermissionError) as exc:
+            self._write(_json_error(str(exc)), HTTPStatus.FORBIDDEN if isinstance(exc, PermissionError) else HTTPStatus.BAD_REQUEST)
             return
         if route != "/file":
             self._write(_json_error("not found"), HTTPStatus.NOT_FOUND)
@@ -613,7 +622,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self._extensions(route, "PATCH", self._read_json()):
                 self._write(_json_error("not found"), HTTPStatus.NOT_FOUND)
         except Exception as exc:
-            self._write(_json_error(str(exc)), HTTPStatus.BAD_REQUEST)
+            self._write(_json_error(str(exc)), HTTPStatus.FORBIDDEN if isinstance(exc, PermissionError) else HTTPStatus.BAD_REQUEST)
 
     def do_DELETE(self) -> None:  # noqa: N802
         try:
@@ -621,13 +630,13 @@ class Handler(BaseHTTPRequestHandler):
             if not self._extensions(route, "DELETE"):
                 self._write(_json_error("not found"), HTTPStatus.NOT_FOUND)
         except Exception as exc:
-            self._write(_json_error(str(exc)), HTTPStatus.BAD_REQUEST)
+            self._write(_json_error(str(exc)), HTTPStatus.FORBIDDEN if isinstance(exc, PermissionError) else HTTPStatus.BAD_REQUEST)
 
 
 def main() -> None:
     FILES_ROOT.mkdir(parents=True, exist_ok=True)
     SCREENSHOT_ROOT.mkdir(parents=True, exist_ok=True)
-    if not COMPUTE_ONLY:
+    if not COMPUTE_ONLY and not CONTROL_ONLY:
         BROWSER._start()
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     stopping = threading.Event()
@@ -646,7 +655,7 @@ def main() -> None:
         pass
     finally:
         httpd.server_close()
-        if not COMPUTE_ONLY:
+        if not COMPUTE_ONLY and not CONTROL_ONLY:
             try:
                 close_computer()
             finally:

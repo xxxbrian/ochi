@@ -36,7 +36,7 @@ func TestCancelledDesktopTransportInterruptsScopedOperationAndDrains(t *testing.
 			bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {
 				case "/health":
-					w.WriteHeader(http.StatusOK)
+					io.WriteString(w, fixtureHealth("workspace"))
 				case "/tools/" + tool.name:
 					scope, err := readInterruptScope(r)
 					if err != nil {
@@ -123,7 +123,7 @@ func TestDesktopInterruptCanReachBridgeBeforeDispatch(t *testing.T) {
 	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/health":
-			w.WriteHeader(http.StatusOK)
+			io.WriteString(w, fixtureHealth("workspace"))
 		case "/runs/interrupt":
 			scope, err := readInterruptScope(r)
 			if err != nil {

@@ -70,9 +70,8 @@ func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := "__admin__"
 	if segments[0] == "skills" && ((r.Method == http.MethodPost && len(segments) == 1) || (r.Method == http.MethodPatch && len(segments) == 2)) {
-		// Uploaded bundles initially live in the administrator's personal volume.
-		// Copy a selected bundle into the private management workspace before
-		// installation; regular users never get a writable extensions mount.
+		// The control bridge accepts a selected bundle as data. It intentionally
+		// has no arbitrary file-read/write or shell route.
 		var input map[string]json.RawMessage
 		if json.Unmarshal(data, &input) == nil {
 			var filePath, source, artifactID string
@@ -113,11 +112,10 @@ func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
 					}
 					bundle = bytes
 				}
-				status, _, response, writeErr := bridge.Bridge(r.Context(), userID, http.MethodPut, "/file?path="+url.QueryEscape(filePath), bundle)
-				if writeErr != nil || status >= 400 {
-					writeError(w, http.StatusBadGateway, bridgeError(status, response, writeErr))
-					return
-				}
+				input["bundle_base64"], _ = json.Marshal(bundle)
+				delete(input, "path")
+				delete(input, "source")
+				data, _ = json.Marshal(input)
 			}
 		}
 	}
@@ -188,7 +186,12 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	items := []workspace.State{}
+	control, err := manager.Inspect(r.Context(), "__admin__")
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	items := []workspace.State{control}
 	for _, user := range users {
 		item, err := manager.Inspect(r.Context(), user.ID)
 		if err != nil {
@@ -202,16 +205,25 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) manageWorkspace(w http.ResponseWriter, r *http.Request) {
 	userID, _ := url.PathUnescape(r.PathValue("id"))
-	if _, err := s.store.GetUser(r.Context(), userID); err != nil {
-		writeStoreError(w, err)
-		return
+	var active bool
+	var err error
+	if userID == "__admin__" {
+		// The shared plugin executor can serve any user's run.
+		active, err = s.store.AnyActiveRun(r.Context())
+	} else {
+		if _, err := s.store.GetUser(r.Context(), userID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		var status string
+		status, err = s.store.ActiveRunStatus(r.Context(), userID)
+		active = status != ""
 	}
-	status, err := s.store.ActiveRunStatus(r.Context(), userID)
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
-	if status != "" {
+	if active {
 		writeError(w, http.StatusConflict, i18n.New("workspace_busy"))
 		return
 	}

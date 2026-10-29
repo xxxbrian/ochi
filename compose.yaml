@@ -54,7 +54,9 @@ services:
 
   # Preload the tool image. The Go service creates each user's real desktop.
   workspace-image:
-    build: ./workspace
+    build:
+      context: .
+      dockerfile: workspace/Dockerfile
     image: ${OCHI_WORKSPACE_IMAGE:-ochi-workspace:local}
     entrypoint: [/bin/true]
     command: []

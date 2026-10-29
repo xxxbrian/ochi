@@ -99,15 +99,16 @@ COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
-COPY bridge.py /opt/workspace/bridge.py
-COPY workspace_*.py /opt/workspace/
-COPY memory_embeddings.py /opt/workspace/memory_embeddings.py
-COPY tools.json /opt/workspace/tools.json
-COPY desktop-defaults/ /opt/workspace/desktop-defaults/
-COPY desktop-prepare.py /opt/workspace/desktop-prepare.py
-COPY desktop-start.sh /usr/local/bin/workspace-desktop-start
-COPY desktop-browser-launch.py /usr/local/bin/workspace-browser-launch
-COPY entrypoint.sh /usr/local/bin/workspace-entrypoint
+COPY workspace/bridge.py /opt/workspace/bridge.py
+COPY workspace/workspace_*.py /opt/workspace/
+COPY workspace/memory_embeddings.py /opt/workspace/memory_embeddings.py
+COPY workspace/tools.json /opt/workspace/tools.json
+COPY server/internal/workspace/contract.json /opt/workspace/contract.json
+COPY workspace/desktop-defaults/ /opt/workspace/desktop-defaults/
+COPY workspace/desktop-prepare.py /opt/workspace/desktop-prepare.py
+COPY workspace/desktop-start.sh /usr/local/bin/workspace-desktop-start
+COPY workspace/desktop-browser-launch.py /usr/local/bin/workspace-browser-launch
+COPY workspace/entrypoint.sh /usr/local/bin/workspace-entrypoint
 RUN chmod 0755 /usr/local/bin/workspace-entrypoint /usr/local/bin/workspace-desktop-start /usr/local/bin/workspace-browser-launch /opt/workspace/bridge.py \
     && install -D -m 0644 /opt/workspace/desktop-defaults/share/xfce4/helpers/ochi-browser.desktop /usr/share/xfce4/helpers/ochi-browser.desktop \
     && /opt/venv/bin/python -c 'import gi, pyatspi' \

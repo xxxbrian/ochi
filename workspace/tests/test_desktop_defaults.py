@@ -70,7 +70,7 @@ class DesktopDefaultsTests(unittest.TestCase):
             calls = opener.open.call_args_list
             self.assertEqual(len(calls), 2)
             for call, original in zip(calls, urls):
-                parsed = urllib.parse.urlsplit(call.args[0])
+                parsed = urllib.parse.urlsplit(call.args[0].full_url)
                 self.assertEqual(parsed.netloc, "127.0.0.1:8080")
                 self.assertEqual(parsed.path, "/browser/desktop-launch")
                 self.assertEqual(urllib.parse.parse_qs(parsed.query), {"url": [original]})

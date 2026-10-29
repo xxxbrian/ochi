@@ -16,6 +16,29 @@ func workspaceResponse(status int, body string) *http.Response {
 	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body))}
 }
 
+const fixtureToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+func fixtureHealth(mode string) string {
+	var value map[string]any
+	_ = json.Unmarshal(ContractJSON, &value)
+	value["contract_sha256"], value["mode"] = ContractSHA256(), mode
+	raw, _ := json.Marshal(value)
+	return string(raw)
+}
+
+func fixtureContainer(body string) string {
+	var value map[string]any
+	_ = json.Unmarshal([]byte(body), &value)
+	config, _ := value["Config"].(map[string]any)
+	if config == nil {
+		config = map[string]any{}
+	}
+	config["Env"] = []string{"OCHI_BRIDGE_TOKEN=" + fixtureToken}
+	value["Config"] = config
+	raw, _ := json.Marshal(value)
+	return string(raw)
+}
+
 func TestEnsureWorkspaceUsesImageOwnedDirectories(t *testing.T) {
 	name := userContainer("fixture-user")
 	inspect := "GET /v1.44/containers/" + name + "/json"
@@ -40,11 +63,11 @@ func TestEnsureWorkspaceUsesImageOwnedDirectories(t *testing.T) {
 				status, body := http.StatusOK, `{}`
 				switch call {
 				case inspect:
-					body = `{"State":{"Running":false}}`
+					body = fixtureContainer(`{"State":{"Running":false}}`)
 					if !tc.exists {
 						status = http.StatusNotFound
 					} else if tc.running {
-						body = `{"State":{"Running":true}}`
+						body = fixtureContainer(`{"State":{"Running":true}}`)
 					}
 				case create:
 					status = http.StatusCreated
@@ -59,7 +82,7 @@ func TestEnsureWorkspaceUsesImageOwnedDirectories(t *testing.T) {
 				if r.Method != http.MethodGet || r.URL.Host != name+":8080" || r.URL.Path != "/health" {
 					t.Errorf("unexpected bridge request: %s %s", r.Method, r.URL)
 				}
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(fixtureHealth("workspace")))}, nil
 			})
 			for range 2 {
 				address, err := d.ensure(context.Background(), "fixture-user")
@@ -141,10 +164,10 @@ func TestEnsureWorkspaceNeverReplacesExistingImage(t *testing.T) {
 		if r.Method != http.MethodGet || r.URL.Path != "/v1.44/containers/"+userContainer("fixture-user")+"/json" {
 			t.Fatalf("existing desktop was modified: %s %s", r.Method, r.URL)
 		}
-		return workspaceResponse(http.StatusOK, `{"Image":"sha256:old","Config":{"Image":"ochi-workspace:old"},"State":{"Running":true}}`), nil
+		return workspaceResponse(http.StatusOK, fixtureContainer(`{"Image":"sha256:old","Config":{"Image":"ochi-workspace:old"},"State":{"Running":true}}`)), nil
 	})
 	d.bridge.Transport = catalogRoundTripper(func(r *http.Request) (*http.Response, error) {
-		return workspaceResponse(http.StatusOK, `{}`), nil
+		return workspaceResponse(http.StatusOK, fixtureHealth("workspace")), nil
 	})
 	if _, err := d.ensure(context.Background(), "fixture-user"); err != nil {
 		t.Fatal(err)
@@ -171,7 +194,7 @@ func TestRebuildWorkspacePreservesNamedVolumes(t *testing.T) {
 			if created {
 				image = "new"
 			}
-			return workspaceResponse(http.StatusOK, fmt.Sprintf(`{"Image":"sha256:%s","Config":{"Image":"ochi-workspace:%s"},"State":{"Running":%t,"Status":"running"}}`, image, image, running)), nil
+			return workspaceResponse(http.StatusOK, fixtureContainer(fmt.Sprintf(`{"Image":"sha256:%s","Config":{"Image":"ochi-workspace:%s"},"State":{"Running":%t,"Status":"running"}}`, image, image, running))), nil
 		case "POST /v1.44/containers/" + name + "/stop?t=15":
 			running = false
 		case "DELETE /v1.44/containers/" + name:
@@ -196,7 +219,7 @@ func TestRebuildWorkspacePreservesNamedVolumes(t *testing.T) {
 				t.Fatalf("incorrect rebuilt workspace configuration: %+v", input)
 			}
 			data, extensions := input.HostConfig.Mounts[0], input.HostConfig.Mounts[1]
-			if data.Type != "volume" || data.Source != name+"-data" || data.Target != "/data" || extensions.Source != "ochi-extensions" || extensions.Target != "/opt/extensions" || !extensions.ReadOnly {
+			if data.Type != "volume" || data.Source != name+"-data" || data.Target != "/data" || extensions.Source != "ochi-plugin-assets" || extensions.Target != "/opt/extensions" || !extensions.ReadOnly {
 				t.Fatalf("workspace rebuild changed persistent mounts: %+v", input.HostConfig.Mounts)
 			}
 			created = true
@@ -208,7 +231,7 @@ func TestRebuildWorkspacePreservesNamedVolumes(t *testing.T) {
 		return workspaceResponse(http.StatusOK, `{}`), nil
 	})
 	d.bridge.Transport = catalogRoundTripper(func(r *http.Request) (*http.Response, error) {
-		return workspaceResponse(http.StatusOK, `{}`), nil
+		return workspaceResponse(http.StatusOK, fixtureHealth("workspace")), nil
 	})
 	state, err := d.Manage(context.Background(), userID, "rebuild")
 	if err != nil {

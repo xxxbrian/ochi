@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${OCHI_CONTROL_ONLY:-0}" == "1" ]]; then
+  [[ "$(id -u)" == "0" && -n "${OCHI_BRIDGE_TOKEN:-}" ]] || { echo "plugin control requires its private runtime identity" >&2; exit 1; }
+  mkdir -p /var/lib/ochi-control /opt/extensions /data/mcp /data/files
+  chmod 700 /var/lib/ochi-control
+  chmod 755 /opt/extensions /data /data/mcp
+  unset DISPLAY DBUS_SESSION_BUS_ADDRESS SESSION_MANAGER
+  exec /opt/venv/bin/python /opt/workspace/bridge.py
+fi
+
 if [[ "${COMPUTE_ONLY:-0}" == "1" && "$(id -u)" == "0" ]]; then
   # Only established replies, loopback, Docker DNS and public egress. The API
   # service can reach this bridge, but code cannot initiate connections to it,

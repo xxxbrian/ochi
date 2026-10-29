@@ -68,7 +68,7 @@ class PluginPolicyContracts(unittest.TestCase):
         runtime = workspace_mcp.MCPRuntime()
         alice_tool = workspace_mcp._mcp_tool_name("alice", "search")
         bob_tool = workspace_mcp._mcp_tool_name("bob", "search")
-        with patch.object(workspace_mcp, "_load_extensions", return_value=config), patch.object(runtime, "connection") as connection:
+        with patch.object(workspace_mcp, "CONTROL_ONLY", True), patch.object(workspace_mcp, "_load_extensions", return_value=config), patch.object(runtime, "connection") as connection:
             self.allow(mcp=["alice"])
             self.assertEqual([item["name"] for item in runtime.search({"query": "search"})["tools"]], [alice_tool])
             self.assertEqual([item["name"] for item in runtime.definitions()], [alice_tool])

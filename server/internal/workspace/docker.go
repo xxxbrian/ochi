@@ -39,6 +39,8 @@ type Docker struct {
 	urls        map[string]string
 	catalogMu   sync.Mutex
 	discoveries map[string]*runCatalog
+	tokenMu     sync.RWMutex
+	tokens      map[string]string
 }
 
 // The server uses Docker only for workspace lifecycle. Workspace tools never
@@ -81,13 +83,18 @@ func (d *Docker) ensure(ctx context.Context, userID string) (string, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if address := d.urls[userID]; address != "" {
-		if d.healthy(ctx, address) {
+		if err := d.healthy(ctx, address); err == nil {
 			return address, nil
+		} else if errors.Is(err, ErrContractMismatch) {
+			return "", err
 		}
 		delete(d.urls, userID)
 	}
 	name := userContainer(userID)
 	var inspect struct {
+		Config struct {
+			Env []string `json:"Env"`
+		} `json:"Config"`
 		State struct {
 			Running bool `json:"Running"`
 		} `json:"State"`
@@ -97,23 +104,42 @@ func (d *Docker) ensure(ctx context.Context, userID string) (string, error) {
 		return "", err
 	}
 	if status == http.StatusNotFound {
+		control := userID == "__admin__"
+		env := []string{"EXTENSIONS_ROOT=/opt/extensions"}
+		mounts := []map[string]any{
+			{"Type": "volume", "Source": name + "-data", "Target": "/data"},
+			{"Type": "volume", "Source": "ochi-plugin-assets", "Target": "/opt/extensions", "ReadOnly": !control},
+		}
+		token, err := newBridgeToken()
+		if err != nil {
+			return "", err
+		}
+		env = append(env, "OCHI_BRIDGE_TOKEN="+token)
+		if control {
+			env = append(env, "OCHI_CONTROL_ONLY=1")
+			mounts = append(mounts, map[string]any{"Type": "volume", "Source": "ochi-plugin-control", "Target": "/var/lib/ochi-control"})
+		}
 		container := map[string]any{
 			"Image":  d.config.Image,
 			"Labels": map[string]string{"app": "ochi", "workspace": name},
-			"Env":    []string{"EXTENSIONS_ROOT=/opt/extensions"},
+			"Env":    env,
 			"HostConfig": map[string]any{
 				"NetworkMode": d.config.Network,
 				"ShmSize":     512 * 1024 * 1024,
-				"Mounts": []map[string]any{
-					{"Type": "volume", "Source": name + "-data", "Target": "/data"},
-					{"Type": "volume", "Source": "ochi-extensions", "Target": "/opt/extensions", "ReadOnly": userID != "__admin__"},
-				},
+				"Mounts":      mounts,
 			},
+		}
+		if control {
+			container["User"] = "root"
 		}
 		if _, err := d.request(ctx, http.MethodPost, "/containers/create?name="+name, container, nil); err != nil {
 			return "", fmt.Errorf("create workspace: %w", err)
 		}
 		inspect.State.Running = false
+		inspect.Config.Env = env
+	}
+	if err := d.rememberBridgeToken(userID, inspect.Config.Env); err != nil {
+		return "", err
 	}
 	if !inspect.State.Running {
 		if _, err := d.request(ctx, http.MethodPost, "/containers/"+name+"/start", nil, nil); err != nil {
@@ -126,9 +152,11 @@ func (d *Docker) ensure(ctx context.Context, userID string) (string, error) {
 	ticker := time.NewTicker(300 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		if d.healthy(readyCtx, address) {
+		if err := d.healthy(readyCtx, address); err == nil {
 			d.urls[userID] = address
 			return address, nil
+		} else if errors.Is(err, ErrContractMismatch) {
+			return "", err
 		}
 		select {
 		case <-readyCtx.Done():
@@ -168,16 +196,29 @@ func (d *Docker) request(ctx context.Context, method, path string, body any, out
 	return resp.StatusCode, err
 }
 
-func (d *Docker) healthy(ctx context.Context, address string) bool {
+func (d *Docker) healthy(ctx context.Context, address string) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, address+"/health", nil)
 	resp, err := d.bridge.Do(req)
 	if err != nil {
-		return false
+		return err
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("workspace health HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024))
+	if err != nil {
+		return err
+	}
+	mode := "workspace"
+	if strings.Contains(address, userContainer("__admin__")) {
+		mode = "control"
+	} else if strings.Contains(address, "ochi-compute-") {
+		mode = "compute"
+	}
+	return CheckBridgeContract(data, mode)
 }
 
 func (d *Docker) Definitions(ctx context.Context, userID string) ([]agent.ToolDefinition, error) {
@@ -206,6 +247,7 @@ func (d *Docker) Bridge(ctx context.Context, userID, method, path string, data [
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	setScopeHeaders(req, ctx)
+	d.setBridgeAuth(req, userID)
 	if strings.HasPrefix(path, "/extensions/") {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -229,6 +271,7 @@ func (d *Docker) Bridge(ctx context.Context, userID, method, path string, data [
 }
 
 type State struct {
+	Kind              string `json:"kind"`
 	UserID            string `json:"user_id"`
 	Container         string `json:"container"`
 	State             string `json:"state"`
@@ -243,6 +286,10 @@ type State struct {
 
 func (d *Docker) Inspect(ctx context.Context, userID string) (State, error) {
 	state := State{UserID: userID, Container: userContainer(userID), State: "not_created", Image: d.config.Image, ConfiguredImage: d.config.Image}
+	state.Kind = "workspace"
+	if userID == "__admin__" {
+		state.Kind = "control"
+	}
 	var inspect struct {
 		Image  string                 `json:"Image"`
 		Config struct{ Image string } `json:"Config"`
@@ -359,7 +406,11 @@ func (d *Docker) Call(ctx context.Context, userID, name string, args json.RawMes
 	if err := agent.ValidateToolArguments(*definition, args); err != nil {
 		return agent.ToolResult{}, err
 	}
-	address, err := d.ensure(ctx, userID)
+	targetID := userID
+	if name == "tool_search" || strings.HasPrefix(name, "mcp_") {
+		targetID = "__admin__"
+	}
+	address, err := d.ensure(ctx, targetID)
 	if err != nil {
 		return agent.ToolResult{}, err
 	}
@@ -390,6 +441,7 @@ func (d *Docker) Call(ctx context.Context, userID, name string, args json.RawMes
 				}
 				request.Header.Set("Content-Type", "application/json")
 				setScopeHeaders(request, agent.WithRunScope(terminate, scope))
+				d.setBridgeAuth(request, userID)
 				if response, err := d.bridge.Do(request); err == nil {
 					response.Body.Close()
 				}
@@ -403,6 +455,7 @@ func (d *Docker) Call(ctx context.Context, userID, name string, args json.RawMes
 	}
 	req.Header.Set("Content-Type", "application/json")
 	setScopeHeaders(req, ctx)
+	d.setBridgeAuth(req, targetID)
 	resp, err := d.bridge.Do(req)
 	if err != nil {
 		return agent.ToolResult{}, err
@@ -455,6 +508,39 @@ func (d *Docker) Call(ctx context.Context, userID, name string, args json.RawMes
 		}
 	}
 	return agent.ToolResult{Output: string(envelope.Result)}, nil
+}
+
+func newBridgeToken() (string, error) {
+	var token [32]byte
+	if _, err := rand.Read(token[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(token[:]), nil
+}
+
+func (d *Docker) rememberBridgeToken(key string, env []string) error {
+	for _, value := range env {
+		if token, ok := strings.CutPrefix(value, "OCHI_BRIDGE_TOKEN="); ok && len(token) == 64 {
+			d.tokenMu.Lock()
+			defer d.tokenMu.Unlock()
+			if d.tokens == nil {
+				d.tokens = make(map[string]string)
+			}
+			d.tokens[key] = token
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: rebuild workspace to provision private bridge authentication", ErrContractMismatch)
+}
+
+func (d *Docker) setBridgeAuth(req *http.Request, userID string) {
+	key := userID
+	if scope, ok := agent.ScopeFromContext(req.Context()); ok && scope.ComputeOnly {
+		key = computeContainer(userID, scope.SessionID)
+	}
+	d.tokenMu.RLock()
+	req.Header.Set("Authorization", "Bearer "+d.tokens[key])
+	d.tokenMu.RUnlock()
 }
 
 func setScopeHeaders(req *http.Request, ctx context.Context) {

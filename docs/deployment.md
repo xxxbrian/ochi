@@ -194,12 +194,9 @@ Application self-update requires both the target schema hash and workspace
 contract hash to match the running build. A schema change needs a verified
 backup and explicit one-off maintenance before starting the matching image;
 there is no silent runtime migration chain. A workspace contract change requires
-matching server and workspace images and explicit workspace maintenance.
-The update page explains which contract blocks binary replacement; rollback
-checks both identities too. `server/internal/workspace/contract.json` is the
-single source of the protocol, semantic image revision and capabilities copied
-into the image and embedded in the server. Bump its revision only when those
-requirements change, not for every implementation edit.
+the matching server and workspace images and explicit workspace rebuilds,
+including the plugin management workspace. The update page explains which
+contract blocks binary replacement; rollback checks both identities too.
 Database major versions, OS/runtime dependencies, Compose topology and Computer
 images likewise remain explicit maintenance rather than ordinary app updates.
 
@@ -223,6 +220,30 @@ Use the administrator's **rebuild** action when that user's work can stop.
 It verifies the new image exists before stopping the old desktop, and retains
 the named `/data` and shared plugin volumes. Rebuilding restarts processes; it
 does not preserve in-memory applications.
+
+The workspace image and server embed the same
+`server/internal/workspace/contract.json`. Its protocol, semantic revision,
+execution modes and capabilities describe the current bridge requirements.
+Change its revision when an image/tool/runtime dependency change requires
+coordinated deployment; ordinary implementation fixes do not require a bump.
+The server verifies the health response's contract identity and execution mode
+before advertising or calling tools. A reachable but incompatible bridge fails
+with a rebuild instruction, rather than timing out or accepting unknown tools.
+CI includes this contract in the workspace image's content identity.
+
+The administrator's workspace list includes the shared **Plugin management
+workspace**, which owns MCP connections and private component configuration.
+Its start, stop and rebuild actions use the same image lifecycle and retain its
+configuration volumes. Stop/rebuild is blocked while any user has an active run.
+Ordinary user workspaces retain only public plugin assets and never mount the
+control credentials volume.
+
+Build the workspace image from the repository root so it receives the same
+contract as the server:
+
+```sh
+docker build -f workspace/Dockerfile -t ochi-workspace:local .
+```
 
 Computer-off compute containers also retain their named scratch volume. A
 stopped outdated one is recreated on its next use; a running one is not killed

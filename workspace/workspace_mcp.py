@@ -14,9 +14,10 @@ import urllib.parse
 import uuid
 from typing import Any
 
+from workspace_control import CONTROL_ONLY, stdio_runtime
 from workspace_extensions import EXTENSIONS_LOCK, _extension_id, _load_extensions, _save_extensions
 from workspace_plugins import extension_allowed
-from workspace_runtime import FILES_ROOT, RUN_SCOPE, _safe_cwd, _scope_cwd, _workspace_env
+from workspace_runtime import RUN_SCOPE
 from workspace_schema import ToolArgumentError, validate_arguments, validate_schema
 
 MAX_DISCOVERED_TOOLS = 6
@@ -44,7 +45,7 @@ def _mcp_tool_name(server_id: str, tool_name: str) -> str:
 
 
 def _mcp_public(config: dict[str, Any]) -> dict[str, Any]:
-    result = {key: config.get(key) for key in ("id", "name", "transport", "command", "args", "cwd", "url", "enabled", "tools", "status", "error", "updated_at")}
+    result = {key: config.get(key) for key in ("id", "name", "transport", "command", "args", "url", "enabled", "tools", "status", "error", "updated_at")}
     result.update(env_keys=sorted(config.get("env", {})), header_keys=sorted(config.get("headers", {})))
     return result
 
@@ -115,7 +116,7 @@ def save_mcp(args: dict[str, Any], server_id: str | None = None) -> dict[str, An
         data = _load_extensions()
         server_id = _extension_id(server_id or args.get("id") or ("server-" + uuid.uuid4().hex[:8]))
         previous = data["mcp"].get(server_id, {})
-        config = {**previous, **{key: value for key, value in args.items() if key in {"name", "transport", "command", "args", "cwd", "url", "enabled"}}, "id": server_id, "updated_at": time.time()}
+        config = {**previous, **{key: value for key, value in args.items() if key in {"name", "transport", "command", "args", "url", "enabled"}}, "id": server_id, "updated_at": time.time()}
         for key in ("env", "headers"):
             incoming = args.get(key, {})
             if not isinstance(incoming, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in incoming.items()):
@@ -132,7 +133,14 @@ def save_mcp(args: dict[str, Any], server_id: str | None = None) -> dict[str, An
         config.setdefault("args", [])
         config.setdefault("env", {})
         config.setdefault("headers", {})
-        config.setdefault("cwd", str(FILES_ROOT))
+        if config["transport"] == "stdio" and not config.get("runtime_uid"):
+            # Persist the component identity; changing a token never changes its
+            # private filesystem owner. Allocate outside normal image user IDs.
+            used = {item.get("runtime_uid") for item in data["mcp"].values()}
+            uid = 20_000 + int(hashlib.sha256(server_id.encode()).hexdigest()[:7], 16)
+            while uid in used:
+                uid += 1
+            config["runtime_uid"] = uid
         if config["transport"] not in {"stdio", "http"}:
             raise ValueError("transport must be stdio or http")
         if config["transport"] == "stdio" and not isinstance(config.get("command"), str):
@@ -144,7 +152,7 @@ def save_mcp(args: dict[str, Any], server_id: str | None = None) -> dict[str, An
         for name in ("env", "headers"):
             if not isinstance(config[name], dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in config[name].items()):
                 raise ValueError(f"{name} must contain string values")
-        connection_keys = ("transport", "command", "args", "env", "cwd", "url", "headers")
+        connection_keys = ("transport", "command", "args", "env", "url", "headers")
         if not previous or any(config.get(key) != previous.get(key) for key in connection_keys):
             config["status"], config["error"], config["tools"] = "untested", "", []
         data["mcp"][server_id] = config
@@ -173,8 +181,8 @@ class MCPConnection:
             from mcp.client.streamable_http import streamable_http_client
             async with contextlib.AsyncExitStack() as stack:
                 if self.config["transport"] == "stdio":
-                    cwd = _safe_cwd(self.config.get("cwd"))
-                    target = StdioServerParameters(command=self.config["command"], args=self.config.get("args", []), env=_workspace_env(self.config.get("env")), cwd=str(cwd))
+                    command, args, env, cwd = stdio_runtime(self.config)
+                    target = StdioServerParameters(command=command, args=args, env=env, cwd=cwd)
                 else:
                     import httpx2
                     http = await stack.enter_async_context(httpx2.AsyncClient(
@@ -233,6 +241,8 @@ class MCPConnection:
             raise RuntimeError("MCP connection is closed")
 
     def call(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        if not CONTROL_ONLY:
+            raise PermissionError("MCP invocation belongs to plugin control")
         self.wait_ready()
         done, result = threading.Event(), []
         self.jobs.put((name, args, done, result))
@@ -254,7 +264,9 @@ class MCPRuntime:
         self.lock = threading.Lock()
 
     def connection(self, config: dict[str, Any]) -> MCPConnection:
-        fingerprint = json.dumps({key: config.get(key) for key in ("transport", "command", "args", "env", "cwd", "url", "headers", "enabled")}, sort_keys=True)
+        if not CONTROL_ONLY:
+            raise PermissionError("MCP transport belongs to plugin control")
+        fingerprint = json.dumps({key: config.get(key) for key in ("transport", "command", "args", "env", "url", "headers", "enabled")}, sort_keys=True)
         with self.lock:
             existing = self.connections.get(config.get("connection_id",config["id"]))
             if existing and existing[0] == fingerprint and existing[1].thread.is_alive() and not existing[1].error:
@@ -343,9 +355,7 @@ class MCPRuntime:
                         validate_arguments({"name": name, "parameters": tool["parameters"]}, args)
                         scope = RUN_SCOPE.get()
                         if scope.get("session_id"):
-                            cwd = str(_scope_cwd())
-                            config = {**config, "connection_id": server_id + ":" + scope["session_id"], "cwd": cwd,
-                                      "env": {**config.get("env", {}), "ASSISTANT_WORKDIR": cwd, "ASSISTANT_SESSION_ID": scope["session_id"], "ASSISTANT_RUN_ID": scope.get("run_id", "")}}
+                            config = {**config, "connection_id": server_id + ":" + scope.get("user_id", "") + ":" + scope["session_id"]}
                         return self.connection(config).call(tool["name"], args)
         raise ValueError("MCP tool is unavailable or disabled")
 

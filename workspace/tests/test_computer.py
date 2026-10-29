@@ -15,6 +15,7 @@ import bridge
 import workspace_a11y as a11y
 import workspace_computer as computer
 import workspace_runtime as runtime
+import workspace_control
 import workspace_browser as browser
 from workspace_schema import ToolArgumentError, validate_arguments, validate_schema
 
@@ -93,6 +94,9 @@ def fake_api(children):
 
 class ComputerContracts(unittest.TestCase):
     def setUp(self):
+        token = patch.object(workspace_control, "BRIDGE_TOKEN", "fixture-token")
+        token.start()
+        self.addCleanup(token.stop)
         self.scope = runtime.RUN_SCOPE.set({"session_id": "one", "cwd": "/data/work/one"})
         computer.SNAPSHOTS.clear()
         computer.DESKTOP_CLOSING.clear()
@@ -313,7 +317,7 @@ class ComputerContracts(unittest.TestCase):
 
     def test_desktop_activation_is_not_browser_provisioning(self):
         handler = object.__new__(bridge.Handler)
-        handler.path, handler.headers, handler.rfile = "/desktop/activate", {"Content-Length": "2"}, io.BytesIO(b"{}")
+        handler.path, handler.headers, handler.rfile = "/desktop/activate", {"Authorization": "Bearer fixture-token", "Content-Length": "2"}, io.BytesIO(b"{}")
         outputs = []
         handler._write = lambda value, status=200: outputs.append((value, status))
         with patch.object(bridge, "COMPUTE_ONLY", False), patch.object(bridge.BROWSER, "activate_current", return_value={"activated": False}) as activate, patch.object(bridge, "_browser_call", side_effect=AssertionError("created browser")):
@@ -324,7 +328,7 @@ class ComputerContracts(unittest.TestCase):
     def test_bridge_interrupt_marks_scope_before_aborting_owned_browser_target(self):
         for route, marker in (("/runs/interrupt", "_interrupt_operation"), ("/runs/cancel", "_cancel_run")):
             handler = object.__new__(bridge.Handler)
-            handler.path, handler.headers, handler.rfile = route, {"Content-Length": "2", "X-Run-Scope": json.dumps({"session_id": "one"})}, io.BytesIO(b"{}")
+            handler.path, handler.headers, handler.rfile = route, {"Authorization": "Bearer fixture-token", "Content-Length": "2", "X-Run-Scope": json.dumps({"session_id": "one"})}, io.BytesIO(b"{}")
             outputs, sequence = [], []
             handler._write = lambda value, status=200: outputs.append((value, status))
 

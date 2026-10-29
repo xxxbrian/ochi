@@ -64,7 +64,7 @@ func TestComputeImageUpdatesOnlyStoppedContainers(t *testing.T) {
 					if !tc.exists {
 						return workspaceResponse(http.StatusNotFound, `{}`), nil
 					}
-					return workspaceResponse(http.StatusOK, fmt.Sprintf(`{"Image":%q,"State":{"Running":%t}}`, tc.actualID, tc.running)), nil
+					return workspaceResponse(http.StatusOK, fixtureContainer(fmt.Sprintf(`{"Image":%q,"State":{"Running":%t}}`, tc.actualID, tc.running))), nil
 				case image:
 					if tc.imageStatus != 0 {
 						return workspaceResponse(tc.imageStatus, `{}`), nil
@@ -98,7 +98,7 @@ func TestComputeImageUpdatesOnlyStoppedContainers(t *testing.T) {
 				return workspaceResponse(http.StatusOK, `{}`), nil
 			})
 			d.bridge.Transport = catalogRoundTripper(func(r *http.Request) (*http.Response, error) {
-				return workspaceResponse(http.StatusOK, `{}`), nil
+				return workspaceResponse(http.StatusOK, fixtureHealth("compute")), nil
 			})
 			for range 2 {
 				if _, err := d.ensureCompute(context.Background(), "fixture-user", "fixture-session"); err != nil {
