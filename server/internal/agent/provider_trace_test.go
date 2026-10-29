@@ -114,7 +114,7 @@ func TestProviderTraceChatWireOrderUsageAndSemanticCompletion(t *testing.T) {
 			t.Error("trace callback ran on the token path before semantic parsing finished")
 		}
 		return nil
-	})
+	}, nil)
 	if err != nil || message.Content != "hello" || usage == nil || usage.TotalTokens != 12 {
 		t.Fatalf("completion=%+v usage=%+v err=%v", message, usage, err)
 	}
@@ -200,7 +200,7 @@ func TestProviderTraceHTTPPermissionAndRetryAttempts(t *testing.T) {
 		}))
 		defer server.Close()
 		g := traceTestRunner(t, traceTestConfig(server.URL, &recorder))
-		_, _, err := g.stream(context.Background(), nil, nil, "denied", func(Update) error { return nil })
+		_, _, err := g.stream(context.Background(), nil, nil, "denied", func(Update) error { return nil }, nil)
 		trace := recorder.one(t)
 		if err == nil || requests.Load() != 1 || trace.StatusCode != 403 || trace.RequestID != "denied-request" || trace.ErrorClass != "permission" || trace.UpstreamErrorCode != "permission_denied" || trace.UpstreamErrorType != "policy" || len(trace.StreamChunks) != 0 || trace.ResponseBody == "" {
 			t.Fatalf("incorrect permission attempt: %+v err=%v requests=%d", trace, err, requests.Load())
@@ -225,7 +225,7 @@ func TestProviderTraceHTTPPermissionAndRetryAttempts(t *testing.T) {
 		}))
 		defer server.Close()
 		g := traceTestRunner(t, traceTestConfig(server.URL, &recorder))
-		_, _, err := g.stream(context.Background(), nil, nil, "retry-round", func(Update) error { return nil })
+		_, _, err := g.stream(context.Background(), nil, nil, "retry-round", func(Update) error { return nil }, nil)
 		traces := recorder.all()
 		if err != nil || len(traces) != 2 || traces[0].Attempt != 1 || traces[1].Attempt != 2 || traces[0].Round != "retry-round" || traces[1].Round != "retry-round" || traces[0].ErrorClass != "unavailable" || traces[1].ErrorClass != "" || traces[0].ID == traces[1].ID {
 			t.Fatalf("retry attempts=%+v err=%v", traces, err)
@@ -256,7 +256,7 @@ func TestProviderTraceChecksDebugAtEachAttempt(t *testing.T) {
 		enabled.Store(false)
 	}
 	g := traceTestRunner(t, config)
-	_, _, err := g.stream(context.Background(), nil, nil, "toggle-round", func(Update) error { return nil })
+	_, _, err := g.stream(context.Background(), nil, nil, "toggle-round", func(Update) error { return nil }, nil)
 	trace := recorder.one(t)
 	if err != nil || requests.Load() != 2 || trace.Attempt != 1 || trace.StatusCode != 503 {
 		t.Fatalf("debug toggle was not checked for each retry: trace=%+v requests=%d err=%v", trace, requests.Load(), err)

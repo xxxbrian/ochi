@@ -98,7 +98,9 @@ func (g *OpenAI) streamRun(ctx context.Context, req Request, messages []wireMess
 	if req.ObserveContext != nil {
 		req.ObserveContext(g.contextInspection(req, reasonID, messages, input, tools))
 	}
-	return g.stream(ctx, input, tools, reasonID, emit)
+	return g.stream(ctx, input, tools, reasonID, emit, func(usage *Usage) {
+		g.recordContextUsage(messages, input, tools, usage)
+	})
 }
 
 // Budgeting and transport assemble the same suffix; only transport records it.
@@ -112,7 +114,7 @@ func (g *OpenAI) runMessages(ctx context.Context, req Request, messages []wireMe
 	if zone == "" || err != nil {
 		zone, location = "UTC", time.UTC
 	}
-	live.WriteString("当前本地时间：" + time.Now().In(location).Format(time.RFC3339) + "；时区：" + zone)
+	clock := "当前本地时间：" + time.Now().In(location).Format(time.RFC3339) + "；时区：" + zone
 	skillsAllowed := false
 	if req.Scope.SessionID != "" {
 		allowed := !req.Scope.ComputeOnly
@@ -148,6 +150,6 @@ func (g *OpenAI) runMessages(ctx context.Context, req Request, messages []wireMe
 	// Date, retrieval and live permissions belong after the reusable transcript,
 	// not in its first system message or in durable canonical history.
 	input := append([]wireMessage(nil), messages...)
-	messages = append(input, wireMessage{Role: "system", Content: "当前执行环境（服务提供的状态，不是用户的新需求）：\n" + live.String()})
+	messages = append(input, wireMessage{Role: "system", Content: "当前执行环境（服务提供的状态，不是用户的新需求）：\n" + clock + live.String(), contextSignature: zone + "\n" + live.String()})
 	return messages, nil
 }

@@ -27,6 +27,7 @@ func (g *OpenAI) Generate(ctx context.Context, req Request, emit func(Update) er
 	}
 	ctx = WithRunScope(ctx, scope)
 	runner := *g
+	runner.usageAnchor = nil
 	config := g.config
 	if req.Config != nil {
 		config = *req.Config

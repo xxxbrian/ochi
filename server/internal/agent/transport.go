@@ -154,7 +154,7 @@ func (g *OpenAI) post(ctx context.Context, path string, body any) (*http.Respons
 	return resp, nil
 }
 
-func (g *OpenAI) stream(ctx context.Context, messages []wireMessage, tools []wireTool, reasonID string, emit func(Update) error) (wireMessage, *Usage, error) {
+func (g *OpenAI) stream(ctx context.Context, messages []wireMessage, tools []wireTool, reasonID string, emit func(Update) error, observeInputUsage func(*Usage)) (wireMessage, *Usage, error) {
 	var totalUsage *Usage
 	for attempt := 1; ; attempt++ {
 		emitted, callbackFailed := false, false
@@ -202,6 +202,9 @@ func (g *OpenAI) stream(ctx context.Context, messages []wireMessage, tools []wir
 			}
 		}
 		if err == nil {
+			if observeInputUsage != nil {
+				observeInputUsage(usage)
+			}
 			return message, totalUsage, nil
 		}
 		if ctx.Err() != nil {

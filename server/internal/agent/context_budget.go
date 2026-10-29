@@ -8,16 +8,19 @@ import (
 )
 
 type ContextBudget struct {
-	Window              int  `json:"window"`
-	UnknownWindow       bool `json:"unknown_window"`
-	SystemTokens        int  `json:"system_tokens"`
-	HistoryTokens       int  `json:"history_tokens"`
-	ToolTokens          int  `json:"tool_tokens"`
-	DynamicTokens       int  `json:"dynamic_tokens"`
-	OutputReserveTokens int  `json:"output_reserve_tokens"`
-	InputTokens         int  `json:"input_tokens"`
-	LimitInputTokens    int  `json:"limit_input_tokens"`
-	TargetInputTokens   int  `json:"target_input_tokens"`
+	EstimateSource       string `json:"estimate_source"`
+	HeuristicInputTokens int    `json:"heuristic_input_tokens"`
+	UsageAnchorTokens    int    `json:"usage_anchor_tokens,omitempty"`
+	Window               int    `json:"window"`
+	UnknownWindow        bool   `json:"unknown_window"`
+	SystemTokens         int    `json:"system_tokens"`
+	HistoryTokens        int    `json:"history_tokens"`
+	ToolTokens           int    `json:"tool_tokens"`
+	DynamicTokens        int    `json:"dynamic_tokens"`
+	OutputReserveTokens  int    `json:"output_reserve_tokens"`
+	InputTokens          int    `json:"input_tokens"`
+	LimitInputTokens     int    `json:"limit_input_tokens"`
+	TargetInputTokens    int    `json:"target_input_tokens"`
 }
 
 const unknownContextWindow = 16384
@@ -63,7 +66,7 @@ func (g *OpenAI) contextBudget(ctx context.Context, req Request, messages []wire
 
 func (g *OpenAI) budgetForInput(history, input []wireMessage, tools []wireTool) ContextBudget {
 	window := contextWindow(g.config)
-	budget := ContextBudget{Window: window, UnknownWindow: g.config.ContextWindow <= 0, OutputReserveTokens: contextOutputReserve(g.config)}
+	budget := ContextBudget{EstimateSource: "heuristic", Window: window, UnknownWindow: g.config.ContextWindow <= 0, OutputReserveTokens: contextOutputReserve(g.config)}
 	budget.LimitInputTokens = max(0, min(window*7/10, window-budget.OutputReserveTokens-256))
 	budget.TargetInputTokens = max(0, min(window*55/100, window-budget.OutputReserveTokens-256))
 	for index, message := range input {
@@ -79,6 +82,8 @@ func (g *OpenAI) budgetForInput(history, input []wireMessage, tools []wireTool) 
 	}
 	budget.ToolTokens = estimateToolTokens(tools)
 	budget.InputTokens = budget.SystemTokens + budget.HistoryTokens + budget.ToolTokens + budget.DynamicTokens
+	budget.HeuristicInputTokens = budget.InputTokens
+	g.calibrateContextBudget(&budget, history, input, tools)
 	return budget
 }
 

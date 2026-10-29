@@ -57,8 +57,9 @@ type ToolSource interface {
 	Call(context.Context, string, string, json.RawMessage) (ToolResult, error)
 }
 type OpenAI struct {
-	config Config
-	client *http.Client
+	config      Config
+	client      *http.Client
+	usageAnchor *contextUsageAnchor
 }
 
 func NewOpenAI(config Config) (*OpenAI, error) {
@@ -105,6 +106,7 @@ type functionCall struct {
 type wireMessage struct {
 	seq              int64
 	summary          bool
+	contextSignature string
 	Role             string          `json:"role"`
 	Observation      bool            `json:"ochi_workspace_observation,omitempty"`
 	Content          any             `json:"content,omitempty"`
