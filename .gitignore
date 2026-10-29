@@ -16,6 +16,7 @@ credentials.json
 
 # Dependencies, generated builds and caches; native source is not ignored.
 node_modules/
+.venv/
 dist/
 build/
 .expo/

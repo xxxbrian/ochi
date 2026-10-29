@@ -59,9 +59,10 @@ jobs:
             -c 'CREATE EXTENSION pgcrypto; CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;'
       - name: Check build tooling and workspace
         run: |
-          python3 -m pip install -r workspace/requirements-test.txt
-          python3 -B -m unittest discover -s scripts/tests -v
-          python3 -B -m unittest discover -s workspace/tests -v
+          python3 -m venv "$RUNNER_TEMP/ochi-checks"
+          "$RUNNER_TEMP/ochi-checks/bin/python" -m pip install -r workspace/requirements-test.txt
+          "$RUNNER_TEMP/ochi-checks/bin/python" -B -m unittest discover -s scripts/tests -v
+          "$RUNNER_TEMP/ochi-checks/bin/python" -B -m unittest discover -s workspace/tests -v
       - name: Check server with database integration enabled
         working-directory: server
         run: |
