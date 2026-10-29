@@ -1,3 +1,4 @@
+import { projectRun, publicReply } from "../../../shared/conversation/projection";
 import { t, useI18n, getLocale } from "../lib/i18n";
 import {
   lazy,
@@ -383,7 +384,7 @@ export default function TasksPage({
     });
   };
   const current = snapshot ?? execution?.snapshot;
-  const visibleOutput = current?.output ?? execution?.output ?? "";
+  const visibleOutput = current ? publicReply(current) : execution?.output ?? "";
   const currentExecution =
     executions.find((item) => item.id === execution?.id) ?? execution;
   const executionStatus =
@@ -472,7 +473,7 @@ export default function TasksPage({
                   )}
                 </div>
                 <div className="task-output ochi-tasks__output">
-                  <RunTranscript timeline={current?.timeline ?? []} output={visibleOutput} status={executionStatus}
+                  <RunTranscript timeline={current ? projectRun(current).entries : []} output={visibleOutput} status={executionStatus}
                     waitingKind={current?.waiting_input?.kind} resource={current?.resource}
                     error={current?.error ?? execution.error} errorCode={current?.error_code ?? execution.error_code}
                     hasArtifacts={Boolean((current?.artifacts ?? execution.artifacts)?.length)}

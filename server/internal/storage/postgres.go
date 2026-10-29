@@ -219,27 +219,19 @@ func (s *Store) CompleteRun(ctx context.Context, snapshot runtime.Snapshot) erro
 }
 
 func completeRunTx(ctx context.Context, tx pgx.Tx, snapshot runtime.Snapshot) error {
-	steps, err := json.Marshal(snapshot.Steps)
+	items, err := marshalItems(snapshot.Items)
 	if err != nil {
 		return err
 	}
 	usage, _ := json.Marshal(snapshot.Usage)
 	waiting, _ := json.Marshal(snapshot.WaitingInput)
 	artifacts, _ := json.Marshal(snapshot.Artifacts)
-	reasoning, _ := json.Marshal(snapshot.Reasoning)
-	timeline, err := marshalTimeline(snapshot.Timeline)
-	if err != nil {
-		return err
-	}
-	if snapshot.Reasoning == nil {
-		reasoning = []byte("[]")
-	}
 	var sessionID string
-	err = tx.QueryRow(ctx, `UPDATE runs SET status=$2,error=NULLIF($3,''),output=$4,steps=$5,seq=$6,updated_at=$7,usage=$8,waiting_input=$9,artifacts=$10,resource=$11,computer_granted=$12,reasoning=$13,timeline=$14,error_code=$15 WHERE id=$1 AND seq<=$6 RETURNING session_id::text`, snapshot.RunID, snapshot.Status, snapshot.Error, snapshot.Output, steps, snapshot.Seq, snapshot.UpdatedAt, usage, waiting, artifacts, snapshot.Resource, snapshot.ComputerGranted, reasoning, timeline, snapshot.ErrorCode).Scan(&sessionID)
+	err = tx.QueryRow(ctx, `UPDATE runs SET status=$2,error=NULLIF($3,''),items=$4,seq=$5,updated_at=$6,usage=$7,waiting_input=$8,artifacts=$9,resource=$10,computer_granted=$11,error_code=$12 WHERE id=$1 AND seq<=$5 RETURNING session_id::text`, snapshot.RunID, snapshot.Status, snapshot.Error, items, snapshot.Seq, snapshot.UpdatedAt, usage, waiting, artifacts, snapshot.Resource, snapshot.ComputerGranted, snapshot.ErrorCode).Scan(&sessionID)
 	if err != nil {
 		return err
 	}
-	if snapshot.Output != "" || len(snapshot.Artifacts) > 0 || len(snapshot.Timeline) > 0 || len(snapshot.Steps) > 0 || len(snapshot.Reasoning) > 0 || snapshot.Status == runtime.StatusFailed || snapshot.Status == runtime.StatusInterrupted || snapshot.Status == runtime.StatusCancelled {
+	if len(snapshot.Items) > 0 || len(snapshot.Artifacts) > 0 || snapshot.Status != runtime.StatusCompleted {
 		content := runtime.PublicReply(snapshot)
 		_, err = tx.Exec(ctx, `INSERT INTO messages (session_id,run_id,role,content,model_id,model_name,effort,attachments) VALUES ($1,$2,'assistant',$3,$4,$5,$6,$7)
    ON CONFLICT (run_id) WHERE role='assistant' DO UPDATE SET content=EXCLUDED.content,attachments=EXCLUDED.attachments`, sessionID, snapshot.RunID, content, snapshot.ModelID, snapshot.ModelName, snapshot.Effort, artifacts)
@@ -275,8 +267,8 @@ func (s *Store) Messages(ctx context.Context, userID, sessionID string) ([]Messa
 		return nil, err
 	}
 	rows, err := s.db.Query(ctx, `SELECT m.id::text, m.run_id::text, m.role, m.content, m.created_at,
-		CASE WHEN m.role='assistant' THEN COALESCE(jsonb_array_length(r.steps),0) ELSE 0 END, m.model_id, m.model_name, m.effort, m.attachments,
-		CASE WHEN m.role='assistant' THEN COALESCE(jsonb_array_length(r.reasoning)>0,false) ELSE false END,
+		CASE WHEN m.role='assistant' THEN `+itemStepCountSQL+` ELSE 0 END, m.model_id, m.model_name, m.effort, m.attachments,
+		CASE WHEN m.role='assistant' THEN `+itemHasReasoningSQL+` ELSE false END,
 		CASE WHEN m.role='assistant' THEN COALESCE(r.status,'') ELSE '' END,
 		`+messageProcessSQL+`,r.created_at,r.updated_at,`+messagePublicSQL+`
 		FROM messages m LEFT JOIN runs r ON r.id=m.run_id WHERE m.session_id=$1 AND NOT m.archived
@@ -292,17 +284,16 @@ func collectMessages(rows pgx.Rows) ([]Message, error) {
 	items := make([]Message, 0)
 	for rows.Next() {
 		var item Message
-		var output string
 		var publicJSON []byte
-		if err := rows.Scan(&item.ID, &item.RunID, &item.Role, &item.Content, &item.CreatedAt, &item.StepCount, &item.ModelID, &item.ModelName, &item.Effort, &item.Attachments, &item.HasReasoning, &item.RunStatus, &item.HasProcess, &item.RunCreatedAt, &item.RunUpdatedAt, &item.RunError, &item.RunErrorCode, &output, &publicJSON); err != nil {
+		if err := rows.Scan(&item.ID, &item.RunID, &item.Role, &item.Content, &item.CreatedAt, &item.StepCount, &item.ModelID, &item.ModelName, &item.Effort, &item.Attachments, &item.HasReasoning, &item.RunStatus, &item.HasProcess, &item.RunCreatedAt, &item.RunUpdatedAt, &item.RunError, &item.RunErrorCode, &publicJSON); err != nil {
 			return nil, err
 		}
 		if item.Role == "assistant" && runtime.IsTerminal(item.RunStatus) {
-			var timeline []runtime.ProcessEntry
-			if err := json.Unmarshal(publicJSON, &timeline); err != nil {
+			var items []runtime.Item
+			if err := json.Unmarshal(publicJSON, &items); err != nil {
 				return nil, err
 			}
-			item.Content = runtime.PublicReply(runtime.Snapshot{Status: item.RunStatus, Output: output, Timeline: timeline})
+			item.Content = runtime.PublicReply(runtime.Snapshot{Status: item.RunStatus, Items: items})
 		}
 		if item.Role != "assistant" {
 			item.RunError, item.RunErrorCode = "", ""

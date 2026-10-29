@@ -19,11 +19,11 @@ import (
 )
 
 func TestProcessTimelineEncodingAlwaysUsesArray(t *testing.T) {
-	zero, err := marshalTimeline(nil)
+	zero, err := marshalItems(nil)
 	if err != nil || string(zero) != "[]" {
 		t.Fatal("zero-value timeline must serialize as an empty array")
 	}
-	empty, err := marshalTimeline([]runtime.ProcessEntry{})
+	empty, err := marshalItems([]runtime.Item{})
 	if err != nil || string(empty) != "[]" {
 		t.Fatal("new empty timeline must be a supported array")
 	}
@@ -145,24 +145,24 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	}
 	const runID = "55555555-5555-4555-8555-555555555555"
 	queued, err := s.EnqueueRun(ctx, PendingRun{RunID: runID, SessionID: session.ID, UserID: user, Message: "Read a file", ModelID: modelID, ModelName: "QA model"}, false)
-	if err != nil || queued.Timeline == nil || len(queued.Timeline) != 0 {
+	if err != nil || queued.Items == nil || len(queued.Items) != 0 {
 		t.Fatalf("queued run lacks exact [] contract: %v %+v", err, queued)
 	}
 	readQueued, err := s.GetRun(ctx, user, runID)
-	if err != nil || readQueued.Timeline == nil || queued.CreatedAt.IsZero() || !readQueued.CreatedAt.Equal(queued.CreatedAt) {
+	if err != nil || readQueued.Items == nil || queued.CreatedAt.IsZero() || !readQueued.CreatedAt.Equal(queued.CreatedAt) {
 		t.Fatal("queue did not persist exact timeline support")
 	}
 	snapshot, canonical, err := s.CreateConfiguredRun(ctx, user, session.ID, "Read a file", runID, Model{ID: modelID, Name: "QA model", ProviderID: provider}, "", "", nil)
-	if err != nil || snapshot.Timeline == nil || len(canonical) != 1 {
+	if err != nil || snapshot.Items == nil || len(canonical) != 1 {
 		t.Fatalf("run admission changed canonical history or lost support: %v %+v", err, snapshot)
 	}
 	m := runtime.NewManager()
 	t.Cleanup(func() { _ = m.Shutdown(ctx) })
 	r := m.Restore(snapshot)
-	_ = r.AppendReasoning(agent.ReasoningPart{ID: "round-1:reasoning", Kind: "reasoning", Text: "Check", Done: true})
-	_ = r.Append("I will read the file.")
-	_ = r.ResetOutput()
-	_ = r.UpdateStep(runtime.Step{ID: "read", Name: "files_read", Status: "running", Arguments: json.RawMessage(`{"path":"file"}`)})
+	_ = r.AppendReasoning("r1", agent.ReasoningPart{ID: "round-1:reasoning", Kind: "reasoning", Text: "Check", Done: true})
+	_ = r.AppendText("r1", "text", "I will read the file.", "pending")
+	_ = r.EndRound("r1", false)
+	_ = r.UpdateStep("r1", runtime.Step{ID: "read", Name: "files_read", Status: "running", Arguments: json.RawMessage(`{"path":"file"}`)})
 	checkpoint := r.Snapshot()
 	if err = s.Checkpoint(ctx, checkpoint); err != nil {
 		t.Fatal(err)
@@ -170,27 +170,28 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	read, err := s.GetRun(ctx, user, runID)
 	latest, latestErr := s.LatestRun(ctx, user, session.ID)
 	admin, adminErr := s.AdminRun(ctx, runID)
-	if err != nil || latestErr != nil || adminErr != nil || !sameProcessJSON(read.Timeline, checkpoint.Timeline) || !sameProcessJSON(latest.Timeline, checkpoint.Timeline) || !sameProcessJSON(admin.Timeline, checkpoint.Timeline) {
+	if err != nil || latestErr != nil || adminErr != nil || !sameProcessJSON(read.Items, checkpoint.Items) || !sameProcessJSON(latest.Items, checkpoint.Items) || !sameProcessJSON(admin.Items, checkpoint.Items) {
 		t.Fatalf("checkpoint/query projections differ: get=%v latest=%v admin=%v", err, latestErr, adminErr)
 	}
 	stale := checkpoint
 	stale.Seq--
-	stale.Timeline = []runtime.ProcessEntry{}
+	stale.Items = []runtime.Item{}
 	if err = s.Checkpoint(ctx, stale); err != nil {
 		t.Fatal(err)
 	}
 	read, _ = s.GetRun(ctx, user, runID)
-	if !sameProcessJSON(read.Timeline, checkpoint.Timeline) {
+	if !sameProcessJSON(read.Items, checkpoint.Items) {
 		t.Fatal("late checkpoint replaced newer process data")
 	}
-	_ = r.UpdateStep(runtime.Step{ID: "read", Name: "files_read", Status: "completed", Output: "file contents"})
-	_ = r.Append("Final answer.")
+	_ = r.UpdateStep("r1", runtime.Step{ID: "read", Name: "files_read", Status: "completed", Output: "file contents"})
+	_ = r.AppendText("r2", "text", "Final answer.", "pending")
+	_ = r.EndRound("r2", true)
 	if err = r.Finalize(runtime.StatusCompleted, nil, func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
 		t.Fatal(err)
 	}
 	final := r.Snapshot()
 	read, _ = s.GetRun(ctx, user, runID)
-	if !sameProcessJSON(read.Timeline, final.Timeline) || read.Output != "Final answer." || len(read.Timeline) != 4 || !read.Timeline[3].Final {
+	if !sameProcessJSON(read.Items, final.Items) || runtime.PublicReply(read) != "Final answer." || len(read.Items) != 4 || read.Items[3].Phase != "final" {
 		t.Fatal("final save lost the stable answer block or process")
 	}
 	messages, err := s.Messages(ctx, user, session.ID)
@@ -211,7 +212,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	newManager := runtime.NewManager()
 	t.Cleanup(func() { _ = newManager.Shutdown(ctx) })
 	restarted, _ := s.GetRun(ctx, user, runID)
-	if !sameProcessJSON(newManager.Restore(restarted).Snapshot().Timeline, final.Timeline) {
+	if !sameProcessJSON(newManager.Restore(restarted).Snapshot().Items, final.Items) {
 		t.Fatal("restart changed stored public progress or occurrence order")
 	}
 	const progressRun = "66666666-6666-4666-8666-666666666666"
@@ -220,8 +221,8 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	progress := m.Restore(progressSnapshot)
-	_ = progress.Append("I finished the requested action.")
-	_ = progress.ResetOutput()
+	_ = progress.AppendText("r1", "text", "I finished the requested action.", "pending")
+	_ = progress.EndRound("r1", false)
 	if err = progress.Finalize(runtime.StatusCompleted, nil, func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
 		t.Fatal(err)
 	}
@@ -235,10 +236,10 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	interrupted := m.Restore(interruptedSnapshot)
-	_ = interrupted.Append("I will check.")
-	_ = interrupted.ResetOutput()
-	_ = interrupted.UpdateStep(runtime.Step{ID: "exec", Name: "exec", Status: "running"})
-	_ = interrupted.AppendReasoning(agent.ReasoningPart{ID: "round-2:reasoning", Kind: "reasoning", Text: "Unfinished"})
+	_ = interrupted.AppendText("r1", "text", "I will check.", "pending")
+	_ = interrupted.EndRound("r1", false)
+	_ = interrupted.UpdateStep("r2", runtime.Step{ID: "exec", Name: "exec", Status: "running"})
+	_ = interrupted.AppendReasoning("r2", agent.ReasoningPart{ID: "round-2:reasoning", Kind: "reasoning", Text: "Unfinished"})
 	if err = s.Checkpoint(ctx, interrupted.Snapshot()); err != nil {
 		t.Fatal(err)
 	}
@@ -248,8 +249,8 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 	read, err = s.GetRun(ctx, user, interruptedRun)
 	admin, adminErr = s.AdminRun(ctx, interruptedRun)
 	latest, latestErr = s.LatestRun(ctx, user, session.ID)
-	if err != nil || adminErr != nil || latestErr != nil || read.Timeline[0].Text != "I will check." || read.Timeline[1].Step.Status != "failed" || !read.Timeline[2].Reasoning.Done ||
-		!sameProcessJSON(read.Timeline, admin.Timeline) || !sameProcessJSON(read.Timeline, latest.Timeline) {
+	if err != nil || adminErr != nil || latestErr != nil || read.Items[0].Text != "I will check." || read.Items[1].Step.Status != "failed" || read.Items[2].State != "interrupted" ||
+		!sameProcessJSON(read.Items, admin.Items) || !sameProcessJSON(read.Items, latest.Items) {
 		t.Fatal("restarting an unfinished checkpoint lost progress or kept work active")
 	}
 	page, err = s.MessagesPage(ctx, user, session.ID, "", 20)
@@ -262,7 +263,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	pending := m.Restore(pendingSnapshot)
-	_ = pending.AppendText("partial", "Still checking sources", true)
+	_ = pending.AppendText("r1", "partial", "Still checking sources", "pending")
 	if err = pending.Finalize(runtime.StatusFailed, errors.New("stream failed"), func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +273,7 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 		t.Fatal("could not read failed provisional output history")
 	}
 	last := page[len(page)-1]
-	if last.Content != "Still checking sources" || last.RunErrorCode != "run_failed" || last.RunError == "" || !last.HasProcess || len(read.Timeline) != 1 || !read.Timeline[0].Pending || read.Timeline[0].Text != "Still checking sources" {
+	if last.Content != "Still checking sources" || last.RunErrorCode != "run_failed" || last.RunError == "" || !last.HasProcess || len(read.Items) != 1 || read.Items[0].Phase != "pending" || read.Items[0].Text != "Still checking sources" {
 		t.Fatal("failed public output/error was hidden or provisional output was marked final")
 	}
 	// The same read model applies to a checkpoint interrupted before CompleteRun.
@@ -294,8 +295,8 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	answer := m.Restore(answerSnapshot)
-	_ = answer.AppendText("answer", "A direct answer.", true)
-	_ = answer.CommitOutput()
+	_ = answer.AppendText("r1", "answer", "A direct answer.", "pending")
+	_ = answer.EndRound("r1", true)
 	if err = answer.Finalize(runtime.StatusCompleted, nil, func(final runtime.Snapshot) error { return s.CompleteRun(ctx, final) }); err != nil {
 		t.Fatal(err)
 	}
@@ -305,12 +306,12 @@ func TestProcessTimelineDatabaseRoundTripAndHistory(t *testing.T) {
 		t.Fatal("could not read answer-only history")
 	}
 	last = page[len(page)-1]
-	if last.Content != "A direct answer." || last.HasProcess || len(read.Timeline) != 1 || !read.Timeline[0].Final || read.Timeline[0].Pending {
+	if last.Content != "A direct answer." || last.HasProcess || len(read.Items) != 1 || read.Items[0].Phase != "final" {
 		t.Fatal("answer-only history created an empty process disclosure or lost its final block")
 	}
 }
 
-func sameProcessJSON(a, b []runtime.ProcessEntry) bool {
+func sameProcessJSON(a, b []runtime.Item) bool {
 	first, _ := json.Marshal(a)
 	second, _ := json.Marshal(b)
 	var firstValue, secondValue any

@@ -36,52 +36,49 @@ type Step struct {
 	ID         string          `json:"id"`
 	Name       string          `json:"name"`
 	Status     string          `json:"status"`
+	Outcome    string          `json:"outcome,omitempty"`
 	Arguments  json.RawMessage `json:"arguments,omitempty"`
 	Output     string          `json:"output,omitempty"`
 	Screenshot string          `json:"screenshot,omitempty"`
 }
 
 type Snapshot struct {
-	RunID           string                `json:"run_id"`
-	SessionID       string                `json:"session_id"`
-	Status          string                `json:"status"`
-	Output          string                `json:"output"`
-	Reasoning       []agent.ReasoningPart `json:"reasoning"`
-	Error           string                `json:"error,omitempty"`
-	ErrorCode       string                `json:"error_code,omitempty"`
-	Seq             uint64                `json:"seq"`
-	CreatedAt       time.Time             `json:"created_at"`
-	UpdatedAt       time.Time             `json:"updated_at"`
-	Steps           []Step                `json:"steps"`
-	Timeline        []ProcessEntry        `json:"timeline"`
-	ModelID         string                `json:"model_id,omitempty"`
-	ModelName       string                `json:"model_name,omitempty"`
-	Effort          string                `json:"effort,omitempty"`
-	Usage           agent.Usage           `json:"usage"`
-	Artifacts       []agent.Attachment    `json:"artifacts"`
-	WaitingInput    *agent.WaitingInput   `json:"waiting_input,omitempty"`
-	Resource        string                `json:"resource,omitempty"`
-	ComputerGranted bool                  `json:"computer_granted"`
+	RunID           string              `json:"run_id"`
+	SessionID       string              `json:"session_id"`
+	Status          string              `json:"status"`
+	Error           string              `json:"error,omitempty"`
+	ErrorCode       string              `json:"error_code,omitempty"`
+	Seq             uint64              `json:"seq"`
+	CreatedAt       time.Time           `json:"created_at"`
+	UpdatedAt       time.Time           `json:"updated_at"`
+	Items           []Item              `json:"items"`
+	ModelID         string              `json:"model_id,omitempty"`
+	ModelName       string              `json:"model_name,omitempty"`
+	Effort          string              `json:"effort,omitempty"`
+	Usage           agent.Usage         `json:"usage"`
+	Artifacts       []agent.Attachment  `json:"artifacts"`
+	WaitingInput    *agent.WaitingInput `json:"waiting_input,omitempty"`
+	Resource        string              `json:"resource,omitempty"`
+	ComputerGranted bool                `json:"computer_granted"`
 }
 
 type Event struct {
-	Type            string               `json:"type"`
-	RunID           string               `json:"run_id"`
-	Seq             uint64               `json:"seq"`
-	UpdatedAt       time.Time            `json:"updated_at"`
-	Text            string               `json:"text,omitempty"`
-	Reasoning       *agent.ReasoningPart `json:"reasoning,omitempty"`
-	Status          string               `json:"status,omitempty"`
-	Error           string               `json:"error,omitempty"`
-	ErrorCode       string               `json:"error_code,omitempty"`
-	Step            *Step                `json:"step,omitempty"`
-	Usage           *agent.Usage         `json:"usage,omitempty"`
-	WaitingInput    *agent.WaitingInput  `json:"waiting_input,omitempty"`
-	Artifacts       []agent.Attachment   `json:"artifacts,omitempty"`
-	Resource        string               `json:"resource,omitempty"`
-	ComputerGranted *bool                `json:"computer_granted,omitempty"`
-	TimelineEntry   *ProcessEntry        `json:"timeline_entry,omitempty"`
-	Timeline        []ProcessEntry       `json:"timeline,omitempty"`
+	Type            string              `json:"type"`
+	RunID           string              `json:"run_id"`
+	Seq             uint64              `json:"seq"`
+	UpdatedAt       time.Time           `json:"updated_at"`
+	Item            *Item               `json:"item,omitempty"`
+	ItemID          string              `json:"item_id,omitempty"`
+	Delta           string              `json:"delta,omitempty"`
+	Patches         []ItemPatch         `json:"patches,omitempty"`
+	Status          string              `json:"status,omitempty"`
+	Error           string              `json:"error,omitempty"`
+	ErrorCode       string              `json:"error_code,omitempty"`
+	Usage           *agent.Usage        `json:"usage,omitempty"`
+	WaitingInput    *agent.WaitingInput `json:"waiting_input,omitempty"`
+	Artifacts       []agent.Attachment  `json:"artifacts,omitempty"`
+	Resource        string              `json:"resource,omitempty"`
+	ComputerGranted *bool               `json:"computer_granted,omitempty"`
 }
 
 func IsTerminal(status string) bool {
@@ -98,17 +95,14 @@ func IsActive(status string) bool {
 }
 
 type Run struct {
-	mu           sync.Mutex
-	snapshot     Snapshot
-	subs         map[uint64]chan Event
-	nextSub      uint64
-	ctx          context.Context
-	cancel       context.CancelFunc
-	answer       chan string
-	started      bool           // guarded by the manager lock
-	public       []ProcessEntry // current reply candidates, also visible in the timeline
-	publicOpen   bool
-	publicSource string
+	mu       sync.Mutex
+	snapshot Snapshot
+	subs     map[uint64]chan Event
+	nextSub  uint64
+	ctx      context.Context
+	cancel   context.CancelFunc
+	answer   chan string
+	started  bool // guarded by the manager lock
 }
 
 type Manager struct {
@@ -306,180 +300,6 @@ func (r *Run) Subscribe() (Snapshot, <-chan Event, func()) {
 	}
 }
 
-func (r *Run) Append(text string) error {
-	return r.AppendText("", text, false)
-}
-
-// AppendText retains provider item identity for late phase classification.
-func (r *Run) AppendText(id, text string, pending bool) error {
-	if text == "" {
-		return nil
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if IsTerminal(r.snapshot.Status) || r.ctx.Err() != nil {
-		return context.Canceled
-	}
-	r.snapshot.Output += text
-	r.snapshot.Seq++
-	part := r.appendPublicLocked(id, text)
-	part.Pending, part.Final = pending, !pending
-	if len(r.public) > 0 && r.public[len(r.public)-1].ID == part.ID {
-		r.public[len(r.public)-1] = part
-	} else {
-		r.public = append(r.public, part)
-	}
-	entry := r.upsertProcessLocked(part)
-	r.snapshot.UpdatedAt = time.Now().UTC()
-	r.publishLocked(Event{Type: "text_delta", RunID: r.snapshot.RunID, Seq: r.snapshot.Seq, Text: text, TimelineEntry: entry})
-	return nil
-}
-
-func (r *Run) AppendProgress(id, text string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if IsTerminal(r.snapshot.Status) || r.ctx.Err() != nil {
-		return context.Canceled
-	}
-	key := "progress:" + id
-	// A gateway may reveal commentary only when the message item completes.
-	// Reclassify every occurrence in place, without moving or hiding its text.
-	var current *ProcessEntry
-	changed := 0
-	changedID := ""
-	for _, item := range r.snapshot.Timeline {
-		if item.Kind == "progress" && publicSourceMatches(item.ID, key) {
-			if item.Pending || item.Final {
-				changed++
-				changedID = item.ID
-			}
-			item.Pending, item.Final = false, false
-			current = r.upsertProcessLocked(item)
-		}
-	}
-	remaining := r.public[:0]
-	for _, item := range r.public {
-		if !publicSourceMatches(item.ID, key) {
-			remaining = append(remaining, item)
-		}
-	}
-	r.public = remaining
-	if text == "" && current == nil {
-		return nil
-	}
-	r.snapshot.Output = ""
-	for _, item := range r.public {
-		r.snapshot.Output += item.Text
-	}
-	r.snapshot.Seq++
-	if text != "" {
-		entry := r.appendPublicLocked(id, text)
-		entry.Pending, entry.Final = false, false
-		current = r.upsertProcessLocked(entry)
-	}
-	r.snapshot.UpdatedAt = time.Now().UTC()
-	event := Event{Type: "progress", RunID: r.snapshot.RunID, Seq: r.snapshot.Seq, Text: r.snapshot.Output, TimelineEntry: current}
-	if changed > 1 || (changed == 1 && current.ID != changedID) {
-		event.Timeline = r.snapshot.Timeline
-	}
-	r.publishLocked(event)
-	return nil
-}
-
-// CommitOutput classifies the reply without replacing the blocks that have
-// already streamed. Only terminal completion allows the UI to fold its prefix.
-func (r *Run) CommitOutput() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if IsTerminal(r.snapshot.Status) || r.ctx.Err() != nil {
-		return context.Canceled
-	}
-	for i := range r.public {
-		r.public[i].Pending, r.public[i].Final = false, true
-		r.upsertProcessLocked(r.public[i])
-	}
-	r.publicOpen = false
-	r.snapshot.Seq++
-	r.snapshot.UpdatedAt = time.Now().UTC()
-	r.publishLocked(Event{Type: "output_commit", RunID: r.snapshot.RunID, Seq: r.snapshot.Seq, Text: r.snapshot.Output, Timeline: r.snapshot.Timeline})
-	return nil
-}
-
-func (r *Run) AppendReasoning(delta agent.ReasoningPart) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if IsTerminal(r.snapshot.Status) || r.ctx.Err() != nil {
-		return context.Canceled
-	}
-	if delta.ID == "" || (delta.Kind != "reasoning" && delta.Kind != "summary") {
-		return errors.New("invalid reasoning part")
-	}
-	found := false
-	part := delta
-	for i := range r.snapshot.Reasoning {
-		existing := &r.snapshot.Reasoning[i]
-		if existing.ID == delta.ID {
-			existing.Text += delta.Text
-			existing.Done = delta.Done
-			part = *existing
-			found = true
-			break
-		}
-	}
-	if !found {
-		if delta.Text == "" {
-			return nil
-		}
-		r.snapshot.Reasoning = append(r.snapshot.Reasoning, delta)
-	}
-	r.snapshot.Seq++
-	entry := r.upsertProcessLocked(ProcessEntry{ID: "reasoning:" + part.ID, Seq: r.snapshot.Seq, Kind: "reasoning", Reasoning: &part})
-	if delta.Text != "" {
-		r.publicOpen = false
-	}
-	r.snapshot.UpdatedAt = time.Now().UTC()
-	r.publishLocked(Event{Type: "reasoning_delta", RunID: r.snapshot.RunID, Seq: r.snapshot.Seq, Reasoning: &delta, TimelineEntry: entry})
-	return nil
-}
-
-func (r *Run) UpdateStep(step Step) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if IsTerminal(r.snapshot.Status) {
-		return context.Canceled
-	}
-	if r.ctx.Err() != nil {
-		finishing := false
-		for _, existing := range r.snapshot.Steps {
-			if existing.ID == step.ID && existing.Status == "running" && (step.Status == "completed" || step.Status == "failed") {
-				finishing = true
-				break
-			}
-		}
-		if !finishing {
-			return context.Canceled
-		}
-	}
-	step = cloneStep(step)
-	found := false
-	for i := range r.snapshot.Steps {
-		if r.snapshot.Steps[i].ID == step.ID {
-			r.snapshot.Steps[i] = step
-			found = true
-			break
-		}
-	}
-	if !found {
-		r.snapshot.Steps = append(r.snapshot.Steps, step)
-	}
-	r.snapshot.Seq++
-	entry := r.upsertProcessLocked(ProcessEntry{ID: "tool:" + step.ID, Seq: r.snapshot.Seq, Kind: "tool", Step: &step})
-	r.publicOpen = false
-	r.snapshot.UpdatedAt = time.Now().UTC()
-	r.publishLocked(Event{Type: "step", RunID: r.snapshot.RunID, Seq: r.snapshot.Seq, Step: &step, TimelineEntry: entry})
-	return nil
-}
-
 // Cancel only requests cancellation. The executor remains responsible for
 // saving its final output and calling Finish, so cancellation cannot race a
 // premature terminal status or lose the final assistant message.
@@ -559,42 +379,13 @@ func failureText(err error) string {
 }
 
 func (r *Run) Finish(status string, failure error) {
-	if !IsTerminal(status) {
-		return
+	if IsTerminal(status) {
+		_ = r.Finalize(status, failure, func(Snapshot) error { return nil })
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if IsTerminal(r.snapshot.Status) {
-		return
-	}
-	for i := range r.snapshot.Steps {
-		if r.snapshot.Steps[i].Status == "running" {
-			r.snapshot.Steps[i].Status = "failed"
-		}
-	}
-	for i := range r.snapshot.Reasoning {
-		r.snapshot.Reasoning[i].Done = true
-	}
-	reconcileTimeline(&r.snapshot)
-	r.snapshot.WaitingInput = nil
-	r.snapshot.Resource = ""
-	r.snapshot.ComputerGranted = false
-	message := failureText(failure)
-	if failure != nil {
-		log.Printf("run %s finished with %s: %v", r.snapshot.RunID, FailureCode(failure), failure)
-	}
-	r.snapshot.Status, r.snapshot.Error, r.snapshot.ErrorCode = status, message, FailureCode(failure)
-	r.public = nil
-	r.snapshot.Seq++
-	r.snapshot.UpdatedAt = time.Now().UTC()
-	grant := false
-	r.publishLocked(Event{Type: "status", RunID: r.snapshot.RunID, Seq: r.snapshot.Seq, Status: status, Error: message, ErrorCode: r.snapshot.ErrorCode, ComputerGranted: &grant, Timeline: r.snapshot.Timeline})
-	r.cancel()
 }
 
-// Finalize freezes output while it is committed, then publishes a terminal
-// status. A cancellation racing the commit either wins before this lock or
-// sees the already completed run; it never changes saved completed output.
+// Finalize freezes the authoritative items while persistence commits, then
+// publishes only lifecycle patches and terminal metadata.
 func (r *Run) Finalize(status string, failure error, persist func(Snapshot) error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -607,54 +398,28 @@ func (r *Run) Finalize(status string, failure error, persist func(Snapshot) erro
 		status, failure = StatusInterrupted, i18n.New("run_interrupted")
 	}
 	final := cloneSnapshot(r.snapshot)
-	var changedSteps []Step
-	var changedReasoning []agent.ReasoningPart
-	for i := range final.Steps {
-		if final.Steps[i].Status == "running" {
-			final.Steps[i].Status = "failed"
-			changedSteps = append(changedSteps, final.Steps[i])
-		}
-	}
-	for i := range final.Reasoning {
-		if !final.Reasoning[i].Done {
-			final.Reasoning[i].Done = true
-			delta := final.Reasoning[i]
-			delta.Text = ""
-			changedReasoning = append(changedReasoning, delta)
-		}
-	}
-	reconcileTimeline(&final)
-	final.WaitingInput = nil
-	final.Resource = ""
-	final.ComputerGranted = false
-	message := failureText(failure)
+	patches := closeItems(&final)
+	final.WaitingInput, final.Resource, final.ComputerGranted = nil, "", false
 	if failure != nil {
 		log.Printf("run %s finished with %s: %v", r.snapshot.RunID, FailureCode(failure), failure)
 	}
-	final.Status, final.Error, final.ErrorCode = status, message, FailureCode(failure)
-	final.Seq += uint64(len(changedSteps)+len(changedReasoning)) + 1
+	final.Status, final.Error, final.ErrorCode = status, failureText(failure), FailureCode(failure)
+	final.Seq++
+	if len(patches) > 0 {
+		final.Seq++
+	}
 	final.UpdatedAt = time.Now().UTC()
 	err := persist(cloneSnapshot(final))
 	if err != nil {
 		final.Status, final.Error, final.ErrorCode = StatusFailed, i18n.New("run_save_failed").Error(), "run_save_failed"
-		// The retry keeps live and durable status aligned after a transient DB
-		// failure without introducing a queue or automatic run resumption.
 		_ = persist(cloneSnapshot(final))
 	}
-	seq := r.snapshot.Seq
 	r.snapshot = final
-	r.public = nil
-	for _, step := range changedSteps {
-		seq++
-		r.publishLocked(Event{Type: "step", RunID: final.RunID, Seq: seq, Step: &step, TimelineEntry: processEntry(final.Timeline, "tool:"+step.ID)})
-	}
-	for _, part := range changedReasoning {
-		seq++
-		delta := part
-		r.publishLocked(Event{Type: "reasoning_delta", RunID: final.RunID, Seq: seq, Reasoning: &delta, TimelineEntry: processEntry(final.Timeline, "reasoning:"+part.ID)})
+	if len(patches) > 0 {
+		r.publishLocked(Event{Type: "item_updated", RunID: final.RunID, Seq: final.Seq - 1, Patches: patches})
 	}
 	grant := false
-	r.publishLocked(Event{Type: "status", RunID: final.RunID, Seq: final.Seq, Status: final.Status, Error: final.Error, ErrorCode: final.ErrorCode, ComputerGranted: &grant, Timeline: final.Timeline})
+	r.publishLocked(Event{Type: "status", RunID: final.RunID, Seq: final.Seq, Status: final.Status, Error: final.Error, ErrorCode: final.ErrorCode, ComputerGranted: &grant})
 	r.cancel()
 	return err
 }
@@ -663,14 +428,11 @@ func (r *Run) publishLocked(event Event) {
 	event.UpdatedAt = r.snapshot.UpdatedAt
 	for id, ch := range r.subs {
 		copy := event
-		if event.Step != nil {
-			step := cloneStep(*event.Step)
-			copy.Step = &step
+		if event.Item != nil {
+			item := cloneItem(*event.Item)
+			copy.Item = &item
 		}
-		if event.Reasoning != nil {
-			part := *event.Reasoning
-			copy.Reasoning = &part
-		}
+		copy.Patches = clonePatches(event.Patches)
 		if event.Usage != nil {
 			usage := cloneUsage(*event.Usage)
 			copy.Usage = &usage
@@ -681,11 +443,6 @@ func (r *Run) publishLocked(event Event) {
 			copy.WaitingInput = &input
 		}
 		copy.Artifacts = cloneArtifacts(event.Artifacts)
-		if event.TimelineEntry != nil {
-			entry := cloneProcessEntry(*event.TimelineEntry)
-			copy.TimelineEntry = &entry
-		}
-		copy.Timeline = cloneTimeline(event.Timeline)
 		select {
 		case ch <- copy:
 		default:
@@ -704,7 +461,6 @@ func cloneStep(step Step) Step {
 }
 
 func cloneSnapshot(snapshot Snapshot) Snapshot {
-	snapshot.Reasoning = append([]agent.ReasoningPart{}, snapshot.Reasoning...)
 	snapshot.Artifacts = cloneArtifacts(snapshot.Artifacts)
 	snapshot.Usage = cloneUsage(snapshot.Usage)
 	if snapshot.WaitingInput != nil {
@@ -712,11 +468,7 @@ func cloneSnapshot(snapshot Snapshot) Snapshot {
 		input.Options = append([]string{}, input.Options...)
 		snapshot.WaitingInput = &input
 	}
-	snapshot.Steps = append([]Step{}, snapshot.Steps...)
-	for i := range snapshot.Steps {
-		snapshot.Steps[i] = cloneStep(snapshot.Steps[i])
-	}
-	snapshot.Timeline = cloneTimeline(snapshot.Timeline)
+	snapshot.Items = cloneItems(snapshot.Items)
 	return snapshot
 }
 
@@ -746,28 +498,6 @@ func cloneArtifacts(items []agent.Attachment) []agent.Attachment {
 	return copy
 }
 
-func (r *Run) ResetOutput() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if IsTerminal(r.snapshot.Status) || r.ctx.Err() != nil {
-		return context.Canceled
-	}
-	// A tool-bearing assistant reply is public progress, not hidden reasoning.
-	// Its first token's sequence is retained even when reasoning interleaved.
-	for _, entry := range r.public {
-		if hasPublicText(entry) {
-			entry.Pending, entry.Final = false, false
-			r.upsertProcessLocked(entry)
-		}
-	}
-	r.public = nil
-	r.publicOpen = false
-	r.snapshot.Output = ""
-	r.snapshot.Seq++
-	r.snapshot.UpdatedAt = time.Now().UTC()
-	r.publishLocked(Event{Type: "output_reset", RunID: r.snapshot.RunID, Seq: r.snapshot.Seq, Timeline: r.snapshot.Timeline})
-	return nil
-}
 func (r *Run) AddUsage(usage agent.Usage) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

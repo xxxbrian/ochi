@@ -167,7 +167,7 @@ func (s *Server) isolatedResearchTool(ctx context.Context, scope agent.RunScope,
 		return agent.ToolResult{}, errors.New("selected model is unavailable for isolated research")
 	}
 	err = generator.Generate(childCtx, child, func(update agent.Update) error {
-		if update.ResetOutput {
+		if update.RoundEnd != nil && !update.RoundEnd.Final {
 			result.Findings = ""
 		}
 		if update.TextKind != "progress" {

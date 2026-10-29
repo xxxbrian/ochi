@@ -25,7 +25,6 @@ import {
 } from "lucide-react-native";
 import { router } from "expo-router";
 import { api, isActiveStatus, userFacingRunError } from "../lib/api";
-import { unrepresentedOutput } from "../lib/processTimeline";
 import type { Schedule, ScheduleExecution, Snapshot } from "../lib/types";
 import { useApp } from "../providers/AppProvider";
 import { useRunStream } from "../hooks/useRunStream";
@@ -568,7 +567,6 @@ export function TaskExecutionScreen({
     return () => stream.clear();
   }, [taskId, executionId]);
   const snapshot = stream.snapshot ?? execution?.snapshot;
-  const visibleOutput = snapshot ? unrepresentedOutput(snapshot) : "";
   async function stop() {
     if (!snapshot || stopping) return;
     setStopping(true);
@@ -630,13 +628,6 @@ export function TaskExecutionScreen({
                 <Activity snapshot={snapshot} readingTranscript={readingTranscript} onViewAnswer={viewAnswer}
                   availableHeight={viewportHeight || undefined} />
               </View>
-              {visibleOutput && (
-                <ArtifactMarkdown
-                  content={visibleOutput}
-                  files={snapshot.artifacts}
-                  streaming={isActiveStatus(snapshot.status)}
-                />
-              )}
               <ArtifactCards files={snapshot.artifacts} />
               {snapshot.waiting_input && snapshot.status === "waiting_user" && (
                 <WaitingCard

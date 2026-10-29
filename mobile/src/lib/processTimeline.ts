@@ -1,61 +1,12 @@
+import { orderedProcessEntries, projectRun, transcriptRows, toolGroupFamily as toolFamily } from "../../../shared/conversation/projection";
+export { toolGroupFamily as toolFamily } from "../../../shared/conversation/projection";
 import { t } from "./i18n";
-import type { ProcessEntry, ProcessEventFields, Snapshot, Step } from './types';
+import type { ProcessEntry, Snapshot, Step } from './types';
 
 export type ToolFamily = 'commands' | 'files' | 'browser' | 'computer' | 'integration';
 export type ProcessRow =
   | { kind: 'entry'; id: string; entry: ProcessEntry }
   | { kind: 'tools'; id: string; family: ToolFamily | null; steps: Step[] };
-
-function sameEntry(left: ProcessEntry, right: ProcessEntry) {
-  if (left === right) return true;
-  return left.id === right.id && left.seq === right.seq && left.kind === right.kind &&
-    left.text === right.text && left.pending === right.pending && left.final === right.final && left.reasoning?.id === right.reasoning?.id &&
-    left.reasoning?.kind === right.reasoning?.kind && left.reasoning?.text === right.reasoning?.text &&
-    left.reasoning?.done === right.reasoning?.done && (left.step === right.step || (
-      left.step?.id === right.step?.id && left.step?.name === right.step?.name &&
-      left.step?.status === right.step?.status && left.step?.output === right.step?.output &&
-      left.step?.screenshot === right.step?.screenshot && left.step?.duration_ms === right.step?.duration_ms &&
-      JSON.stringify(left.step?.arguments) === JSON.stringify(right.step?.arguments)
-    ));
-}
-
-function ordered(entries: ProcessEntry[]) {
-  return entries.some((entry, index) => index > 0 && entry.seq < entries[index - 1]!.seq)
-    ? [...entries].sort((left, right) => left.seq - right.seq)
-    : entries;
-}
-
-export function applyProcessEvent(current: Snapshot['timeline'], fields: ProcessEventFields): Snapshot['timeline'] {
-  let entries = current;
-  if (fields.timeline !== undefined) {
-    const previous = new Map(current.map((entry) => [entry.id, entry]));
-    const incoming = ordered(fields.timeline.map((entry) => {
-      const retained = previous.get(entry.id);
-      return retained && sameEntry(retained, entry) ? retained : entry;
-    }));
-    entries = current.length === incoming.length && incoming.every((entry, index) => entry === current[index])
-      ? current : incoming;
-  }
-  if (!fields.timeline_entry) return entries;
-  const entry = fields.timeline_entry;
-  const index = entries.findIndex((previous) => previous.id === entry.id);
-  if (index < 0) return ordered([...entries, entry]);
-  // Delta updates replace content, never the entry's original place in the process.
-  const next = entry.seq === entries[index]!.seq ? entry : { ...entry, seq: entries[index]!.seq };
-  if (sameEntry(entries[index]!, next)) return entries;
-  return entries.map((previous, position) => position === index ? next : previous);
-}
-
-export function toolFamily(step: Step): ToolFamily | null {
-  if (step.status === 'failed' || /(?:^|_)request|permission|waiting/.test(step.name)) return null;
-  if (step.name === 'exec') return 'commands';
-  if (step.name.startsWith('files_')) return 'files';
-  if (step.name.startsWith('browser_')) return 'browser';
-  if (step.name.startsWith('computer_')) return 'computer';
-  if (step.name.startsWith('mcp_')) return 'integration';
-  // Search queries and page reads remain independent chronological entries.
-  return null;
-}
 
 function appendTool(rows: ProcessRow[], step: Step, id: string) {
   const family = toolFamily(step);
@@ -66,7 +17,7 @@ function appendTool(rows: ProcessRow[], step: Step, id: string) {
 
 export function processRows(entries: ProcessEntry[]): ProcessRow[] {
   const rows: ProcessRow[] = [];
-  for (const entry of ordered(entries)) {
+  for (const entry of orderedProcessEntries(entries)) {
     if (entry.kind === 'tool' && entry.step) appendTool(rows, entry.step, entry.id);
     else rows.push({ kind: 'entry', id: entry.id, entry });
   }
@@ -77,117 +28,15 @@ export type TimelineSegment =
   | { kind: 'text'; id: string; entry: ProcessEntry }
   | { kind: 'details'; id: string; entries: ProcessEntry[] };
 
-export function hasPublicText(snapshot: Snapshot): boolean {
-  return snapshot.timeline.some((entry) => entry.kind === 'progress' && Boolean(entry.text?.trim()));
-}
-
-// Segment keys come from the first real event, never the current stream status.
+export function hasPublicText(snapshot: Snapshot) { return projectRun(snapshot).hasPublicText; }
+export function finalPublicEntries(snapshot: Snapshot) { return projectRun(snapshot).finalEntries; }
+export function hasProcessHistory(snapshot: Snapshot) { return projectRun(snapshot).plan.hasWork; }
 export function timelineSegments(entries: ProcessEntry[]): TimelineSegment[] {
-  const segments: TimelineSegment[] = [];
-  for (const entry of ordered(entries)) {
-    if (entry.kind === 'progress') {
-      if (entry.text?.trim()) segments.push({ kind: 'text', id: entry.id, entry });
-    } else {
-      const last = segments.at(-1);
-      if (last?.kind === 'details') last.entries.push(entry);
-      else segments.push({ kind: 'details', id: entry.id, entries: [entry] });
-    }
-  }
-  return segments;
+  return transcriptRows(entries).map((row) => row.kind === 'public'
+    ? { kind: 'text', id: row.id, entry: row.entry }
+    : { kind: 'details', id: row.id, entries: row.entries });
 }
-
-export function finalPublicEntries(snapshot: Snapshot): ProcessEntry[] {
-  return snapshot.timeline.filter((entry) => entry.kind === 'progress' && entry.final && entry.text?.trim());
-}
-
-export function hasProcessHistory(snapshot: Snapshot): boolean {
-  return snapshot.timeline.some((entry) => entry.kind === 'progress'
-    ? !entry.final && Boolean(entry.text?.trim())
-    : entry.kind === 'tool' || Boolean(entry.reasoning?.text.trim()));
-}
-
-function terminal(snapshot: Snapshot): boolean {
-  return snapshot.status === 'completed' || snapshot.status === 'cancelled' || snapshot.status === 'failed' || snapshot.status === 'interrupted';
-}
-
-function matchesOutput(text: string, snapshot: Snapshot): boolean {
-  return text === snapshot.output || (terminal(snapshot) && text.trim() === snapshot.output.trim());
-}
-
-export function unrepresentedOutput(snapshot: Snapshot): string {
-  if (!snapshot.output.trim()) return '';
-  if (representedOutputEntries(snapshot).length) return '';
-  const publicEntries = ordered(snapshot.timeline).filter((entry) => entry.kind === 'progress');
-  let suffix = '';
-  for (let index = publicEntries.length - 1; index >= 0; index--) {
-    suffix = (publicEntries[index]!.text ?? '') + suffix;
-    if (matchesOutput(suffix, snapshot)) return '';
-    if (suffix.trim().length >= snapshot.output.trim().length) break;
-  }
-  return snapshot.output;
-}
-
-export function publicReply(snapshot: Snapshot): string {
-  if (snapshot.status === 'completed' && snapshot.output.trim()) return snapshot.output;
-  if (!terminal(snapshot)) return snapshot.output;
-  const entries = ordered(snapshot.timeline).filter((entry) => entry.kind === 'progress');
-  const candidates = entries.filter((entry) => entry.pending || entry.final);
-  const mergeCandidates = Boolean(snapshot.output.trim()) && candidates.length > 0 && matchesOutput(candidates.map((entry) => entry.text ?? '').join(''), snapshot);
-  const groups: { source: string; candidate: boolean; text: string }[] = [];
-  for (const entry of entries) {
-    const source = entry.id.replace(/:segment-\d+$/, '');
-    const candidate = Boolean(entry.pending || entry.final);
-    const previous = groups.at(-1);
-    // Reasoning can divide a provider's sentence without ending its Markdown.
-    if (previous && ((source && previous.source === source) || (mergeCandidates && candidate && previous.candidate))) {
-      previous.text += entry.text ?? '';
-      previous.candidate = previous.candidate && candidate;
-    } else groups.push({ source, candidate, text: entry.text ?? '' });
-  }
-  const blocks = groups.filter((group) => group.text.trim()).map((group) => group.text);
-  const output = unrepresentedOutput(snapshot);
-  if (output.trim()) blocks.push(output);
-  return blocks.join('\n\n');
-}
-
-export function reconcileTerminalText(snapshot: Snapshot, output: string): ProcessEntry[] {
-  if (!output.trim()) return snapshot.timeline;
-  const confirmed = { ...snapshot, output };
-  const current = representedOutputEntries(confirmed);
-  if (current.length) {
-    const ids = new Set(current.map((entry) => entry.id));
-    return snapshot.timeline.map((entry) => entry.kind === 'progress'
-      ? { ...entry, pending: false, final: ids.has(entry.id) } : entry);
-  }
-  const publicEntries = ordered(snapshot.timeline).filter((entry) => entry.kind === 'progress');
-  let suffix = '';
-  const ids = new Set<string>();
-  for (let index = publicEntries.length - 1; index >= 0; index--) {
-    const entry = publicEntries[index]!;
-    suffix = (entry.text ?? '') + suffix;
-    ids.add(entry.id);
-    if (matchesOutput(suffix, confirmed)) return snapshot.timeline.map((item) => item.kind === 'progress'
-      ? { ...item, pending: false, final: ids.has(item.id) } : item);
-    if (suffix.trim().length >= output.trim().length) break;
-  }
-  return snapshot.timeline;
-}
-
-function representedOutputEntries(snapshot: Snapshot): ProcessEntry[] {
-  const publicEntries = ordered(snapshot.timeline).filter((entry) => entry.kind === 'progress');
-  const finals = publicEntries.filter((entry) => entry.final);
-  if (finals.length && matchesOutput(finals.map((entry) => entry.text ?? '').join(''), snapshot)) return finals;
-  const current = publicEntries.filter((entry) => entry.final || entry.pending);
-  return current.length && matchesOutput(current.map((entry) => entry.text ?? '').join(''), snapshot) ? current : [];
-}
-
-// Some relays flatten a title-only summary into adjacent bold spans. Only that
-// exact presentation form is separated; ordinary prose/Markdown stays intact.
-export function formatReasoningText(content: string): string {
-  const value = content.trim();
-  return /^(?:\*\*[^*\r\n]+\*\*\s*){2,}$/.test(value)
-    ? [...value.matchAll(/\*\*[^*\r\n]+\*\*/g)].map((match) => match[0]).join('\n\n') : content;
-}
+export { publicReply, formatReasoningText } from '../../../shared/conversation/projection';
 
 export function detailLabel(entries: ProcessEntry[]): string {
   let searches = 0, pages = 0, tools = 0;
@@ -205,11 +54,7 @@ export function detailLabel(entries: ProcessEntry[]): string {
 }
 
 export function latestProgress(snapshot: Snapshot): string {
-  for (let index = snapshot.timeline.length - 1; index >= 0; index--) {
-    const entry = snapshot.timeline[index]!;
-    if (entry.kind === 'progress' && entry.text?.trim()) return entry.text;
-  }
-  return '';
+  return snapshot.items.findLast((item) => item.kind === 'text' && item.text?.trim())?.text ?? '';
 }
 
 export function processPanelLimit(availableHeight?: number): number {

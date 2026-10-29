@@ -326,7 +326,7 @@ func queueLateInstructionsTx(ctx context.Context, tx pgx.Tx, runID string) error
  FROM run_instructions i JOIN runs r ON r.id=i.run_id
  WHERE i.run_id=$1 AND r.status='completed' AND i.canonical_seq IS NULL AND i.queued_run_id IS NULL
 ), new_runs AS (
- INSERT INTO runs(id,session_id,status,model_id,model_name,effort,timezone,timeline)
+ INSERT INTO runs(id,session_id,status,model_id,model_name,effort,timezone,items)
  SELECT next_id,session_id,'queued',model_id,model_name,effort,timezone,'[]'::jsonb FROM pending RETURNING id
 ), new_requests AS (
  INSERT INTO run_requests(run_id,user_id,session_id,message,model_id,effort,attachment_ids,revision,timezone,created_at)

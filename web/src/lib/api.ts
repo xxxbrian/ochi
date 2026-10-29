@@ -28,6 +28,7 @@ import type {
   Schedule,
   ScheduleExecution,
   Session,
+  SessionHead,
   SessionPage,
   Skill,
   SkillDetail,
@@ -38,7 +39,7 @@ import type {
   Workspace,
 } from "./types";
 
-const API_BASE =
+export const API_BASE =
   (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") ??
   "";
 
@@ -133,6 +134,8 @@ export const api = {
       if (value !== undefined && value !== "") query.set(key, String(value));
     return request<SessionPage>(`/api/sessions/page?${query}`, { signal });
   },
+  sessionHead: (id: string, signal?: AbortSignal) =>
+    request<SessionHead>(`/api/sessions/${encodeURIComponent(id)}/head`, { signal }),
   session: (id: string) =>
     request<Session>(`/api/sessions/${encodeURIComponent(id)}`),
   createSession: (
@@ -163,9 +166,10 @@ export const api = {
     request<void>(`/api/sessions/${encodeURIComponent(id)}`, {
       method: "DELETE",
     }),
-  messages: (id: string, before?: string) =>
+  messages: (id: string, before?: string, signal?: AbortSignal) =>
     request<Message[]>(
       `/api/sessions/${encodeURIComponent(id)}/messages?limit=100${before ? `&before=${encodeURIComponent(before)}` : ""}`,
+      { signal },
     ),
   startRun: (
     sessionId: string,
@@ -185,16 +189,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ message, ...options }),
     }),
-  run: (runId: string) =>
-    request<Snapshot>(`/api/runs/${encodeURIComponent(runId)}`),
+  run: (runId: string, signal?: AbortSignal) =>
+    request<Snapshot>(`/api/runs/${encodeURIComponent(runId)}`, { signal }),
   runInstructions: (runId: string, signal?: AbortSignal) =>
     request<RunInstruction[]>(`/api/runs/${encodeURIComponent(runId)}/instructions`, { signal }),
   supplementRun: (runId: string, content: string, clientKey: string, signal?: AbortSignal) =>
     request<RunInstruction>(`/api/runs/${encodeURIComponent(runId)}/instructions`, {
       method: "POST", body: JSON.stringify({ content, client_key: clientKey }), signal,
     }),
-  queue: (id: string) =>
-    request<PendingRun[]>(`/api/sessions/${encodeURIComponent(id)}/queue`),
+  queue: (id: string, signal?: AbortSignal) =>
+    request<PendingRun[]>(`/api/sessions/${encodeURIComponent(id)}/queue`, { signal }),
   updateQueuedRun: (id: string, runId: string, patch: { message: string }) =>
     request<PendingRun>(
       `/api/sessions/${encodeURIComponent(id)}/queue/${encodeURIComponent(runId)}`,

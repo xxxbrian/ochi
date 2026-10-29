@@ -229,7 +229,7 @@ func TestCoreMemoryEmbeddingRecallAndDurableWorkerIntegration(t *testing.T) {
 		t.Fatal("provider error body leaked to run diagnostics")
 	}
 	embeddingFailure.Store(false)
-	snapshot.Status, snapshot.Output = runtime.StatusCompleted, "Noted."
+	fixtureAnswer(&snapshot, "Noted.")
 	if err = store.CompleteRun(ctx, snapshot); err != nil {
 		t.Fatal(err)
 	}

@@ -163,6 +163,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions", s.auth.require(s.listSessions))
 	mux.HandleFunc("GET /api/sessions/page", s.auth.require(s.sessionsPage))
 	mux.HandleFunc("GET /api/sessions/{id}", s.auth.require(s.getSession))
+	mux.HandleFunc("GET /api/sessions/{id}/head", s.auth.require(s.getSessionHead))
 	mux.HandleFunc("POST /api/sessions/{id}/runs", s.auth.require(s.createRun))
 	mux.HandleFunc("GET /api/sessions/{id}/messages", s.auth.require(s.messages))
 	mux.HandleFunc("GET /api/runs/{id}", s.auth.require(s.getRun))
@@ -624,32 +625,25 @@ func (s *Server) execute(run *runtime.Run, request agent.Request) {
 	runContext = context.WithValue(runContext, frozenRequestKey{}, request)
 	lastCheckpoint := time.Now()
 	err := s.agent.Generate(runContext, request, func(update agent.Update) error {
-		if update.ResetOutput {
-			if err := run.ResetOutput(); err != nil {
-				return err
-			}
-		}
 		if update.Text != "" || update.TextKind == "progress" {
-			var err error
-			switch update.TextKind {
-			case "pending":
-				err = run.AppendText(update.TextID, update.Text, true)
-			case "progress":
-				err = run.AppendProgress(update.TextID, update.Text)
-			default:
-				err = run.AppendText(update.TextID, update.Text, false)
+			phase := update.TextKind
+			if phase == "progress" {
+				phase = "commentary"
 			}
-			if err != nil {
+			if phase == "" {
+				phase = "pending"
+			}
+			if err := run.AppendText(update.RoundID, update.TextID, update.Text, phase); err != nil {
 				return err
 			}
 		}
-		if update.CommitOutput {
-			if err := run.CommitOutput(); err != nil {
+		if update.RoundEnd != nil {
+			if err := run.EndRound(update.RoundEnd.ID, update.RoundEnd.Final); err != nil {
 				return err
 			}
 		}
 		if update.Reasoning != nil {
-			if err := run.AppendReasoning(*update.Reasoning); err != nil {
+			if err := run.AppendReasoning(update.RoundID, *update.Reasoning); err != nil {
 				return err
 			}
 		}
@@ -658,7 +652,7 @@ func (s *Server) execute(run *runtime.Run, request agent.Request) {
 		}
 		if update.Step != nil {
 			step := update.Step
-			if err := run.UpdateStep(runtime.Step{ID: step.ID, Name: step.Name, Status: step.Status, Arguments: step.Arguments, Output: step.Output, Screenshot: step.Screenshot}); err != nil {
+			if err := run.UpdateStep(update.RoundID, runtime.Step{Outcome: step.Outcome, ID: step.ID, Name: step.Name, Status: step.Status, Arguments: step.Arguments, Output: step.Output, Screenshot: step.Screenshot}); err != nil {
 				return err
 			}
 		}
@@ -674,7 +668,7 @@ func (s *Server) execute(run *runtime.Run, request agent.Request) {
 				return err
 			}
 		}
-		if update.Step != nil || update.Canonical != nil || update.Usage != nil || update.ResetOutput || update.CommitOutput ||
+		if update.Step != nil || update.Canonical != nil || update.Usage != nil || update.RoundEnd != nil ||
 			((update.Text != "" || update.Reasoning != nil) && time.Since(lastCheckpoint) >= time.Second) {
 			if err := s.store.Checkpoint(ctx, run.Snapshot()); err != nil {
 				return err

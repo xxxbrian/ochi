@@ -63,6 +63,7 @@ func ScopeFromContext(ctx context.Context) (RunScope, bool) {
 }
 
 type CanonicalMessage struct {
+	RoundID    string
 	Seq        int64
 	RunID      string
 	ModelID    string
@@ -117,6 +118,7 @@ type BoundaryUpdate struct {
 }
 
 type Step struct {
+	Outcome    string          `json:"outcome,omitempty"`
 	ID         string          `json:"id"`
 	Name       string          `json:"name"`
 	Status     string          `json:"status"`
@@ -134,17 +136,22 @@ type ReasoningPart struct {
 	Done bool   `json:"done"`
 }
 
+type RoundEnd struct {
+	ID    string
+	Final bool
+}
+
 type Update struct {
-	Text         string
-	TextKind     string // pending until the model round resolves, explicit progress, or final
-	TextID       string // stable identity for provider-declared public progress
-	CommitOutput bool
-	Reasoning    *ReasoningPart
-	Step         *Step
-	ResetOutput  bool
-	Canonical    *CanonicalMessage
-	Compaction   *Compaction
-	Usage        *Usage
+	RoundID    string
+	RoundEnd   *RoundEnd
+	Text       string
+	TextKind   string // pending until the model round resolves, explicit progress, or final
+	TextID     string // stable identity for provider-declared public progress
+	Reasoning  *ReasoningPart
+	Step       *Step
+	Canonical  *CanonicalMessage
+	Compaction *Compaction
+	Usage      *Usage
 }
 
 type Generator interface {
@@ -168,9 +175,9 @@ func (DemoGenerator) Generate(ctx context.Context, req Request, emit func(Update
 			return ctx.Err()
 		case <-timer.C:
 		}
-		if err := emit(Update{Text: string(r)}); err != nil {
+		if err := emit(Update{RoundID: "demo", TextID: "demo-text", TextKind: "pending", Text: string(r)}); err != nil {
 			return err
 		}
 	}
-	return nil
+	return emit(Update{RoundEnd: &RoundEnd{ID: "demo", Final: true}})
 }

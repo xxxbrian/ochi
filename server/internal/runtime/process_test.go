@@ -15,182 +15,196 @@ func processRun(t *testing.T) *Run {
 	t.Helper()
 	m := NewManager()
 	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
-	return m.Restore(Snapshot{RunID: "process", SessionID: "session", Status: StatusRunning, Timeline: []ProcessEntry{}})
+	return m.Restore(Snapshot{RunID: "process", SessionID: "session", Status: StatusRunning})
 }
-
-func TestProcessTimelineMixedOrderStableUpsertsAndReplyBoundary(t *testing.T) {
+func applyItemEvent(t *testing.T, s *Snapshot, e Event) {
+	t.Helper()
+	if e.Seq != s.Seq+1 {
+		t.Fatalf("gap %d -> %d", s.Seq, e.Seq)
+	}
+	s.Seq = e.Seq
+	s.UpdatedAt = e.UpdatedAt
+	switch e.Type {
+	case "item_started":
+		s.Items = append(s.Items, cloneItem(*e.Item))
+	case "item_delta":
+		for i := range s.Items {
+			if s.Items[i].ID == e.ItemID {
+				s.Items[i].Text += e.Delta
+			}
+		}
+	case "item_updated":
+		for _, p := range e.Patches {
+			for i := range s.Items {
+				item := &s.Items[i]
+				if item.ID == p.ItemID {
+					if p.Phase != "" {
+						item.Phase = p.Phase
+					}
+					if p.State != "" {
+						item.State = p.State
+					}
+					if p.Step != nil {
+						copy := cloneStep(*p.Step)
+						item.Step = &copy
+					}
+				}
+			}
+		}
+	case "status":
+		s.Status = e.Status
+		s.Error = e.Error
+		s.ErrorCode = e.ErrorCode
+	}
+}
+func TestItemEventsExactlyReconstructSnapshot(t *testing.T) {
 	r := processRun(t)
-	_, events, unsubscribe := r.Subscribe()
-	defer unsubscribe()
-	must := func(err error) {
-		t.Helper()
-		if err != nil {
+	snapshot, events, stop := r.Subscribe()
+	defer stop()
+	actions := []func() error{
+		func() error {
+			return r.AppendReasoning("r1", agent.ReasoningPart{ID: "thought", Kind: "summary", Text: "Check ", Done: false})
+		},
+		func() error { return r.AppendText("r1", "text", "Let me check.", "pending") },
+		func() error {
+			return r.AppendReasoning("r1", agent.ReasoningPart{ID: "thought", Kind: "summary", Text: "the source.", Done: true})
+		},
+		func() error { return r.EndRound("r1", false) },
+		func() error { return r.UpdateStep("r1", Step{ID: "search", Name: "web_search", Status: "running"}) },
+		func() error {
+			return r.UpdateStep("r1", Step{ID: "search", Name: "web_search", Status: "completed", Outcome: "needs_user", Output: "Verification required"})
+		},
+		func() error { return r.AppendText("r2", "answer", "Result.", "pending") },
+		func() error { return r.EndRound("r2", true) },
+		func() error { return r.Finalize(StatusCompleted, nil, func(Snapshot) error { return nil }) },
+	}
+	for _, action := range actions {
+		if err := action(); err != nil {
 			t.Fatal(err)
 		}
-	}
-	must(r.AppendReasoning(agent.ReasoningPart{ID: "round-1:reasoning", Kind: "reasoning", Text: "Check "}))
-	first := <-events
-	must(r.AppendReasoning(agent.ReasoningPart{ID: "round-1:reasoning", Kind: "reasoning", Text: "the request.", Done: true}))
-	updated := <-events
-	if updated.TimelineEntry.Seq != first.Seq || updated.TimelineEntry.Reasoning.Text != "Check the request." || updated.Seq != first.Seq+1 {
-		t.Fatalf("delta was not a full stable upsert: %+v", updated)
-	}
-	must(r.Append("I will "))
-	text := <-events
-	must(r.Append("search."))
-	<-events
-	must(r.AppendReasoning(agent.ReasoningPart{ID: "round-1:reasoning:segment-2", Kind: "reasoning", Text: "Choose sources.", Done: true}))
-	thought := <-events
-	must(r.Append(" Then read them."))
-	secondText := <-events
-	if before := r.Snapshot(); len(before.Timeline) != 4 || before.Output != "I will search. Then read them." ||
-		text.TimelineEntry == nil || text.TimelineEntry.Text != "I will " {
-		t.Fatal("public reply did not stream in place from its first token")
-	}
-	must(r.ResetOutput())
-	reset := <-events
-	wantKinds := []string{"reasoning", "progress", "reasoning", "progress"}
-	kinds := []string{}
-	for _, entry := range reset.Timeline {
-		kinds = append(kinds, entry.Kind)
-	}
-	if !reflect.DeepEqual(kinds, wantKinds) || reset.Timeline[1].Seq != text.Seq || reset.Timeline[2].Seq != thought.Seq || reset.Timeline[3].Seq != secondText.Seq || r.Snapshot().Output != "" {
-		t.Fatalf("public progress moved to the reset time or was lost: %+v", reset.Timeline)
-	}
-	if reset.Timeline[1].Text != "I will search." || reset.Timeline[3].Text != " Then read them." || reset.Timeline[1].Reasoning != nil {
-		t.Fatal("public progress changed bytes or became private reasoning")
-	}
-	step := Step{ID: "search", Name: "web_search", Status: "running", Arguments: json.RawMessage(`{"query":"example"}`)}
-	must(r.UpdateStep(step))
-	started := <-events
-	step.Status, step.Output = "completed", "two results"
-	must(r.UpdateStep(step))
-	completed := <-events
-	if completed.TimelineEntry.Seq != started.Seq || completed.TimelineEntry.Step.Status != "completed" || len(r.Snapshot().Timeline) != 5 {
-		t.Fatal("tool completion created a second occurrence")
-	}
-	must(r.AppendReasoning(agent.ReasoningPart{ID: "round-2:summary", Kind: "summary", Text: "Synthesize.", Done: true}))
-	<-events
-	must(r.Append("Here is the final answer."))
-	<-events
-	must(r.Finalize(StatusCompleted, nil, func(saved Snapshot) error { return nil }))
-	terminal := <-events
-	final := r.Snapshot()
-	if len(final.Timeline) != 7 || final.Output != "Here is the final answer." || !final.Timeline[6].Final || !reflect.DeepEqual(terminal.Timeline, final.Timeline) {
-		t.Fatal("terminal event lost the stable final answer or process state")
-	}
-	for i, entry := range final.Timeline {
-		if i > 0 && entry.Seq <= final.Timeline[i-1].Seq {
-			t.Fatal("timeline occurrence order is not strictly increasing")
+		for len(events) > 0 {
+			applyItemEvent(t, &snapshot, <-events)
 		}
 	}
+	actual := r.Snapshot()
+	if !reflect.DeepEqual(snapshot.Items, actual.Items) || snapshot.Seq != actual.Seq || snapshot.Status != actual.Status {
+		t.Fatalf("snapshot diverged: %+v %+v", snapshot, actual)
+	}
+	for i, item := range actual.Items {
+		if i > 0 && item.Seq <= actual.Items[i-1].Seq {
+			t.Fatal("occurrence order not stable")
+		}
+	}
+	if PublicReply(actual) != "Result." {
+		t.Fatal("final phase projection wrong")
+	}
 }
-
-func TestProcessSnapshotsAndSubscribersAreIsolated(t *testing.T) {
+func TestItemSnapshotsAndSubscribersAreIsolated(t *testing.T) {
 	r := processRun(t)
 	_, a, stopA := r.Subscribe()
 	_, b, stopB := r.Subscribe()
 	defer stopA()
 	defer stopB()
 	args := json.RawMessage(`{"path":"file"}`)
-	if err := r.UpdateStep(Step{ID: "read", Name: "files_read", Status: "running", Arguments: args}); err != nil {
-		t.Fatal(err)
-	}
+	_ = r.UpdateStep("r", Step{ID: "read", Name: "files_read", Status: "running", Arguments: args})
 	args[0] = '['
-	first, other := <-a, <-b
-	first.TimelineEntry.Step.Arguments[0] = '['
-	first.TimelineEntry.Step.Name = "mutated"
-	if other.TimelineEntry.Step.Name != "files_read" || string(other.TimelineEntry.Step.Arguments) != `{"path":"file"}` {
-		t.Fatal("subscriber payloads share writable entry state")
+	one, two := <-a, <-b
+	one.Item.Step.Name = "mutated"
+	one.Item.Step.Arguments[0] = '['
+	if two.Item.Step.Name != "files_read" || string(two.Item.Step.Arguments) != `{"path":"file"}` {
+		t.Fatal("event aliases")
 	}
-	snapshot := r.Snapshot()
-	snapshot.Timeline[0].Step.Status = "completed"
-	if r.Snapshot().Timeline[0].Step.Status != "running" {
-		t.Fatal("returned snapshot shares writable timeline")
-	}
-	if err := r.Finalize(StatusFailed, errors.New("upstream lost"), func(saved Snapshot) error {
-		if saved.Timeline[0].Step.Status != "failed" {
-			t.Fatal("unfinished tool was not closed before persistence")
+	snap := r.Snapshot()
+	snap.Items[0].Step.Name = "mutated"
+	_ = r.Finalize(StatusFailed, errors.New("failed"), func(s Snapshot) error {
+		if s.Items[0].Step.Status != "failed" {
+			t.Fatal("unfinished tool left active")
 		}
-		saved.Timeline[0].Step.Name = "persist mutation"
+		s.Items[0].Step.Name = "mutated"
 		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if r.Snapshot().Timeline[0].Step.Name != "files_read" {
-		t.Fatal("persistence callback changed live process state")
-	}
-	<-a // terminal repair step
-	terminal := <-a
-	terminal.Timeline[0].Step.Name = "terminal mutation"
-	if r.Snapshot().Timeline[0].Step.Name != "files_read" {
-		t.Fatal("terminal event shares writable timeline")
+	})
+	repair := <-a
+	repair.Patches[0].Step.Name = "mutation"
+	if r.Snapshot().Items[0].Step.Name != "files_read" {
+		t.Fatal("snapshot/patch alias")
 	}
 }
-
-func TestTerminalProcessJSONRoundTripAndEmptyTimeline(t *testing.T) {
+func TestTerminalItemRoundTripAndEmptyArray(t *testing.T) {
 	r := processRun(t)
-	_ = r.Append("I will read the file.")
-	_ = r.ResetOutput()
-	_ = r.UpdateStep(Step{ID: "read", Name: "files_read", Status: "running"})
-	_ = r.AppendReasoning(agent.ReasoningPart{ID: "round-2:reasoning", Kind: "reasoning", Text: "Partial thought"})
-	checkpoint := r.Snapshot()
-	checkpoint.Status = StatusInterrupted
-	data, err := json.Marshal(checkpoint)
-	if err != nil {
-		t.Fatal(err)
-	}
+	_ = r.AppendText("r", "p", "Public partial", "pending")
+	_ = r.UpdateStep("r", Step{ID: "read", Status: "running"})
+	_ = r.AppendReasoning("r", agent.ReasoningPart{ID: "reason", Kind: "reasoning", Text: "Partial thought"})
+	s := r.Snapshot()
+	s.Status = StatusInterrupted
+	data, _ := json.Marshal(s)
 	var decoded Snapshot
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatal(err)
+	_ = json.Unmarshal(data, &decoded)
+	restored := ReconcileTerminal(decoded)
+	if restored.Items[1].Step.Status != "failed" || restored.Items[2].State != "interrupted" || PublicReply(restored) != "Public partial" || s.Items[1].Step.Status != "running" {
+		t.Fatal("restoration changed public text or kept active work")
 	}
-	m := NewManager()
-	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
-	restored := m.Restore(decoded).Snapshot()
-	if restored.Timeline[0].Text != "I will read the file." || restored.Timeline[1].Step.Status != "failed" || !restored.Timeline[2].Reasoning.Done || restored.Timeline[2].Seq != checkpoint.Timeline[2].Seq {
-		t.Fatalf("restart lost public progress/order or left active work: %+v", restored.Timeline)
-	}
-	if checkpoint.Timeline[1].Step.Status != "running" || checkpoint.Timeline[2].Reasoning.Done {
-		t.Fatal("restart normalization mutated the original checkpoint")
-	}
-	empty := m.Restore(Snapshot{RunID: "empty", Status: StatusCompleted}).Snapshot()
-	emptyJSON, _ := json.Marshal(empty)
+	empty := ReconcileTerminal(Snapshot{Status: StatusCompleted})
+	data, _ = json.Marshal(empty)
 	var payload map[string]any
-	_ = json.Unmarshal(emptyJSON, &payload)
-	if value, present := payload["timeline"]; !present || value == nil || len(value.([]any)) != 0 {
-		t.Fatal("an empty process must serialize as an array")
+	_ = json.Unmarshal(data, &payload)
+	if value, present := payload["items"]; !present || value == nil || len(value.([]any)) != 0 {
+		t.Fatal("items must be []")
 	}
-	newRun, err := m.Start(Snapshot{RunID: "new", SessionID: "new-session"}, nil)
-	if err != nil || newRun.Snapshot().Timeline == nil {
-		t.Fatal("new run did not advertise exact timeline support")
+	for _, key := range []string{"output", "reasoning", "steps", "timeline"} {
+		if _, exists := payload[key]; exists {
+			t.Fatal("parallel public owner leaked", key)
+		}
 	}
 }
-
-func TestProcessCancelAndSnapshotRaceKeepsCompletionOrder(t *testing.T) {
+func TestCancelAndSnapshotRacePreservesActualToolCompletion(t *testing.T) {
 	r := processRun(t)
-	_ = r.UpdateStep(Step{ID: "read", Name: "files_read", Status: "running"})
+	_ = r.UpdateStep("r", Step{ID: "read", Name: "read", Status: "running"})
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 100; i++ {
-			snapshot := r.Snapshot()
-			snapshot.Timeline[0].Step.Name = "reader mutation"
+			s := r.Snapshot()
+			s.Items[0].Step.Name = "mutation"
 		}
 	}()
 	go func() {
 		defer wg.Done()
 		r.Cancel()
-		if err := r.UpdateStep(Step{ID: "read", Name: "files_read", Status: "completed", Output: "observed before cancellation"}); err != nil {
-			t.Error(err)
+		if e := r.UpdateStep("r", Step{ID: "read", Name: "read", Status: "completed", Outcome: "success"}); e != nil {
+			t.Error(e)
 		}
-		if err := r.Finalize(StatusCompleted, nil, func(saved Snapshot) error { return nil }); err != nil {
-			t.Error(err)
-		}
+		_ = r.Finalize(StatusCompleted, nil, func(Snapshot) error { return nil })
 	}()
 	wg.Wait()
+	s := r.Snapshot()
+	if s.Status != StatusCancelled || s.Items[0].Step.Status != "completed" || s.Items[0].Seq != 1 {
+		t.Fatal("lost real result during cancellation")
+	}
+}
+
+func TestReusedProviderToolIDInAnotherRoundKeepsBothOccurrences(t *testing.T) {
+	r := processRun(t)
+	snapshot, events, stop := r.Subscribe()
+	defer stop()
+	for _, round := range []string{"r1", "r2"} {
+		for _, status := range []string{"running", "completed"} {
+			if err := r.UpdateStep(round, Step{ID: "call-0", Name: "exec", Status: status, Output: round}); err != nil {
+				t.Fatal(err)
+			}
+			for len(events) > 0 {
+				applyItemEvent(t, &snapshot, <-events)
+			}
+		}
+	}
 	final := r.Snapshot()
-	if final.Status != StatusCancelled || len(final.Timeline) != 1 || final.Timeline[0].Step.Status != "completed" || final.Timeline[0].Seq != 1 {
-		t.Fatalf("cancel moved/dropped the in-flight result: %+v", final)
+	if len(final.Items) != 2 || final.Items[0].ID == final.Items[1].ID || final.Items[0].Step.Output != "r1" || final.Items[1].Step.Output != "r2" || !reflect.DeepEqual(snapshot.Items, final.Items) {
+		t.Fatal("reused provider tool ID overwrote another round")
+	}
+	steps := final.Steps()
+	for index, step := range steps {
+		if step.ID != final.Items[index].ID || final.Items[index].SourceID != "call-0" || final.Items[index].Step.ID != "call-0" {
+			t.Fatal("evidence lost occurrence identity or changed the provider call ID")
+		}
 	}
 }

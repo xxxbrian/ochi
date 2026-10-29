@@ -66,7 +66,7 @@ func skipToolCall(outcome *toolOutcome, reason string) {
 	// non-execution record, not a fabricated failure from the underlying tool.
 	output, _ := json.Marshal(map[string]any{"isError": true, "code": "not_dispatched", "reason": reason, "error": "Tool was not dispatched because the loop stopped after repeated failures or no progress."})
 	outcome.result = ToolResult{Output: string(output)}
-	outcome.step.Status, outcome.step.Output = "failed", string(output)
+	outcome.step.Status, outcome.step.Outcome, outcome.step.Output = "failed", "failure", string(output)
 }
 
 func (g *OpenAI) executeTool(ctx context.Context, req Request, outcome *toolOutcome, permissionDenied *bool) {
@@ -139,6 +139,21 @@ func (g *OpenAI) executeTool(ctx context.Context, req Request, outcome *toolOutc
 	} else if toolOutputFailed(outcome.result.Output) {
 		outcome.step.Status = "failed"
 	}
+	outcome.step.Outcome = "success"
+	if outcome.step.Status == "failed" {
+		outcome.step.Outcome = "failure"
+	} else {
+		var result struct {
+			NeedsUser  bool `json:"needs_user"`
+			Automation struct {
+				NeedsUser bool `json:"needs_user"`
+			} `json:"automation"`
+		}
+		if json.Unmarshal([]byte(outcome.result.Output), &result) == nil && (result.NeedsUser || result.Automation.NeedsUser) {
+			outcome.step.Outcome = "needs_user"
+		}
+	}
+
 }
 
 // Batches are contiguous and bounded. All writes, questions and unknown tools

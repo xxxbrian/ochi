@@ -1,7 +1,8 @@
+import { messagePresentation, projectRun } from "../../../shared/conversation/projection";
 import { t, useI18n } from "../lib/i18n";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronRight, LoaderCircle } from "lucide-react";
-import { api, isActiveStatus } from "../lib/api";
+import { useRunDetail } from "../hooks/useRunDetail";
 import type { RunStatus, Snapshot } from "../lib/types";
 import { RunTranscript } from "./RunTranscript";
 import "./execution.css";
@@ -42,60 +43,19 @@ export function HistoryProcess({
   useI18n();
   const [localOpen, setLocalOpen] = useState(false);
   const open = expanded ?? localOpen;
-  const [loaded, setLoaded] = useState<Snapshot | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const owner = useRef(0);
-  const cachedSnapshot = useRef<Snapshot | null>(null);
-  const provided = snapshot?.run_id === runId ? snapshot : null;
-  const remembered = provided ?? (cachedSnapshot.current?.run_id === runId ? cachedSnapshot.current : null);
-  const saved = loaded?.run_id === runId && (!remembered || loaded.seq >= remembered.seq) ? loaded : remembered;
-  const needsTerminal = Boolean(saved && isActiveStatus(saved.status) && status && !isActiveStatus(status));
-  const current = saved && needsTerminal ? { ...saved, status: status!, output: status === "completed" ? output ?? saved.output : saved.output,
-    created_at: createdAt ?? saved.created_at, updated_at: updatedAt ?? saved.updated_at,
-    error: runError || saved.error, error_code: runErrorCode || saved.error_code, waiting_input: undefined } : saved;
-  const recoveringPublic = needsTerminal && status !== "completed" && Boolean(output?.trim());
-  // The terminal history projection can be ahead of a disconnected stream.
-  // Keep all of it visible while the canonical process snapshot recovers.
-  const visibleTimeline = recoveringPublic ? current!.timeline.filter((entry) => entry.kind !== "progress") : current?.timeline ?? [];
-  const visibleOutput = recoveringPublic ? output! : current?.output ?? output ?? "";
-
-  useEffect(() => {
-    owner.current += 1;
-    cachedSnapshot.current = null;
-    setLoaded(null);
-    setError("");
-    setLoading(false);
-    return () => { owner.current += 1; };
-  }, [runId]);
-
-  useEffect(() => {
-    if (snapshot?.run_id !== runId) return;
-    owner.current += 1;
-    cachedSnapshot.current = snapshot;
-    setLoading(false);
-    setError("");
-  }, [snapshot, runId]);
-
-  useEffect(() => {
-    if ((!open && !needsTerminal) || (current && !needsTerminal) || loading || error) return;
-    const token = ++owner.current;
-    setLoading(true);
-    void api.run(runId).then((snapshot) => {
-      if (owner.current !== token) return;
-      if (snapshot.run_id !== runId || snapshot.seq < (saved?.seq ?? 0) || (needsTerminal && isActiveStatus(snapshot.status))) throw new Error(t("process.notSynced"));
-      setLoaded(snapshot);
-    }).catch(() => {
-      if (owner.current === token) setError(t("error.loadTemporary"));
-    }).finally(() => {
-      if (owner.current === token) setLoading(false);
-    });
-  }, [open, runId, current, needsTerminal, saved?.seq, loading, error]);
+  const detail = useRunDetail(runId, snapshot ?? null, status, open);
+  const { snapshot: saved, loading, failed } = detail;
+  const presentation = messagePresentation({ id: runId, run_id: runId, role: 'assistant', content: output ?? '',
+    created_at: createdAt ?? '', run_status: status, run_error: runError, run_error_code: runErrorCode,
+    run_created_at: createdAt, run_updated_at: updatedAt }, saved);
+  const { snapshot: current } = presentation;
+  const visibleTimeline = current ? projectRun(current).entries : [];
+  const visibleOutput = presentation.fallback;
 
   function change(next: boolean) {
     setLocalOpen(next);
     onExpandedChange?.(next);
-    if (next && error) setError("");
+    if (next && failed) detail.retry();
   }
 
   return <>
@@ -110,7 +70,7 @@ export function HistoryProcess({
         <span className="process-meta">{loading ? t("status.loading") : stepCount > 0 ? t("process.steps", { count: stepCount }) : hasReasoning ? t("process.reasoning") : t("process.title")}</span>
         <ChevronRight size={16} className="process-chevron" />
       </button>
-      {open && (loading ? <div className="history-loading"><LoaderCircle size={14} className="spin" /></div> : error ? <p className="form-error">{error}</p> : null)}
+      {open && (loading ? <div className="history-loading"><LoaderCircle size={14} className="spin" /></div> : failed ? <p className="form-error">{t("error.loadTemporary")}</p> : null)}
     </section>}
   </>;
 }

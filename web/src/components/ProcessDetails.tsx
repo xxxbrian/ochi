@@ -28,7 +28,7 @@ export const ProcessSummary = memo(function ProcessSummary({ active, status, wai
   useI18n();
   const entries = useMemo(() => orderedProcessEntries(timeline), [timeline]);
   const steps = entries.flatMap((entry) => entry.step ? [entry.step] : []);
-  const completed = steps.filter((step) => step.status === "completed").length;
+  const completed = steps.filter((step) => step.status === "completed" && step.outcome !== "needs_user").length;
   const latest = lastMatching(entries, (entry) => Boolean(entry.step || entry.reasoning?.text.trim() || entry.text?.trim()));
   const tool = lastMatching(steps, (step) => step.status === "running");
   const working = active && status === "running";

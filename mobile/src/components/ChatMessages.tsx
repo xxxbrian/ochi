@@ -1,4 +1,4 @@
-import { errorForDisplay, localizedError, errorText, type DisplayError } from "../lib/errors";
+import { errorForDisplay, type DisplayError } from "../lib/errors";
 import { t, useI18n } from "../lib/i18n";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -21,8 +21,9 @@ import {
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import * as Clipboard from "expo-clipboard";
 import type { Message, Snapshot, WaitingInput } from "../lib/types";
-import { api, isActiveStatus, userFacingRunError } from "../lib/api";
-import { publicReply, reconcileTerminalText, unrepresentedOutput } from "../lib/processTimeline";
+import { isActiveStatus, userFacingRunError } from "../lib/api";
+import { chatMessageKey, projectChatMessages, messagePresentation } from "../../../shared/conversation/projection";
+import { useRunDetail } from "../hooks/useRunDetail";
 import { useTheme } from "../providers/AppProvider";
 import { LongPressMenu } from "../ui/LongPressMenu";
 import {
@@ -40,20 +41,12 @@ type Row = { key: string; message: Message; snapshot?: Snapshot };
 type ProcessReadingChange = (runId: string, reading: boolean, interaction?: boolean) => void;
 
 function projectRows(messages: Message[], run: Snapshot | null): Row[] {
-  let found = false;
-  const rows = messages.filter((message) => message.role !== "system").map((message) => {
-    const snapshot = message.role === "assistant" && message.run_id === run?.run_id ? run ?? undefined : undefined;
-    found ||= Boolean(snapshot);
-    return { key: message.role === "assistant" && message.run_id ? `assistant-${message.run_id}` : message.id, message, snapshot };
-  });
-  if (run && !found) rows.push({
-    key: `assistant-${run.run_id}`,
-    message: { id: `run-${run.run_id}`, role: "assistant", run_id: run.run_id, run_status: run.status,
-      content: run.output, attachments: run.artifacts, created_at: run.updated_at },
-    snapshot: run,
-  });
-  return rows;
+  return projectChatMessages(messages, run).filter((message) => message.role !== 'system').map((message) => ({
+    key: chatMessageKey(message), message,
+    snapshot: message.role === 'assistant' && message.run_id === run?.run_id ? run ?? undefined : undefined,
+  }));
 }
+
 type Props = {
   messages: Message[];
   run: Snapshot | null;
@@ -62,7 +55,7 @@ type Props = {
   loadOlder: () => Promise<void>;
   refreshing: boolean;
   onRefresh: () => void;
-  resume: (answer: string) => Promise<void>;
+  resume: (answer: string) => Promise<unknown>;
   onRetry: (message: Message) => Promise<void>;
   onEdit: (message: Message) => void;
   bottomInset?: number;
@@ -327,34 +320,18 @@ const AssistantBubble = memo(function AssistantBubble({
   const { colors } = useTheme();
   const [error, setError] = useState<DisplayError>("");
   const [copied, setCopied] = useState(false);
-  const [history, setHistory] = useState<Snapshot | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [recovery, setRecovery] = useState<{ pending: boolean; error: DisplayError }>({ pending: false, error: "" });
-  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
-  const cachedSnapshot = useRef<Snapshot | null>(null);
-  const owner = useRef(0);
   const reading = useRef(false);
   const runId = message.run_id;
   const provided = snapshot?.run_id === runId ? snapshot : null;
-  if (provided && (!cachedSnapshot.current || provided.seq >= cachedSnapshot.current.seq)) cachedSnapshot.current = provided;
-  const remembered = cachedSnapshot.current;
-  const saved = history && (!remembered || history.seq >= remembered.seq) ? history : remembered;
-  const needsTerminal = Boolean(saved && isActiveStatus(saved.status) && message.run_status && !isActiveStatus(message.run_status));
-  const current = saved && needsTerminal ? { ...saved, status: message.run_status!,
-    output: message.run_status === "completed" ? message.content || saved.output : saved.output,
-    timeline: message.run_status === "completed" ? reconcileTerminalText(saved, message.content) : saved.timeline,
-    error: message.run_error || saved.error, error_code: message.run_error_code || saved.error_code,
-    created_at: message.run_created_at ?? saved.created_at, updated_at: message.run_updated_at ?? saved.updated_at,
-    artifacts: message.attachments ?? saved.artifacts, waiting_input: undefined }
-    : saved && !saved.error && message.run_error ? { ...saved, error: message.run_error, error_code: message.run_error_code } : saved;
+  const detail = useRunDetail(runId ?? "", provided ?? null, message.run_status, historyOpen);
+  const saved = detail.snapshot;
+  const historyLoading = detail.loading;
+  const presentation = messagePresentation(message, saved);
+  const { needsTerminal, snapshot: current, fallback: bodyFallback, copyText: content } = presentation;
   const status = current?.status ?? message.run_status;
   const active = isActiveStatus(status);
-  const persistedPartial = needsTerminal && (status === "failed" || status === "cancelled" || status === "interrupted") && Boolean(message.content.trim());
-  const content = persistedPartial ? message.content : current ? publicReply(current) : message.content;
-  const bodyFallback = persistedPartial ? message.content : current ? unrepresentedOutput(current) : content;
-  // The message may contain public replies missed by SSE; keep them visible while the full timeline catches up.
-  const display = persistedPartial && current ? { ...current, timeline: current.timeline.filter((entry) => entry.kind !== "progress") } : current;
+  const display = current;
   const files = current?.artifacts ?? message.attachments;
   const process = Boolean(current || message.has_process || message.step_count || message.has_reasoning ||
     status === "failed" || status === "interrupted" || status === "cancelled");
@@ -367,68 +344,11 @@ const AssistantBubble = memo(function AssistantBubble({
     }
   }, [runId, onProcessReadingChange]);
   useEffect(() => () => {
-    owner.current += 1;
     if (reading.current) readingChange(false);
   }, [readingChange]);
-  useEffect(() => {
-    if (!needsTerminal || !runId) return;
-    // Another device may start the next turn before this stream sees terminal.
-    // Refresh the cached panel in place, never replace it with a loading shell.
-    const token = ++owner.current;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    let controller: AbortController | undefined;
-    setRecovery({ pending: true, error: "" });
-    async function recover(attempt: number) {
-      if (owner.current !== token) return;
-      const requestController = new AbortController();
-      controller = requestController;
-      try {
-        const loaded = await Promise.race([
-          api.run(runId!, requestController.signal),
-          new Promise<never>((_resolve, reject) => {
-            timeout = setTimeout(() => {
-              requestController.abort();
-              reject(localizedError("error.processSyncTimeout"));
-            }, 10_000);
-          }),
-        ]);
-        if (owner.current !== token) return;
-        if (loaded.run_id !== runId || loaded.seq < (saved?.seq ?? 0) || isActiveStatus(loaded.status))
-          throw localizedError("error.processNotSynced");
-        setHistory(loaded);
-        setRecovery({ pending: false, error: "" });
-      } catch {
-        if (owner.current !== token) return;
-        if (attempt < 2) retryTimer = setTimeout(() => void recover(attempt + 1), attempt === 0 ? 500 : 1_500);
-        else setRecovery({ pending: false, error: localizedError("error.processSync") });
-      } finally {
-        if (timeout !== undefined) clearTimeout(timeout);
-        timeout = undefined;
-      }
-    }
-    void recover(0);
-    return () => {
-      if (owner.current === token) owner.current += 1;
-      if (retryTimer !== undefined) clearTimeout(retryTimer);
-      if (timeout !== undefined) clearTimeout(timeout);
-      controller?.abort();
-    };
-  }, [needsTerminal, runId, recoveryAttempt]);
-  async function loadHistory() {
-    if (current || !runId || historyLoading) return;
-    const token = ++owner.current;
+  function loadHistory() {
     setHistoryOpen(true);
-    setHistoryLoading(true);
-    setError("");
-    try {
-      const loaded = await api.run(runId);
-      if (owner.current === token && loaded.run_id === runId) setHistory(loaded);
-    } catch (reason) {
-      if (owner.current === token) setError(errorForDisplay(reason, "error.load"));
-    } finally {
-      if (owner.current === token) setHistoryLoading(false);
-    }
+    detail.retry();
   }
   async function copy() {
     await Clipboard.setStringAsync(content);
@@ -453,10 +373,10 @@ const AssistantBubble = memo(function AssistantBubble({
           {historyLoading && <ActivityIndicator color={colors.muted} />}
         </View>
       ))}
-      {needsTerminal && (recovery.pending || recovery.error) && (
+      {needsTerminal && (detail.loading || detail.failed) && (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <AppText muted size={12}>{recovery.pending ? t("process.syncing") : errorText(recovery.error)}</AppText>
-          {!recovery.pending && <Pressable accessibilityRole="button" accessibilityLabel={t("process.retrySync")} onPress={() => setRecoveryAttempt((attempt) => attempt + 1)} style={{ minHeight: 32, justifyContent: "center" }}>
+          <AppText muted size={12}>{detail.loading ? t("process.syncing") : t("error.processSync")}</AppText>
+          {!detail.loading && <Pressable accessibilityRole="button" accessibilityLabel={t("process.retrySync")} onPress={detail.retry} style={{ minHeight: 32, justifyContent: "center" }}>
             <AppText size={12}>{t("common.retry")}</AppText>
           </Pressable>}
         </View>
@@ -521,7 +441,7 @@ export function WaitingCard({
   onResume,
 }: {
   waiting: WaitingInput;
-  onResume: (answer: string) => Promise<void>;
+  onResume: (answer: string) => Promise<unknown>;
 }) {
   useI18n();
   const { colors, fonts } = useTheme();

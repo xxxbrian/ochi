@@ -1,3 +1,5 @@
+import { orderedProcessEntries, toolGroupFamily } from "../../../shared/conversation/projection";
+export { orderedProcessEntries } from "../../../shared/conversation/projection";
 import { t } from "./i18n";
 import type { ProcessEntry, Step } from "./types";
 
@@ -66,55 +68,19 @@ export function textArgument(args: Record<string, unknown> | null | undefined, k
   return "";
 }
 
-export function orderedProcessEntries(entries: ProcessEntry[]) {
-  return entries.slice().sort((left, right) => left.seq - right.seq);
-}
-
 export function lastMatching<T>(items: T[], predicate: (item: T) => boolean): T | undefined {
   for (let index = items.length - 1; index >= 0; index -= 1) if (predicate(items[index])) return items[index];
   return undefined;
-}
-
-export function upsertProcessEntry(entries: ProcessEntry[], entry: ProcessEntry) {
-  const next = entries.slice();
-  const index = next.findIndex((current) => current.id === entry.id);
-  if (index >= 0) next[index] = { ...entry, seq: next[index].seq };
-  else next.push(entry);
-  // A public reply is promoted after its tool round, but retains its original position.
-  return orderedProcessEntries(next);
 }
 
 export function processHasContent(timeline: ProcessEntry[]) {
   return timeline.some((entry) => entry.kind === "tool" ? Boolean(entry.step) : Boolean((entry.reasoning?.text ?? entry.text)?.trim()));
 }
 
-export function isToolFailure(step: Step) {
-  if (step.status === "failed") return true;
-  if (step.name !== "exec" || !step.output) return false;
-  try {
-    const result = JSON.parse(step.output);
-    return typeof result?.exit_code === "number" && result.exit_code !== 0;
-  } catch {
-    return false;
-  }
-}
-
+export { isToolFailure, toolNeedsUser as browserNeedsUser } from "../../../shared/conversation/projection";
 function groupFamily(step: Step): ToolFamily | null {
-  const family = toolInfo(step.name).kind;
-  if (isToolFailure(step) || browserNeedsUser(step) || step.name.startsWith("request_") || /(?:permission|waiting|user_input)/.test(step.name)) return null;
-  // Each query and subsequent page read remain distinct, even when adjacent.
-  if (family === "search" || family === "image") return null;
-  return family;
-}
-
-export function browserNeedsUser(step: Step): boolean {
-  if ((!step.name.startsWith("browser_") && step.name !== "computer_apps") || !step.output) return false;
-  try {
-    const result = JSON.parse(step.output);
-    return result?.needs_user === true || result?.automation?.needs_user === true;
-  } catch {
-    return false;
-  }
+  const family = toolGroupFamily(step);
+  return family === "commands" ? "terminal" : family === "integration" ? "tool" : family;
 }
 
 export type ProcessRow =

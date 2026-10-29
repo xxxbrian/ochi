@@ -49,13 +49,10 @@ type AdminRunPage struct {
 
 type AdminRunDetail struct {
 	AdminRun
-	Output    string                 `json:"output"`
-	Steps     []runtime.Step         `json:"steps"`
-	Reasoning []agent.ReasoningPart  `json:"reasoning"`
-	Timeline  []runtime.ProcessEntry `json:"timeline"`
-	Artifacts []agent.Attachment     `json:"artifacts"`
-	Resource  string                 `json:"resource,omitempty"`
-	Archived  bool                   `json:"archived"`
+	Items     []runtime.Item     `json:"items"`
+	Artifacts []agent.Attachment `json:"artifacts"`
+	Resource  string             `json:"resource,omitempty"`
+	Archived  bool               `json:"archived"`
 }
 
 // The list projection never transports tool JSON, output, or full prompts.
@@ -73,7 +70,7 @@ const adminRunWhere = ` WHERE r.created_at >= $1 AND r.created_at <= $2
 
 const adminRunColumns = `r.id::text,r.session_id::text,s.title,left(COALESCE(prompt.content,pending.message,''),240),
  s.user_id,COALESCE(u.username,''),COALESCE(u.display_name,''),r.status,r.model_id,r.model_name,COALESCE(p.name,''),r.effort,COALESCE(r.error,''),r.error_code,r.usage,
- CASE WHEN jsonb_typeof(r.steps)='array' THEN jsonb_array_length(r.steps) ELSE 0 END,
+ ` + itemStepCountSQL + `,
  CASE WHEN jsonb_typeof(r.artifacts)='array' THEN jsonb_array_length(r.artifacts) ELSE 0 END,
  GREATEST(0,(extract(epoch FROM (CASE WHEN r.status IN ('queued','running','waiting_user','waiting_resource','cancelling') THEN now() ELSE r.updated_at END-r.created_at))*1000)::bigint),
  r.created_at,r.updated_at`
@@ -114,31 +111,19 @@ func (s *Store) AdminRun(ctx context.Context, runID string) (AdminRunDetail, err
 	if err := scanAdminRun(s.db.QueryRow(ctx, `SELECT `+adminRunColumns+adminRunJoins+` WHERE r.id=$1`, runID), &result.AdminRun); err != nil {
 		return result, err
 	}
-	var steps, artifacts, reasoning, timeline []byte
-	err := s.db.QueryRow(ctx, `SELECT r.output,r.steps,r.artifacts,r.resource,r.archived,COALESCE(prompt.content,pending.message,''),r.reasoning,r.timeline`+adminRunJoins+` WHERE r.id=$1`, runID).
-		Scan(&result.Output, &steps, &artifacts, &result.Resource, &result.Archived, &result.Prompt, &reasoning, &timeline)
+	var items, artifacts []byte
+	err := s.db.QueryRow(ctx, `SELECT r.items,r.artifacts,r.resource,r.archived,COALESCE(prompt.content,pending.message,'')`+adminRunJoins+` WHERE r.id=$1`, runID).Scan(&items, &artifacts, &result.Resource, &result.Archived, &result.Prompt)
 	if err != nil {
 		return result, err
 	}
-	if err = json.Unmarshal(steps, &result.Steps); err != nil {
+	if err = json.Unmarshal(items, &result.Items); err != nil {
 		return result, err
 	}
 	if err = json.Unmarshal(artifacts, &result.Artifacts); err != nil {
 		return result, err
 	}
-	if err = json.Unmarshal(reasoning, &result.Reasoning); err != nil {
-		return result, err
-	}
-	if len(timeline) > 0 {
-		if err = json.Unmarshal(timeline, &result.Timeline); err != nil {
-			return result, err
-		}
-	}
-	final := runtime.ReconcileTerminal(runtime.Snapshot{Status: result.Status, Steps: result.Steps, Reasoning: result.Reasoning, Timeline: result.Timeline, Resource: result.Resource})
-	result.Steps, result.Reasoning, result.Timeline, result.Resource = final.Steps, final.Reasoning, final.Timeline, final.Resource
-	if result.Steps == nil {
-		result.Steps = []runtime.Step{}
-	}
+	final := runtime.ReconcileTerminal(runtime.Snapshot{Status: result.Status, Items: result.Items, Resource: result.Resource})
+	result.Items, result.Resource = final.Items, final.Resource
 	if result.Artifacts == nil {
 		result.Artifacts = []agent.Attachment{}
 	}

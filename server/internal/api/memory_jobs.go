@@ -199,7 +199,7 @@ func (s *Server) extractMemoryJob(ctx context.Context, job storage.MemoryJob) er
 		if err = json.Unmarshal([]byte(jsonObject(response)), &result); err != nil {
 			return errors.New("memory extraction returned invalid JSON")
 		}
-		result = boundedMemoryExtraction(result, prompt, session.ProjectID, facts, snapshot.Steps)
+		result = boundedMemoryExtraction(result, prompt, session.ProjectID, facts, snapshot.Steps())
 		payload, err := json.Marshal(result)
 		if err != nil {
 			return err
@@ -404,7 +404,7 @@ func memoryExtractionInput(prompt string, snapshot runtime.Snapshot, projectID s
 	}
 	trajectory := []map[string]any{}
 	bytes := 0
-	for _, step := range snapshot.Steps {
+	for _, step := range snapshot.Steps() {
 		if len(trajectory) >= 20 || bytes >= 6000 {
 			break
 		}
@@ -417,8 +417,8 @@ func memoryExtractionInput(prompt string, snapshot runtime.Snapshot, projectID s
 		bytes += len(args) + len(output)
 	}
 	user, _ := storage.SanitizeHistoryText(prompt, 3000)
-	answer, _ := storage.SanitizeHistoryText(snapshot.Output, 3500)
-	input := map[string]any{"project_id": projectID, "existing_facts": facts, "user_message": user, "answer": answer, "trajectory": trajectory, "verified_step_ids": verifiedMemorySteps(snapshot.Steps), "observed_at": snapshot.UpdatedAt}
+	answer, _ := storage.SanitizeHistoryText(runtime.PublicReply(snapshot), 3500)
+	input := map[string]any{"project_id": projectID, "existing_facts": facts, "user_message": user, "answer": answer, "trajectory": trajectory, "verified_step_ids": verifiedMemorySteps(snapshot.Steps()), "observed_at": snapshot.UpdatedAt}
 	payload, _ := json.Marshal(input)
 	if len(payload) > 32*1024 {
 		input["existing_facts"] = facts[:min(6, len(facts))]

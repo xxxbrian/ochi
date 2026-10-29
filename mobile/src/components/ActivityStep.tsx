@@ -1,3 +1,4 @@
+import { isToolFailure, toolNeedsUser } from "../../../shared/conversation/projection";
 import { t, useI18n, type MessageKey } from "../lib/i18n";
 import { memo, useMemo, useState } from "react";
 import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, View } from "react-native";
@@ -119,7 +120,7 @@ export const StepRow = memo(function StepRow({ step, expansion, onExpansionChang
         ) : (
           <Icon
             size={16}
-            color={step.status === "failed" ? colors.error : colors.muted}
+            color={isToolFailure(step) ? colors.error : colors.muted}
             strokeWidth={1.7}
           />
         )}
@@ -134,7 +135,8 @@ export const StepRow = memo(function StepRow({ step, expansion, onExpansionChang
           <View style={{ flex: 1 }}>
             <View style={styles.heading}>
               <AppText size={13}>{label}</AppText>
-              {step.status === "failed" && (
+              {toolNeedsUser(step) && <AppText size={11} style={{ color: colors.muted }}>{t("process.needsUser")}</AppText>}
+              {isToolFailure(step) && (
                 <AppText size={11} style={{ color: colors.error }}>{t("common.failed")}</AppText>
               )}
             </View>

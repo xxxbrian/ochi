@@ -93,7 +93,7 @@ func seedMemorySource(t *testing.T, s *Store) {
 	}{
 		{`INSERT INTO users(id,username,display_name,password_hash) VALUES($1,$1,'QA','not-a-login')`, []any{memoryQAUser}},
 		{`INSERT INTO sessions(id,user_id,title) VALUES($1,$2,'Memory source')`, []any{memoryQASession, memoryQAUser}},
-		{`INSERT INTO runs(id,session_id,status,timeline) VALUES($1,$2,'completed','[]')`, []any{memoryQARun, memoryQASession}},
+		{`INSERT INTO runs(id,session_id,status,items) VALUES($1,$2,'completed','[]')`, []any{memoryQARun, memoryQASession}},
 		{`INSERT INTO messages(session_id,run_id,role,content) VALUES($1,$2,'user','I prefer Go. Actually I now prefer Rust. My timezone is Asia/Shanghai.')`, []any{memoryQASession, memoryQARun}},
 	} {
 		if _, err := s.db.Exec(context.Background(), seed.sql, seed.args...); err != nil {

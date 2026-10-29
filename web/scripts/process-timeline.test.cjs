@@ -4,6 +4,8 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 const ts = require("typescript");
+const sharedLoad = require("../../shared/conversation/test-loader.cjs").createLoader(ts, require);
+const sharedModule = (name) => name.includes("shared/conversation/") ? sharedLoad(path.resolve(__dirname, "../..", "shared/conversation", name.split("shared/conversation/")[1] + ".ts")) : undefined;
 const { createI18nHarness } = require("./i18n-harness.cjs");
 const i18n = createI18nHarness();
 
@@ -13,7 +15,7 @@ function load(file, imports = {}, tail = "", globals = {}) {
   const module = { exports: {} };
   vm.runInNewContext(output + tail, {
     module, exports: module.exports, URL, ...globals,
-    require(name) { if (name in imports) return imports[name]; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
+    require(name) { if (sharedModule(name)) return sharedModule(name); if (name in imports) return imports[name]; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
   }, { filename: file });
   return module.exports;
 }
@@ -23,108 +25,10 @@ const { reduceRunDelta } = load("src/lib/runReducer.ts", { "./processTimeline": 
 const { projectChatMessages, chatMessageKey } = load("src/lib/chatProjection.ts");
 const { parseRunEvent } = load("src/lib/sse.ts");
 const plain = (value) => JSON.parse(JSON.stringify(value));
-const snapshot = (patch = {}) => ({ run_id: "A", session_id: "S", seq: 0, status: "running", output: "", steps: [], timeline: [], updated_at: "", ...patch });
+const snapshot = (patch = {}) => ({ run_id: "A", session_id: "S", seq: 0, status: "running", items: [], updated_at: "", ...patch });
 const reasoning = (id, seq, text = "Thinking") => ({ id, seq, kind: "reasoning", reasoning: { id, kind: "reasoning", text, done: false } });
 const progress = (id, seq, text = "Checking sources") => ({ id, seq, kind: "progress", text });
 const tool = (id, seq, name = "exec", status = "completed", output) => ({ id, seq, kind: "tool", step: { id, name, status, output, arguments: { command: `echo ${id}` } } });
-
-test("public text keeps the same timeline occurrence across commit and combined timeline updates", () => {
-  const pending = { ...progress("P1", 1, "Checking"), pending: true };
-  const updatedAt = "2026-10-16T10:00:01Z";
-  const delta = parseRunEvent({ type: "text_delta", data: JSON.stringify({ type: "text_delta", run_id: "A", seq: 1, text: "Checking", updated_at: updatedAt, timeline_entry: pending }) });
-  const working = reduceRunDelta(snapshot(), delta);
-  assert.equal(working.output, "Checking");
-  assert.equal(working.timeline[0].pending, true);
-  assert.equal(working.updated_at, updatedAt);
-  const committed = { ...pending, pending: false, final: true };
-  const commit = parseRunEvent({ type: "output_commit", data: JSON.stringify({ type: "output_commit", run_id: "A", seq: 2, text: "Checking", updated_at: "2026-10-16T10:00:02Z", timeline: [pending], timeline_entry: committed }) });
-  const final = reduceRunDelta(working, commit);
-  assert.equal(final.output, "Checking");
-  assert.deepEqual(plain(final.timeline), [committed]);
-  assert.equal(final.updated_at, "2026-10-16T10:00:02Z");
-  const textOnly = reduceRunDelta(working, { kind: "output_commit", value: { seq: 2, text: "Checking" } });
-  assert.equal(textOnly.timeline, working.timeline, "a missing timeline is not an instruction to discard public blocks");
-});
-
-test("late commentary classification preserves chronology and replaces the answer buffer", () => {
-  const pending = { ...progress("P1", 1, "Sources"), pending: true };
-  const after = reasoning("R1", 2);
-  const event = parseRunEvent({ type: "progress", data: JSON.stringify({ type: "progress", run_id: "A", seq: 3, text: "Real answer", updated_at: "2026-10-16T10:00:03Z", timeline_entry: { ...pending, pending: false } }) });
-  const next = reduceRunDelta(snapshot({ output: "SourcesReal answer", timeline: [pending, after] }), event);
-  assert.equal(next.output, "Real answer");
-  assert.equal(next.timeline[0].seq, 1);
-  assert.equal(next.timeline[0].pending, false);
-  assert.equal(next.timeline[1], after);
-});
-
-test("reasoning full upsert does not append twice or move its original slot", () => {
-  const first = reasoning("R1", 1), command = tool("T1", 2), nextThought = reasoning("R2", 3);
-  const next = reduceRunDelta(snapshot({ reasoning: [first.reasoning, nextThought.reasoning], timeline: [first, command, nextThought] }), {
-    kind: "reasoning_delta", value: { seq: 4, reasoning: { ...first.reasoning, text: " more" }, timeline_entry: { ...first, seq: 4, reasoning: { ...first.reasoning, text: "Thinking more" } } },
-  });
-  assert.deepEqual(Array.from(next.timeline, (entry) => entry.id), ["R1", "T1", "R2"]);
-  assert.equal(next.timeline[0].seq, 1);
-  assert.equal(next.timeline[0].reasoning.text, "Thinking more");
-  assert.equal(next.reasoning[0].text, "Thinking more");
-  assert.equal(next.timeline[1], command);
-});
-
-test("step completion updates in place before later reasoning", () => {
-  const command = tool("T1", 2, "exec", "running"), thought = reasoning("R1", 3);
-  const next = reduceRunDelta(snapshot({ timeline: [command, thought], steps: [command.step] }), {
-    kind: "step", value: { seq: 4, step: { ...command.step, status: "completed" }, timeline_entry: { ...command, seq: 4, step: { ...command.step, status: "completed" } } },
-  });
-  assert.equal(next.timeline[0].seq, 2);
-  assert.equal(next.timeline[0].step.status, "completed");
-  assert.equal(next.timeline[1], thought);
-});
-
-test("promoted public reply keeps the first-text position despite later output_reset", () => {
-  const thought = reasoning("R1", 3), command = tool("T1", 5);
-  const next = reduceRunDelta(snapshot({ output: "Checking sources", timeline: [thought, command] }), {
-    kind: "output_reset", value: { seq: 6, timeline: [command, progress("P1", 2), thought] },
-  });
-  assert.equal(next.output, "");
-  assert.deepEqual(Array.from(next.timeline, (entry) => entry.kind), ["progress", "reasoning", "tool"]);
-  assert.equal(next.timeline[0].text, "Checking sources");
-});
-
-test("final output is separate from progress and terminal timeline repairs states", () => {
-  const command = tool("T1", 2, "exec", "running"), note = progress("P1", 1, "Searching");
-  const next = reduceRunDelta(snapshot({ output: "Final answer", timeline: [note, command] }), {
-    kind: "status", value: { seq: 7, status: "completed", timeline: [note, { ...command, step: { ...command.step, status: "completed" } }] },
-  });
-  assert.equal(next.output, "Final answer");
-  assert.equal(next.timeline.some((entry) => entry.text === next.output), false);
-  assert.equal(next.timeline[1].step.status, "completed");
-});
-
-test("text deltas retain the empty timeline and an authoritative reset clears process without reconstructing it", () => {
-  const timeline = [];
-  const next = reduceRunDelta(snapshot({ timeline }), { kind: "text_delta", value: { seq: 1, text: "Hello" } });
-  assert.equal(next.timeline, timeline);
-  assert.equal(process.processHasContent(next.timeline), false);
-  const thought = reasoning("R1", 1), command = tool("T1", 2);
-  const reset = reduceRunDelta(snapshot({ timeline: [thought, command], reasoning: [thought.reasoning], steps: [command.step] }), {
-    kind: "output_reset", value: { seq: 3, timeline: [] },
-  });
-  assert.equal(reset.reasoning.length, 1);
-  assert.equal(reset.steps.length, 1);
-  assert.equal(process.processHasContent(reset.timeline), false);
-});
-
-test("current waiting payload pauses for input and running status clears it without losing Computer permission", () => {
-  const input = { kind: "question", question: "Which file?", options: ["Report", "Notes"] };
-  const waiting = parseRunEvent({ type: "waiting", data: JSON.stringify({ type: "waiting", run_id: "A", seq: 1, status: "waiting_user", waiting_input: input }) });
-  const paused = reduceRunDelta(snapshot({ computer_granted: true }), waiting);
-  assert.equal(paused.status, "waiting_user");
-  assert.deepEqual(plain(paused.waiting_input), input);
-  assert.equal(paused.computer_granted, true);
-  const resumed = reduceRunDelta(paused, { kind: "status", value: { run_id: "A", seq: 2, status: "running", computer_granted: false } });
-  assert.equal(resumed.waiting_input, undefined);
-  assert.equal(resumed.computer_granted, false);
-  assert.equal(reduceRunDelta(resumed, { kind: "status", value: { run_id: "A", seq: 3, status: "waiting_resource" } }).status, "waiting_resource");
-});
 
 test("public progress alone counts as process; final answer alone does not", () => {
   assert.equal(process.processHasContent([progress("P1", 1)]), true);
@@ -149,7 +53,9 @@ test("thinking and public progress each break adjacent-tool aggregation", () => 
 });
 
 test("failed and nonzero-exit tools remain individually visible boundaries", () => {
-  for (const bad of [tool("bad", 2, "exec", "failed"), tool("bad", 2, "exec", "completed", '{"exit_code":1}')]) {
+  for (const status of ["failed", "completed"]) {
+    const bad = tool("bad", 2, "exec", status, '{"exit_code":1}');
+    bad.step.outcome = "failure";
     const rows = process.groupProcessEntries([tool("T1", 1), bad, tool("T2", 3)]);
     assert.equal(rows.length, 3);
     assert.equal(rows[1].kind, "entry");
@@ -194,16 +100,9 @@ test("search URL safety normalizes terminal dots and validates DNS labels/ports 
   assert.equal(process.publicWebUrl("https://example.com:65535/path"), "https://example.com:65535/path");
 });
 
-test("wire parser preserves additive timeline_entry and authoritative timeline on existing event kinds", () => {
-  const value = { seq: 4, run_id: "A", timeline: [progress("P1", 1)] };
-  const parsed = parseRunEvent({ type: "output_reset", data: JSON.stringify(value) });
-  assert.equal(parsed.kind, "output_reset");
-  assert.deepEqual(plain(parsed.value), value);
-});
-
 test("live process and persisted assistant use one stable host key without a duplicate final row", () => {
   const user = { id: "U1", role: "user", content: "Hello", created_at: "2026-10-13" };
-  const state = snapshot({ output: "Final answer" });
+  const state = snapshot({ items: [{ id: "p", seq: 1, kind: "text", source_id: "p", round_id: "r", text: "Final answer", phase: "final", state: "completed" }] });
   const live = projectChatMessages([user], state);
   const saved = { ...live[1], id: "database-message", created_at: "2026-10-13" };
   const persisted = projectChatMessages([user, saved], state);

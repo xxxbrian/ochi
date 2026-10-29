@@ -1,3 +1,4 @@
+import { projectRun } from "../../../shared/conversation/projection";
 import { t, useI18n, type MessageKey } from "../lib/i18n";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -27,12 +28,10 @@ import { isActiveStatus, userFacingRunError } from "../lib/api";
 import {
   detailLabel,
   formatReasoningText,
-  hasProcessHistory,
   timelineSegments,
   processNearBottom,
   processPanelLimit,
   processRows,
-  reconcileTerminalText,
   stepTarget,
   type ProcessRow,
   type ToolFamily,
@@ -57,7 +56,8 @@ export function runLabel(snapshot: Snapshot) {
     return snapshot.waiting_input?.kind === "computer_permission" ? t("status.waitingPermission") : t("status.waitingReply");
   if (snapshot.status === "waiting_resource")
     return snapshot.resource?.includes("desktop") ? t("status.waitingComputer") : t("status.waitingWorkspace");
-  const running = snapshot.steps.findLast((step) => step.status === "running");
+  const view = projectRun(snapshot);
+  const running = view.steps.findLast((step) => step.status === "running");
   if (running) {
     if (/image/.test(running.name)) return t("status.generatingImage");
     if (/^(?:web_search|search)$/.test(running.name)) return t("status.searching");
@@ -68,9 +68,9 @@ export function runLabel(snapshot: Snapshot) {
     if (running.name.startsWith("files_")) return t("status.handlingFiles");
     return t("status.working");
   }
-  const latest = snapshot.timeline.at(-1);
+  const latest = view.entries.at(-1);
   if (latest?.kind === "progress" && latest.text) return t("status.replying");
-  if (snapshot.reasoning?.some((part) => !part.done)) return t("status.thinking");
+  if (view.reasoning.some((part) => !part.done)) return t("status.thinking");
   return t("status.working");
 }
 
@@ -94,12 +94,13 @@ export const Activity = memo(function Activity({
   useI18n();
   const { colors } = useTheme();
   const reducedMotion = useReducedMotion();
+  const view = useMemo(() => projectRun(snapshot), [snapshot]);
   const completed = snapshot.status === "completed";
   const active = isActiveStatus(snapshot.status);
   const working = snapshot.status === "running";
   const [open, setOpen] = useState(defaultExpanded);
   const [openGroup, setOpenGroup] = useState<string | null>(() => defaultExpanded
-    ? snapshot.timeline.find((entry) => entry.kind !== "progress")?.id ?? null : null);
+    ? view.plan.rows.find((row) => row.kind === "process")?.id ?? null : null);
   const [manualReading, setManualReading] = useState(defaultExpanded);
   const [heldAtCompletion, setHeldAtCompletion] = useState(false);
   const [finishedLayout, setFinishedLayout] = useState(completed);
@@ -111,13 +112,12 @@ export const Activity = memo(function Activity({
     setStepExpansion((previous) => previous[id]?.open === next.open && previous[id]?.technical === next.technical
       ? previous : { ...previous, [id]: next });
   }, []);
-  const timeline = useMemo(() => completed ? reconcileTerminalText(snapshot, snapshot.output) : snapshot.timeline,
-    [completed, snapshot.timeline, snapshot.output]);
+  const timeline = view.entries;
   const segments = useMemo(() => timelineSegments(timeline), [timeline]);
   const history = useMemo(() => timeline.filter((entry) => !entry.final), [timeline]);
-  const hasHistory = hasProcessHistory({ ...snapshot, timeline });
+  const hasHistory = view.plan.hasWork;
   const firstFinal = timeline.find((entry) => entry.kind === "progress" && entry.final && entry.text?.trim())?.id;
-  const canFold = completed && Boolean(snapshot.output.trim() || firstFinal);
+  const canFold = view.plan.canRollUp;
   // Lock in an explicit reading choice before removing earlier native views.
   const retainHistory = heldAtCompletion || (completed && !wasCompleted.current && (manualReading || readingTranscript));
   useEffect(() => {
@@ -135,7 +135,7 @@ export const Activity = memo(function Activity({
     onReadingChange?.(reading, interaction);
   }, [onReadingChange]);
   const collapse = canFold && finishedLayout && hasHistory && !retainHistory;
-  const completedSteps = snapshot.steps.filter((step) => step.status === "completed").length;
+  const completedSteps = view.steps.filter((step) => step.status === "completed" && step.outcome !== "needs_user").length;
   function toggleHistory() {
     const next = !open;
     setOpen(next);
@@ -167,7 +167,7 @@ export const Activity = memo(function Activity({
             ? <Check size={16} color={colors.muted} /> : snapshot.status === "cancelled"
               ? <Square size={14} color={colors.muted} /> : <CircleAlert size={16} color={colors.error} />}
           <ActivityStatusText working={working}>{runLabel(snapshot)}</ActivityStatusText>
-          {snapshot.steps.length > 0 && <AppText muted size={12}>{completed ? t("process.steps", { count: snapshot.steps.length }) : `· ${t("process.completedSteps", { count: completedSteps })}`}</AppText>}
+          {view.steps.length > 0 && <AppText muted size={12}>{completed ? t("process.steps", { count: view.steps.length }) : `· ${t("process.completedSteps", { count: completedSteps })}`}</AppText>}
           <ProcessElapsed createdAt={snapshot.created_at} updatedAt={snapshot.updated_at} active={active} />
           {hasHistory && canFold && !retainHistory && <ActivityDisclosure color={colors.subtle} open={open} />}
         </Pressable>
@@ -300,7 +300,7 @@ const ToolGroup = memo(function ToolGroup({ row, stepExpansion, onStepExpansionC
   if (row.steps.length === 1 || !row.family) return <View collapsable={false} style={styles.group}>{stepRows}</View>;
   const [labelKey, Icon] = familyInfo[row.family];
   const label = t(labelKey);
-  const completed = row.steps.filter((step) => step.status === "completed").length;
+  const completed = row.steps.filter((step) => step.status === "completed" && step.outcome !== "needs_user").length;
   const running = row.steps.findLast((step) => step.status === "running");
   return (
     <View collapsable={false} style={styles.group}>

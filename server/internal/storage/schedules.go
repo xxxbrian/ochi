@@ -356,7 +356,7 @@ func (s *Store) LinkScheduleExecution(ctx context.Context, executionID, runID, s
 	return tx.Commit(ctx)
 }
 
-const executionColumns = `e.id::text,e.schedule_id::text,COALESCE(e.run_id::text,''),COALESCE(e.session_id::text,''),COALESCE(r.status,e.status),COALESCE(NULLIF(r.error,''),e.error),COALESCE(NULLIF(r.error_code,''),e.error_code),COALESCE(r.output,''),COALESCE(r.artifacts,'[]'),e.started_at,CASE WHEN r.status IN ('completed','failed','interrupted','cancelled') THEN r.updated_at ELSE e.finished_at END`
+const executionColumns = `e.id::text,e.schedule_id::text,COALESCE(e.run_id::text,''),COALESCE(e.session_id::text,''),COALESCE(r.status,e.status),COALESCE(NULLIF(r.error,''),e.error),COALESCE(NULLIF(r.error_code,''),e.error_code),COALESCE((SELECT content FROM messages WHERE run_id=r.id AND role='assistant' AND NOT archived LIMIT 1),''),COALESCE(r.artifacts,'[]'),e.started_at,CASE WHEN r.status IN ('completed','failed','interrupted','cancelled') THEN r.updated_at ELSE e.finished_at END`
 
 func scanExecution(row pgx.Row) (ScheduleExecution, error) {
 	var v ScheduleExecution

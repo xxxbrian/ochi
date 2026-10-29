@@ -73,13 +73,13 @@ func TestResearchWorkingFilesNeverBecomeDeliverablesAtRunEnd(t *testing.T) {
 				source.paths = append(source.paths, map[string]string{"path": req.Scope.CWD + "/" + path})
 			}
 			f.server.agent = artifactPolicyGenerator(func(_ context.Context, _ agent.Request, emit func(agent.Update) error) error {
-				if err := emit(agent.Update{Step: &agent.Step{ID: "clone", Name: "exec", Status: "completed", Output: `{"exit_code":0}`}}); err != nil {
+				if err := emit(agent.Update{RoundID: "fixture", TextID: "fixture-text", Step: &agent.Step{ID: "clone", Name: "exec", Status: "completed", Output: `{"exit_code":0}`}}); err != nil {
 					return err
 				}
 				if failed {
 					return errors.New("controlled research interruption")
 				}
-				return emit(agent.Update{Text: "Research answer with source links; no file requested."})
+				return emit(agent.Update{RoundID: "fixture", TextID: "fixture-text", Text: "Research answer with source links; no file requested."})
 			})
 			f.server.execute(run, req)
 			stored, err := f.server.store.GetRun(ctx, f.owner, req.RunID)
@@ -126,7 +126,7 @@ func TestExplicitPublicationSurvivesCompletionWithoutImplicitNewVersion(t *testi
 			return err
 		}
 		source.paths = []map[string]string{{"path": request.Scope.CWD + "/requested-script.py"}}
-		return emit(agent.Update{Step: &agent.Step{ID: "write", Name: "files_write", Status: "completed"}, Text: "[Requested script](" + delivered.URL + ")"})
+		return emit(agent.Update{RoundID: "fixture", TextID: "fixture-text", Step: &agent.Step{ID: "write", Name: "files_write", Status: "completed"}, Text: "[Requested script](" + delivered.URL + ")"})
 	})
 	f.server.execute(run, req)
 	stored, err := f.server.store.GetRun(ctx, f.owner, req.RunID)

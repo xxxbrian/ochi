@@ -1,5 +1,6 @@
 // Interface messages only. Never pass user or model text to the translator.
 export const messages = {
+  "process.needsUser": { en: "Needs your attention", "zh-CN": "需要你接手", "zh-TW": "需要你接手" },
   "model.tokens": { "en": "Tokens", "zh-CN": "Token 数", "zh-TW": "Token 數" },
   "date.previousMonth": { "en": "Previous month", "zh-CN": "上个月", "zh-TW": "上個月" },
   "date.nextMonth": { "en": "Next month", "zh-CN": "下个月", "zh-TW": "下個月" },

@@ -42,7 +42,7 @@ func (s *Store) EnqueueRun(ctx context.Context, v PendingRun, priority bool) (ru
 		ids = []byte(`[]`)
 	}
 	var snapshot runtime.Snapshot
-	err = tx.QueryRow(ctx, `INSERT INTO runs(id,session_id,status,model_id,model_name,effort,timeline) VALUES($1,$2,'queued',$3,$4,$5,'[]'::jsonb) RETURNING id::text,session_id::text,status,seq,updated_at,created_at`, v.RunID, v.SessionID, v.ModelID, v.ModelName, v.Effort).Scan(&snapshot.RunID, &snapshot.SessionID, &snapshot.Status, &snapshot.Seq, &snapshot.UpdatedAt, &snapshot.CreatedAt)
+	err = tx.QueryRow(ctx, `INSERT INTO runs(id,session_id,status,model_id,model_name,effort,items) VALUES($1,$2,'queued',$3,$4,$5,'[]'::jsonb) RETURNING id::text,session_id::text,status,seq,updated_at,created_at`, v.RunID, v.SessionID, v.ModelID, v.ModelName, v.Effort).Scan(&snapshot.RunID, &snapshot.SessionID, &snapshot.Status, &snapshot.Seq, &snapshot.UpdatedAt, &snapshot.CreatedAt)
 	if err != nil {
 		return snapshot, err
 	}
@@ -59,8 +59,7 @@ func (s *Store) EnqueueRun(ctx context.Context, v PendingRun, priority bool) (ru
 		return snapshot, err
 	}
 	snapshot.ModelID, snapshot.ModelName, snapshot.Effort = v.ModelID, v.ModelName, v.Effort
-	snapshot.Steps = []runtime.Step{}
-	snapshot.Timeline = []runtime.ProcessEntry{}
+	snapshot.Items = []runtime.Item{}
 	return snapshot, tx.Commit(ctx)
 }
 

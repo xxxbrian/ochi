@@ -57,6 +57,7 @@
   "devDependencies": {
     "@types/react": "~19.2.18",
     "babel-preset-expo": "~57.0.14",
+    "react-test-renderer": "19.2.3",
     "typescript": "~6.0.3"
   },
   "packageManager": "pnpm@12.14.0",

@@ -63,7 +63,7 @@ function readerPaused(scroll: HTMLElement | null) {
 
 export const RunTranscript = memo(function RunTranscript({ timeline, output, status, waitingKind, resource, error, errorCode, hasArtifacts = false, createdAt, updatedAt, expanded, onExpandedChange, renderBody }: Props) {
   useI18n();
-  const plan = useMemo(() => transcriptPlan(timeline, output, status), [timeline, output, status]);
+  const plan = useMemo(() => ({ ...transcriptPlan(timeline, status), fallback: timeline.some((entry) => entry.kind === "progress" && entry.text?.trim()) ? "" : output }), [timeline, output, status]);
   const root = useRef<HTMLDivElement>(null);
   const work = useRef<HTMLDivElement>(null);
   const answer = useRef<HTMLDivElement>(null);

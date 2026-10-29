@@ -8,7 +8,7 @@ import type { ImageURISource } from 'react-native';
 import type {
   ApiError, Artifact, Memory, Message, Model, NativeUpload,
   PendingRun, Project, ProjectDetail, RunOptions, RunStatus, Schedule, ScheduleExecution,
-  Plugin, Session, SessionPage, SessionPatch, Snapshot, User, UserPreferences,
+  Plugin, Session, SessionHead, SessionPage, SessionPatch, Snapshot, User, UserPreferences,
   RunInstruction,
 } from './types';
 
@@ -152,16 +152,17 @@ export const api = {
     Object.entries(options).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)); });
     return request<SessionPage>(`/api/sessions/page?${params}`, { signal });
   },
+  sessionHead: (sessionId: string, signal?: AbortSignal) => request<SessionHead>(`/api/sessions/${id(sessionId)}/head`, { signal }),
   session: (sessionId: string) => request<Session>(`/api/sessions/${id(sessionId)}`),
   createSession: (model_id?: string, effort?: string, project_id?: string, computer_enabled?: boolean) => request<Session>('/api/sessions', json('POST', { model_id, effort, project_id, computer_enabled })),
   updateSession: (sessionId: string, patch: SessionPatch) => request<Session>(`/api/sessions/${id(sessionId)}`, json('PATCH', patch)),
   deleteSession: (sessionId: string) => request<void>(`/api/sessions/${id(sessionId)}`, { method: 'DELETE' }),
-  messages: (sessionId: string, before?: string) => request<Message[]>(`/api/sessions/${id(sessionId)}/messages?limit=100${before ? `&before=${id(before)}` : ''}`),
+  messages: (sessionId: string, before?: string, signal?: AbortSignal) => request<Message[]>(`/api/sessions/${id(sessionId)}/messages?limit=100${before ? `&before=${id(before)}` : ''}`, { signal }),
   startRun: (sessionId: string, message: string, options: RunOptions = {}) => request<Snapshot>(`/api/sessions/${id(sessionId)}/runs`, json('POST', { message, ...options })),
   run: (runId: string, signal?: AbortSignal) => request<Snapshot>(`/api/runs/${id(runId)}`, { signal }),
   runInstructions: (runId: string, signal?: AbortSignal) => request<RunInstruction[]>(`/api/runs/${id(runId)}/instructions`, { signal }),
   supplementRun: (runId: string, content: string, clientKey: string, signal?: AbortSignal) => request<RunInstruction>(`/api/runs/${id(runId)}/instructions`, { ...json('POST', { content, client_key: clientKey }), signal }),
-  queue: (sessionId: string) => request<PendingRun[]>(`/api/sessions/${id(sessionId)}/queue`),
+  queue: (sessionId: string, signal?: AbortSignal) => request<PendingRun[]>(`/api/sessions/${id(sessionId)}/queue`, { signal }),
   updateQueuedRun: (sessionId: string, runId: string, patch: { message: string }) => request<PendingRun>(`/api/sessions/${id(sessionId)}/queue/${id(runId)}`, json('PATCH', patch)),
   cancelQueuedRun: (sessionId: string, runId: string) => request<void>(`/api/sessions/${id(sessionId)}/queue/${id(runId)}`, { method: 'DELETE' }),
   cancelRun: (runId: string) => request<Snapshot>(`/api/runs/${id(runId)}/cancel`, json('POST')),

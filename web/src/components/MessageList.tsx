@@ -23,7 +23,7 @@ import { isActiveStatus } from "../lib/api";
 import type { Message, Snapshot } from "../lib/types";
 import { chatMessageKey, projectChatMessages } from "../lib/chatProjection";
 import { markdownImageUrls } from "../lib/markdown";
-import { terminalPublicReply } from "../lib/runPresentation";
+import { publicReply } from "../lib/runPresentation";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { UserMessage } from "./UserMessage";
 import { HistoryProcess } from "./HistoryProcess";
@@ -145,8 +145,8 @@ const HistoryMessage = memo(function HistoryMessage({
   const runStatus = messageRunStatus(message, snapshot);
   const terminalMessage = message.run_status && !isActiveStatus(message.run_status);
   const visibleContent = terminalMessage && message.content.trim() ? message.content
-    : snapshot && !isActiveStatus(runStatus) ? terminalPublicReply(snapshot.timeline, snapshot.output, runStatus)
-    : snapshot?.output ?? message.content;
+    : snapshot && !isActiveStatus(runStatus) ? publicReply(snapshot)
+    : snapshot ? publicReply(snapshot) : message.content;
   const embeddedImages = useMemo(
     () => markdownImageUrls(message.content),
     [message.content],
@@ -315,7 +315,7 @@ export function MessageList({
       prependScroll.current = null;
     }
     scrollToLatest();
-  }, [messages, snapshot?.output, snapshot?.status, scrollToLatest]);
+  }, [messages, snapshot?.items, snapshot?.status, scrollToLatest]);
   useEffect(() => {
     const column = columnRef.current;
     if (!column) return;

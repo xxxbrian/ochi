@@ -1,3 +1,4 @@
+import { publicReply } from "../../../../shared/conversation/projection";
 import { t, useAdminI18n, getLocale, translateError } from "./i18n";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -452,6 +453,11 @@ export function WorkspacesPage() {
       setBusy("");
     }
   }
+  function workspaceName(item: Workspace) {
+    return item.kind === "control"
+      ? t("pluginControlWorkspace")
+      : users.find((user) => user.id === item.user_id)?.display_name || item.user_id;
+  }
   return (
     <>
       <div className="admin-page-heading">
@@ -476,11 +482,12 @@ export function WorkspacesPage() {
               <span className="integration-icon"><Cpu size={18} /></span>
               <div className="workspace-row-main">
                 <strong>
-                  {users.find((user) => user.id === item.user_id)
-                    ?.display_name || item.user_id}
+                  {workspaceName(item)}
                 </strong>
                 <span>{item.image}</span>
                 <small>{item.container}</small>
+                {item.kind === "control" && <small>{t("pluginControlDescription")}</small>}
+                {item.update_available && <small>{t("workspaceImageUpdateAvailable")}</small>}
               </div>
               <span className={`admin-state${item.running ? " is-enabled" : ""}`}>
                 <i />{item.running ? t("running") : item.state || t("notStarted")}
@@ -526,8 +533,7 @@ export function WorkspacesPage() {
           }
         >
           <p>
-            {users.find((user) => user.id === confirm.user_id)?.display_name ||
-              confirm.user_id}
+            {workspaceName(confirm)}
           </p>
         </Modal>
       )}
@@ -733,9 +739,9 @@ export function RunsPage({ currentUserID, onNavigate }: { currentUserID: string;
         {detailTab === "result" ? <>
           <div className="run-prompt-text">{detail.prompt}</div>
           {(detail.error_code || detail.error) && <pre className="run-error-output">{translateError(detail.error_code) ?? detail.error}</pre>}
-          {detail.output && <div className="markdown-body"><Suspense fallback={<div>{detail.output}</div>}><MarkdownContent content={detail.output} isStreaming={false} /></Suspense></div>}
+          {publicReply(detail) && <div className="markdown-body"><Suspense fallback={<div>{publicReply(detail)}</div>}><MarkdownContent content={publicReply(detail)} isStreaming={false} /></Suspense></div>}
           {detail.artifacts.length > 0 && (detail.user_id === currentUserID ? <FileCards files={detail.artifacts} /> : <ul className="run-artifact-names">{detail.artifacts.map(file => <li key={file.id}>{file.name}</li>)}</ul>)}
-        </> : detailTab === "tools" ? (detail.steps.length ? detail.user_id === currentUserID ? <StepList steps={detail.steps} /> : <ReadOnlySteps steps={detail.steps} /> : <div className="table-empty">{t("noToolCalls")}</div>) : detailTab === "requests" ? <RequestDiagnostics key={`${detail.run_id}:${detailRevision}`} runID={detail.run_id} /> : <dl className="run-data-facts">
+        </> : detailTab === "tools" ? (detail.items.flatMap((item) => item.step ? [item.step] : []).length ? detail.user_id === currentUserID ? <StepList steps={detail.items.flatMap((item) => item.step ? [item.step] : [])} /> : <ReadOnlySteps steps={detail.items.flatMap((item) => item.step ? [item.step] : [])} /> : <div className="table-empty">{t("noToolCalls")}</div>) : detailTab === "requests" ? <RequestDiagnostics key={`${detail.run_id}:${detailRevision}`} runID={detail.run_id} /> : <dl className="run-data-facts">
           {[
             [t("users"), detail.display_name || detail.username], [t("provider"), detail.provider_name || "—"], [t("inputTokens"), formatTokens(detail.usage?.prompt_tokens)], [t("outputTokens"), formatTokens(detail.usage?.completion_tokens)], [t("cachedTokens"), formatTokens(detail.usage?.cached_tokens)], [t("totalDuration"), formatDuration(detail.duration_ms)], [t("update"), new Date(detail.updated_at).toLocaleString(getLocale(), { hour12: false })], [t("files"), String(detail.artifact_count)], [t("runID"), detail.run_id], [t("sessionID"), detail.session_id], [t("userID"), detail.user_id], ...(detail.resource ? [[t("resource"), detail.resource]] : []), ...(detail.archived ? [[t("version"), t("archivedVersion")]] : []),
           ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}

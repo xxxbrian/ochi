@@ -14,15 +14,12 @@ import type {
   Artifact,
   Message,
   Model,
-  PendingRun,
   Project,
   Session,
   SessionPage,
-  Snapshot,
   User,
 } from "./lib/types";
-import { useRunStream } from "./hooks/useRunStream";
-import { useRunInstructions } from "./hooks/useRunInstructions";
+import { useConversation } from "./hooks/useConversation";
 import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar, MobileMenuButton } from "./components/Sidebar";
 import { MessageList } from "./components/MessageList";
@@ -96,19 +93,16 @@ export default function App() {
   const railPaged = useRef(false);
   const railGeneration = useRef(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [posting, setPosting] = useState(false);
+  const [bootstrapLoading, setBootstrapLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [models, setModels] = useState<Model[]>([]);
   const [modelId, setModelId] = useState("");
   const [effort, setEffort] = useState("");
   const { route, navigate } = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [queue, setQueue] = useState<PendingRun[]>([]);
   const [budget, setBudget] = useState<number | undefined>();
   const [reasoningEnabled, setReasoningEnabled] = useState(true);
   const [computerDefault, setComputerDefault] = useState(false);
@@ -117,8 +111,6 @@ export default function App() {
   const [computerUpdating, setComputerUpdating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [computerOpen, setComputerOpen] = useState(false);
-  const [olderAvailable, setOlderAvailable] = useState(false);
-  const [olderLoading, setOlderLoading] = useState(false);
   const [revision, setRevision] = useState<{
     message: Message;
     kind: "edit" | "retry";
@@ -127,7 +119,6 @@ export default function App() {
   const [composerKey, setComposerKey] = useState(0);
   const userRef = useRef<User | null>(null);
   const selectedRef = useRef<string | null>(null);
-  const selectedSessionRef = useRef<Session | null>(null);
   const modelsRef = useRef<Model[]>([]);
   const preferredModelRef = useRef("");
   const confirmedModelRef = useRef("");
@@ -140,19 +131,6 @@ export default function App() {
   const selectionGeneration = useRef(0);
   userRef.current = user;
   modelsRef.current = models;
-  const updateSelectedSession = useCallback((next: Session | null) => {
-    if (!next) {
-      selectedSessionRef.current = null;
-      setSelectedSession(null);
-      return;
-    }
-    if (next.id !== selectedRef.current) return;
-    const current = selectedSessionRef.current;
-    if (current?.id === next.id && olderSession(next, current)) return;
-    const updated = { ...current, ...next };
-    selectedSessionRef.current = updated;
-    setSelectedSession(updated);
-  }, []);
   const replaceSessions = useCallback(
     (page: SessionPage, reset = false) => {
       const list = page.items;
@@ -166,60 +144,14 @@ export default function App() {
         const boundary = list[list.length - 1];
         return [...list, ...current.filter((item) => !seen.has(item.id) && olderSession(item, boundary))];
       });
-      const current = list.find((item) => item.id === selectedRef.current);
-      if (current) updateSelectedSession(current);
     },
-    [updateSelectedSession],
+    [],
   );
   useEffect(() => {
     if (user && user.role !== "admin" && route.kind === "admin")
       navigate("/", true);
   }, [user, route.kind, navigate]);
 
-  const terminal = useCallback(
-    async (result: Snapshot) => {
-      const token = selectionGeneration.current;
-      try {
-        const [history, list] = await Promise.all([
-          api.messages(result.session_id),
-          api.sessionsPage(),
-        ]);
-        if (
-          selectedRef.current !== result.session_id ||
-          token !== selectionGeneration.current
-        )
-          return;
-        setMessages((current) => {
-          const incoming = new Set((history ?? []).map((message) => message.id));
-          const older = current.filter(
-            (message) =>
-              !incoming.has(message.id) &&
-              !message.id.startsWith("pending-") &&
-              message.created_at < (history?.[0]?.created_at ?? ""),
-          );
-          return [...older, ...(history ?? [])];
-        });
-        replaceSessions(list);
-        const [pending, session] = await Promise.all([
-          api.queue(result.session_id),
-          api.session(result.session_id),
-        ]);
-        if (
-          selectedRef.current !== result.session_id ||
-          token !== selectionGeneration.current
-        )
-          return;
-        setQueue(pending ?? []);
-        updateSelectedSession(session);
-        if (session.latest_run && session.latest_run.run_id !== result.run_id)
-          followRef.current(session.latest_run);
-      } catch (reason) {
-        if (token === selectionGeneration.current)
-          setError(errorText(reason, t("error.loadTemporary")));
-      }
-    },
-    [replaceSessions, updateSelectedSession],
-  );
   const expired = useCallback(() => {
     modelPreferenceOwner.current = null;
     preferredModelRef.current = "";
@@ -227,33 +159,46 @@ export default function App() {
     selectionGeneration.current += 1;
     selectedRef.current = null;
     setSelectedId(null);
-    updateSelectedSession(null);
     setUser(null);
     setSessions([]);
     railGeneration.current += 1;
     railPaged.current = false;
     setSessionCursor(undefined);
     setSessionsLoadingMore(false);
-    setMessages([]);
-    setPosting(false);
-    setLoading(false);
+    setCreating(false);
+    setBootstrapLoading(false);
     setComputerDefault(false);
     setDraftComputerEnabled(false);
     setComputerOpen(false);
     setRevision(null);
     setError("");
-  }, [updateSelectedSession]);
-  const { snapshot, reconnecting, follow, clear } = useRunStream(
-    terminal,
-    expired,
-  );
+  }, []);
+  const chat = useConversation(user?.id ?? "", selectedId ?? undefined, String(composerKey), {
+    onExpired: expired,
+    onSessionChanged: (session) => setSessions((current) => current.map((item) => item.id === session.id ? session : item)),
+  });
+  const { controller, messages, run: snapshot, reconnecting, instructions, pending: queue,
+    hasOlder: olderAvailable, loadingOlder: olderLoading } = chat;
+  const loading = bootstrapLoading || chat.loading;
+  const posting = creating || chat.posting;
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
-  const instructions = useRunInstructions(`${user?.id ?? ""}:${selectedId ?? "new"}:${composerKey}`,
-    selectedId ?? undefined, snapshot, Boolean(user && route.kind === "chat"));
-  const followRef = useRef(follow);
-  followRef.current = follow;
-  const selected = selectedSession?.id === selectedId ? selectedSession : null;
+  const selected = chat.session?.id === selectedId ? chat.session : null;
+  useEffect(() => {
+    if (chat.error) setError(errorText(chat.error, t("error.load")));
+  }, [chat.error]);
+  const selectedModelOwner = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!selected || selectedModelOwner.current === selected.id) return;
+    selectedModelOwner.current = selected.id;
+    const chosen = modelsRef.current.find((model) => model.id === selected.model_id)
+      ?? preferredChatModel(modelsRef.current, preferredModelRef.current);
+    if (!chosen) return;
+    setModelId(chosen.id);
+    setBudget(selected.effort?.startsWith("budget:") ? Number(selected.effort.slice(7)) : chosen.reasoning_budget_default);
+    setReasoningEnabled(selected.effort !== "off");
+    setEffort(chosen.efforts?.includes(selected.effort ?? "") ? selected.effort ?? "" : chosen.default_effort ?? "");
+  }, [selected]);
   const computerEnabled = selectedId
     ? Boolean(selected?.computer_enabled)
     : draftComputerEnabled;
@@ -262,71 +207,16 @@ export default function App() {
     (isActiveStatus(snapshot?.status) && Boolean(snapshot?.computer_granted));
   const computerOnce = !computerEnabled && computerAvailable;
 
-  const selectSession = useCallback(
-    async (id: string, restoring = false) => {
-      const token = ++selectionGeneration.current;
-      clear();
-      selectedRef.current = id;
-      if (userRef.current) storeSelection(userRef.current, id);
-      setSelectedId(id);
-      updateSelectedSession(null);
-      setMessages([]);
-      setQueue([]);
-      setError("");
-      setLoading(true);
-      setRevision(null);
-      setDrawerOpen(false);
-      if (!restoring) navigate(`/c/${id}`);
-      setComposerKey((value) => value + 1);
-      try {
-        const [session, loadedHistory, pending] = await Promise.all([
-          api.session(id),
-          api.messages(id),
-          api.queue(id),
-        ]);
-        if (token === selectionGeneration.current) setQueue(pending ?? []);
-        if (token !== selectionGeneration.current) return;
-        let history = loadedHistory;
-        if (session.latest_run && !isActiveStatus(session.latest_run.status)) {
-          history = await api.messages(id);
-          if (token !== selectionGeneration.current) return;
-        }
-        setMessages(history ?? []);
-        setOlderAvailable((history?.length ?? 0) >= 100);
-        const chosen =
-          modelsRef.current.find((model) => model.id === session.model_id) ??
-          modelsRef.current.find((model) => model.is_default) ??
-          modelsRef.current[0];
-        if (chosen) {
-          setBudget(
-            session.effort?.startsWith("budget:")
-              ? Number(session.effort.slice(7))
-              : chosen.reasoning_budget_default,
-          );
-          setReasoningEnabled(session.effort !== "off");
-          setModelId(chosen.id);
-          setEffort(
-            chosen.efforts?.includes(session.effort ?? "")
-              ? (session.effort ?? "")
-              : (chosen.default_effort ?? ""),
-          );
-        }
-        setSessions((current) =>
-          current.some((item) => item.id === id)
-            ? current.map((item) => (item.id === id ? session : item))
-            : [session, ...current],
-        );
-        updateSelectedSession(session);
-        if (session.latest_run) follow(session.latest_run);
-      } catch (reason) {
-        if (token === selectionGeneration.current)
-          setError(errorText(reason, t("error.load")));
-      } finally {
-        if (token === selectionGeneration.current) setLoading(false);
-      }
-    },
-    [clear, follow, navigate, updateSelectedSession],
-  );
+  const selectSession = useCallback(async (id: string, restoring = false) => {
+    selectionGeneration.current++;
+    selectedRef.current = id;
+    selectedModelOwner.current = undefined;
+    if (userRef.current) storeSelection(userRef.current, id);
+    setSelectedId(id);
+    setError(""); setRevision(null); setDrawerOpen(false);
+    if (!restoring) navigate(`/c/${id}`);
+    setComposerKey((value) => value + 1);
+  }, [navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -365,7 +255,7 @@ export default function App() {
     confirmedModelRef.current = "";
     railGeneration.current += 1;
     let cancelled = false;
-    setLoading(true);
+    setBootstrapLoading(true);
     Promise.all([
       api.sessionsPage(),
       api.models(),
@@ -402,12 +292,13 @@ export default function App() {
         if (chosen) {
           if (!pathId) navigate(`/c/${chosen}`, true);
           void selectSession(chosen, true);
-        } else setLoading(false);
+        }
+        setBootstrapLoading(false);
       })
       .catch((reason: unknown) => {
         if (!cancelled) {
           setError(errorText(reason, t("error.loadTemporary")));
-          setLoading(false);
+          setBootstrapLoading(false);
         }
       });
     const poll = window.setInterval(() => {
@@ -450,13 +341,9 @@ export default function App() {
       void selectSession(route.id, true);
     else if (route.kind === "chat" && !route.id && selectedRef.current) {
       selectionGeneration.current += 1;
-      clear();
       selectedRef.current = null;
       setSelectedId(null);
-      updateSelectedSession(null);
-      setMessages([]);
-      setQueue([]);
-      setDraftComputerEnabled(computerDefault);
+          setDraftComputerEnabled(computerDefault);
       const chosen = preferredChatModel(modelsRef.current, preferredModelRef.current);
       setModelId(chosen?.id ?? "");
       setEffort(chosen?.default_effort ?? "");
@@ -471,73 +358,8 @@ export default function App() {
     user,
     selectSession,
     loading,
-    clear,
     computerDefault,
-    updateSelectedSession,
   ]);
-  useEffect(() => {
-    if (
-      !user ||
-      !selectedId ||
-      (!isActiveStatus(snapshot?.status) && !queue.length)
-    )
-      return;
-    let disposed = false;
-    const refresh = async () => {
-      try {
-        const [pending, session] = await Promise.all([
-          api.queue(selectedId),
-          api.session(selectedId),
-        ]);
-        if (disposed || selectedRef.current !== selectedId) return;
-        setQueue(pending ?? []);
-        updateSelectedSession(session);
-        setSessions((current) =>
-          current.map((item) => (item.id === selectedId ? session : item)),
-        );
-        if (
-          session.latest_run &&
-          session.latest_run.run_id !== snapshotRef.current?.run_id
-        ) {
-          const history = await api.messages(selectedId);
-          if (disposed) return;
-          setMessages(history ?? []);
-          follow(session.latest_run);
-        }
-      } catch {
-        /* Streaming reconnect remains independent from queue polling. */
-      }
-    };
-    const interval = setInterval(() => void refresh(), 2000);
-    return () => {
-      disposed = true;
-      clearInterval(interval);
-    };
-  }, [
-    selectedId,
-    user,
-    snapshot?.status,
-    queue.length,
-    follow,
-    updateSelectedSession,
-  ]);
-
-  useEffect(() => {
-    if (!user || !selectedId || selectedSession?.title_source !== "pending" || !snapshot || isActiveStatus(snapshot.status)) return;
-    let disposed = false;
-    let attempts = 0;
-    const interval = setInterval(() => {
-      if (++attempts >= 10) clearInterval(interval);
-      void api.session(selectedId).then((session) => {
-        if (disposed || selectedRef.current !== selectedId) return;
-        updateSelectedSession(session);
-        setSessions((current) => current.map((item) => item.id === session.id ? session : item));
-        if (session.title_source !== "pending") clearInterval(interval);
-      }).catch(() => undefined);
-    }, 2000);
-    return () => { disposed = true; clearInterval(interval); };
-  }, [user, selectedId, selectedSession?.title_source, snapshot?.status, updateSelectedSession]);
-
   useEffect(() => {
     if (!drawerOpen) return;
     const close = (event: KeyboardEvent) => {
@@ -550,14 +372,12 @@ export default function App() {
   const newConversation = useCallback(() => {
     if (posting) return;
     selectionGeneration.current += 1;
-    clear();
     selectedRef.current = null;
+    selectedModelOwner.current = undefined;
     if (user) storeSelection(user, null);
     setSelectedId(null);
-    updateSelectedSession(null);
-    setMessages([]);
     setError("");
-    setLoading(false);
+    setBootstrapLoading(false);
     setDrawerOpen(false);
     setRevision(null);
     setDraftComputerEnabled(computerDefault);
@@ -567,152 +387,70 @@ export default function App() {
     setBudget(chosen?.reasoning_budget_default);
     setReasoningEnabled(true);
     navigate("/");
-    setOlderAvailable(false);
-    setQueue([]);
     setComposerKey((value) => value + 1);
   }, [
     posting,
-    clear,
     user,
     navigate,
     computerDefault,
-    updateSelectedSession,
   ]);
 
-  const sendMessage = useCallback(
-    async (content: string, files: Artifact[] = [], now = false, projectId?: string) => {
-      if (loading || posting || computerUpdating) return false;
-      const token = ++selectionGeneration.current;
-      const optimistic: Message = {
-        id: `pending-${Date.now()}`,
-        role: "user",
-        content,
-        attachments: files,
-        created_at: new Date().toISOString(),
-      };
-      if (projectId) {
-        clear();
-        selectedRef.current = null;
-        setSelectedId(null);
-        updateSelectedSession(null);
-        setQueue([]);
-        setOlderAvailable(false);
-      }
-      setMessages((current) => projectId ? [optimistic] : [...current, optimistic]);
-      setPosting(true);
-      setError("");
-      try {
-        let id = selectedRef.current;
-        if (!id) {
-          const created = await api.createSession(
-            modelId,
-            effort,
-            projectId,
-            projectId ? (projectComputerDrafts[projectId] ?? true) : draftComputerEnabled,
-          );
-          if (token !== selectionGeneration.current) return true;
-          id = created.id;
-          selectedRef.current = id;
-          if (user) storeSelection(user, id);
-          setSelectedId(id);
-          updateSelectedSession(created);
-          navigate(`/c/${id}`);
-          setSessions((current) => [created, ...current]);
+  const sendMessage = useCallback(async (content: string, files: Artifact[] = [], now = false, projectId?: string) => {
+    if (loading || posting || computerUpdating) return false;
+    const token = ++selectionGeneration.current;
+    setError("");
+    const options = { model_id: modelId, effort, attachment_ids: files.map((file) => file.id), stop_current: now,
+      ...reasoningParameters(modelsRef.current.find((model) => model.id === modelId), budget, reasoningEnabled) };
+    try {
+      if (selectedRef.current && !projectId) {
+        await controller.send(content, { ...options, attachments: files });
+      } else {
+        setCreating(true);
+        if (projectId) {
+          controller.select({ origin: chat.owner.origin, account: user?.id ?? "", draftId: `project:${projectId}:${token}` });
         }
-        const result = await api.startRun(id, content, {
-          model_id: modelId,
-          effort,
-          attachment_ids: files.map((file) => file.id),
-          stop_current: now,
-          ...reasoningParameters(
-            modelsRef.current.find((model) => model.id === modelId),
-            budget,
-            reasoningEnabled,
-          ),
+        const result = await controller.createAndSend(content, {
+          ...options, attachments: files, project_id: projectId,
+          computer_enabled: projectId ? projectComputerDrafts[projectId] ?? true : draftComputerEnabled,
         });
-        if (token !== selectionGeneration.current) return true;
-        if (result.status === "queued") {
-          setMessages((current) =>
-            current.filter((item) => item.id !== optimistic.id),
-          );
-          const pending = await api.queue(id);
-          if (token === selectionGeneration.current) setQueue(pending);
-        } else follow(result);
-        if (!isActiveStatus(result.status)) void terminal(result);
-        void api
-          .sessionsPage()
-          .then((list) => {
-            if (token === selectionGeneration.current)
-              replaceSessions(list);
-          })
-          .catch(() => undefined);
-        return true;
-      } catch (reason) {
-        if (token === selectionGeneration.current) {
-          setMessages((current) =>
-            current.filter((item) => item.id !== optimistic.id),
-          );
-          setError(errorText(reason, t("error.send")));
-          // The Project composer unmounts on navigation. Keep its failed input
-          // in the newly created conversation rather than silently losing it.
-          if (projectId && selectedRef.current) {
-            try {
-              sessionStorage.setItem(`assistant.draft.v2.${user?.id}.${selectedRef.current}`, content);
-            } catch { /* Storage is optional. */ }
-            setComposerKey((value) => value + 1);
-          }
-        }
-        return false;
-      } finally {
-        if (token === selectionGeneration.current) setPosting(false);
+        if (!result || token !== selectionGeneration.current) return true;
+        const created = result.session;
+        selectedRef.current = created.id;
+        setSelectedId(created.id);
+        if (user) storeSelection(user, created.id);
+        navigate(`/c/${created.id}`);
+        setSessions((current) => [created, ...current.filter((item) => item.id !== created.id)]);
+        if (result.error) throw result.error;
       }
-    },
-    [
-      loading,
-      posting,
-      modelId,
-      effort,
-      user,
-      follow,
-      terminal,
-      navigate,
-      budget,
-      reasoningEnabled,
-      computerUpdating,
-      draftComputerEnabled,
-      projectComputerDrafts,
-      clear,
-      replaceSessions,
-      updateSelectedSession,
-    ],
-  );
+      return true;
+    } catch (reason) {
+      if (token !== selectionGeneration.current) return true;
+      setError(errorText(reason, t("error.send")));
+      if (projectId && selectedRef.current) {
+        try { sessionStorage.setItem(`assistant.draft.v2.${user?.id}.${selectedRef.current}`, content); } catch { /* Storage is optional. */ }
+        setComposerKey((value) => value + 1);
+      }
+      return false;
+    } finally { if (token === selectionGeneration.current) setCreating(false); }
+  }, [loading, posting, computerUpdating, modelId, effort, budget, reasoningEnabled, controller,
+    chat.owner.origin, user, projectComputerDrafts, draftComputerEnabled, navigate]);
   const sendMessageNow = useCallback(
     (content: string, files: Artifact[]) => sendMessage(content, files, true),
     [sendMessage],
   );
   const stopRun = useCallback(async () => {
-    const current = snapshotRef.current;
-    if (!current || current.status === "cancelling") return;
-    try {
-      const result = await api.cancelRun(current.run_id);
-      if (selectedRef.current === result.session_id) {
-        follow(result);
-        if (!isActiveStatus(result.status)) void terminal(result);
-      }
-    } catch (reason) {
-      setError(errorText(reason, t("error.stop")));
-    }
-  }, [follow, terminal]);
+    try { await controller.stop(); }
+    catch (reason) { setError(errorText(reason, t("error.stop"))); }
+  }, [controller]);
   const logout = useCallback(async () => {
     try {
       await api.logout();
-      clear();
       expired();
       navigate("/", true);
     } catch (reason) {
       setError(errorText(reason, t("error.logout")));
     }
-  }, [clear, expired, navigate]);
+  }, [expired, navigate]);
   const changeModel = useCallback(
     async (id: string) => {
       const next = models.find((model) => model.id === id);
@@ -734,7 +472,7 @@ export default function App() {
         if (modelPreferenceOwner.current !== owner) return;
         confirmedModelRef.current = saved.preferred_model_id;
         if (modelPreferenceRevision.current === revision) preferredModelRef.current = saved.preferred_model_id;
-        if (sessionID) await api.updateSession(sessionID, { model_id: id, effort: nextEffort });
+        if (sessionID && selectedRef.current === sessionID) await controller.updateSession({ model_id: id, effort: nextEffort });
       });
       modelPreferenceWrites.current = write;
       try {
@@ -745,17 +483,17 @@ export default function App() {
         setError(errorText(reason, t("error.rememberModel")));
       }
     },
-    [models, effort, route.kind],
+    [models, effort, route.kind, controller],
   );
   const changeEffort = useCallback(async (value: string) => {
     try {
       if (route.kind === "chat" && selectedRef.current && !isActiveStatus(snapshotRef.current?.status))
-        await api.updateSession(selectedRef.current, { effort: value });
+        await controller.updateSession({ effort: value });
       setEffort(value);
     } catch (reason) {
       setError(errorText(reason, t("error.switch")));
     }
-  }, [route.kind]);
+  }, [route.kind, controller]);
   const changeComputer = useCallback(
     async (enabled: boolean) => {
       if (computerUpdating || loading || posting) return;
@@ -766,41 +504,9 @@ export default function App() {
       setError("");
       try {
         if (id) {
-          const updated = await api.updateSession(id, {
-            computer_enabled: enabled,
-            remember_computer_default: !computerOnce,
-          });
-          if (userRef.current?.id !== actor) return;
-          updateSelectedSession(updated);
-          setSessions((current) =>
-            current.map((item) => (item.id === id ? updated : item)),
-          );
-          if (!updated.project_id && !computerOnce) {
-            setComputerDefault(enabled);
-            if (!selectedRef.current) setDraftComputerEnabled(enabled);
-          }
-          const currentRun = snapshotRef.current;
-          if (
-            selectedRef.current === id &&
-            token === selectionGeneration.current &&
-            currentRun?.session_id === id &&
-            isActiveStatus(currentRun.status)
-          ) {
-            try {
-              const latest = await api.run(currentRun.run_id);
-              if (
-                selectedRef.current === id &&
-                token === selectionGeneration.current &&
-                snapshotRef.current?.run_id === latest.run_id &&
-                latest.seq >= snapshotRef.current.seq
-              ) {
-                follow(latest);
-                if (!isActiveStatus(latest.status)) void terminal(latest);
-              }
-            } catch {
-              /* SSE reconnect also restores a saved permission change. */
-            }
-          }
+          const updated = await controller.updateSession({ computer_enabled: enabled, remember_computer_default: !computerOnce });
+          if (!updated || userRef.current?.id !== actor || token !== selectionGeneration.current) return;
+          if (!updated.project_id && !computerOnce) setComputerDefault(enabled);
         } else {
           const preferences = await api.updatePreferences({
             computer_default: enabled,
@@ -822,38 +528,12 @@ export default function App() {
       computerOnce,
       loading,
       posting,
-      follow,
-      terminal,
-      updateSelectedSession,
-    ],
+      controller,
+      ],
   );
-  const resumeRun = useCallback(
-    async (runId: string, answer: string) => {
-      const token = selectionGeneration.current;
-      const resumed = await api.resumeRun(runId, answer);
-      if (
-        selectedRef.current !== resumed.session_id ||
-        token !== selectionGeneration.current
-      )
-        return;
-      if (
-        snapshotRef.current?.run_id === resumed.run_id &&
-        resumed.seq >= snapshotRef.current.seq
-      ) {
-        follow(resumed);
-        if (!isActiveStatus(resumed.status)) void terminal(resumed);
-      }
-      if (answer === "allow_session") {
-        const session = await api.session(resumed.session_id);
-        if (token !== selectionGeneration.current) return;
-        updateSelectedSession(session);
-        setSessions((current) =>
-          current.map((item) => (item.id === session.id ? session : item)),
-        );
-      }
-    },
-    [follow, terminal, updateSelectedSession],
-  );
+  const resumeRun = useCallback(async (runId: string, answer: string) => {
+    if (snapshotRef.current?.run_id === runId) await controller.resume(answer);
+  }, [controller]);
   const requestRetry = useCallback((message: Message) => {
     setRevision({ message, kind: "retry" });
     setRevisionText("");
@@ -865,7 +545,7 @@ export default function App() {
   async function renameSession(id: string, title: string) {
     try {
       const next = await api.updateSession(id, { title });
-      updateSelectedSession(next);
+      if (selectedRef.current === id) void controller.refresh(true);
       setSessions((current) =>
         current.map((item) => (item.id === id ? next : item)),
       );
@@ -883,19 +563,8 @@ export default function App() {
     }
   }
   async function loadOlder() {
-    if (!selectedId || olderLoading || !messages.length) return;
-    const token = selectionGeneration.current;
-    setOlderLoading(true);
-    try {
-      const older = await api.messages(selectedId, messages[0].id);
-      if (token !== selectionGeneration.current) return;
-      setMessages((current) => [...(older ?? []), ...current]);
-      setOlderAvailable((older?.length ?? 0) >= 100);
-    } catch (reason) {
-      setError(errorText(reason, t("error.load")));
-    } finally {
-      setOlderLoading(false);
-    }
+    try { await controller.loadOlder(); }
+    catch (reason) { setError(errorText(reason, t("error.load"))); }
   }
   async function loadMoreSessions() {
     if (!sessionCursor || sessionsLoadingMore) return;
@@ -931,38 +600,16 @@ export default function App() {
   }
   async function revise() {
     if (!revision || !selectedId || posting || busy || computerUpdating) return;
-    const token = ++selectionGeneration.current;
-    setPosting(true);
+    const token = selectionGeneration.current;
     setError("");
     try {
-      const result = await api.startRun(
-        selectedId,
-        revision.kind === "edit" ? revisionText.trim() : "",
-        {
-          model_id: modelId,
-          effort,
-          ...reasoningParameters(
-            modelsRef.current.find((model) => model.id === modelId),
-            budget,
-            reasoningEnabled,
-          ),
-          ...(revision.kind === "edit"
-            ? { edit_message_id: revision.message.id }
-            : { retry_run_id: revision.message.run_id }),
-        },
-      );
-      if (token !== selectionGeneration.current) return;
-      const history = await api.messages(selectedId);
-      if (token !== selectionGeneration.current) return;
-      setMessages(history ?? []);
-      setRevision(null);
-      follow(result);
-      if (!isActiveStatus(result.status)) void terminal(result);
-    } catch (reason) {
-      setError(errorText(reason, t("error.rerun")));
-    } finally {
-      if (token === selectionGeneration.current) setPosting(false);
-    }
+      await controller.send(revision.kind === "edit" ? revisionText.trim() : "", {
+        model_id: modelId, effort,
+        ...reasoningParameters(modelsRef.current.find((model) => model.id === modelId), budget, reasoningEnabled),
+        ...(revision.kind === "edit" ? { edit_message_id: revision.message.id } : { retry_run_id: revision.message.run_id }),
+      });
+      if (token === selectionGeneration.current) setRevision(null);
+    } catch (reason) { if (token === selectionGeneration.current) setError(errorText(reason, t("error.rerun"))); }
   }
 
   if (!authChecked)
@@ -975,8 +622,7 @@ export default function App() {
     return (
       <LoginScreen
         onLogin={(current) => {
-          clear();
-          setError("");
+              setError("");
           setUser(current);
         }}
       />
@@ -1197,18 +843,14 @@ export default function App() {
               onCancel={async (id) => {
                 if (!selectedId) return;
                 try {
-                  await api.cancelQueuedRun(selectedId, id);
-                  const pending = await api.queue(selectedId);
-                  if (selectedRef.current === selectedId) setQueue(pending);
+                  await controller.cancelQueued(id);
                 } catch (reason) {
                   setError(errorText(reason, t("error.cancel")));
                 }
               }}
               onEdit={async (id, message) => {
                 if (!selectedId) return;
-                await api.updateQueuedRun(selectedId, id, { message });
-                const pending = await api.queue(selectedId);
-                if (selectedRef.current === selectedId) setQueue(pending);
+                await controller.updateQueued(id, message);
               }}
             />
             <RunInstructionStatus items={instructions.items} error={instructions.error} syncError={instructions.syncError}

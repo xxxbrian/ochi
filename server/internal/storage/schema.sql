@@ -38,6 +38,7 @@ CREATE TABLE artifacts (
 );
 
 CREATE TABLE canonical_messages (
+    round_id text DEFAULT ''::text NOT NULL,
     seq bigint NOT NULL,
     session_id uuid NOT NULL,
     run_id uuid,
@@ -305,8 +306,7 @@ CREATE TABLE runs (
     error_code text DEFAULT ''::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    output text DEFAULT ''::text NOT NULL,
-    steps jsonb DEFAULT '[]'::jsonb NOT NULL,
+    items jsonb DEFAULT '[]'::jsonb NOT NULL,
     seq bigint DEFAULT 0 NOT NULL,
     model_id text DEFAULT ''::text NOT NULL,
     model_name text DEFAULT ''::text NOT NULL,
@@ -318,8 +318,6 @@ CREATE TABLE runs (
     resource text DEFAULT ''::text NOT NULL,
     schedule_id uuid,
     computer_granted boolean DEFAULT false NOT NULL,
-    reasoning jsonb DEFAULT '[]'::jsonb NOT NULL,
-    timeline jsonb DEFAULT '[]'::jsonb NOT NULL,
     timezone text DEFAULT 'UTC'::text NOT NULL
 );
 

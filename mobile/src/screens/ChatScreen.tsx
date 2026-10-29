@@ -41,7 +41,6 @@ import Reanimated, { useAnimatedStyle, useReducedMotion } from "react-native-rea
 import { api, isActiveStatus } from "../lib/api";
 import { useApp } from "../providers/AppProvider";
 import { useSessionChat } from "../hooks/useSessionChat";
-import { useRunInstructions } from "../hooks/useRunInstructions";
 import { useDrawerNavigation } from "../hooks/useDrawerNavigation";
 import { BlurScene, GlassSurface } from "../ui/GlassSurface";
 import { AnchoredMenu } from "../ui/AnchoredMenu";
@@ -83,7 +82,8 @@ export function ChatScreen({
   const { colors, dark, models, preferredModel, selectPreferredModel, preferences, refreshPreferences, invalidateLists } =
     useApp();
   const focused = useIsFocused();
-  const chat = useSessionChat(sessionId, focused);
+  const [composerGeneration, setComposerGeneration] = useState(0);
+  const chat = useSessionChat(sessionId, focused, `${projectId ?? ""}:${composerGeneration}`);
   const insets = useSafeAreaInsets();
   const viewport = useWindowDimensions();
   const shortViewport = viewport.width > viewport.height && viewport.height < 600;
@@ -112,8 +112,7 @@ export function ChatScreen({
   const [refreshOperation, setRefreshOperation] = useState<number | null>(null);
   const refreshOwner = useRef<number | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
-  const [composerGeneration, setComposerGeneration] = useState(0);
-  const instructions = useRunInstructions(`${sessionId ?? "new"}:${composerGeneration}`, sessionId, chat.run, focused);
+  const instructions = chat.instructions;
   const [composerHeight, setComposerHeight] = useState(146);
   const [bodyHeight, setBodyHeight] = useState(0);
   const composerScroll = useRef<ScrollView>(null);
@@ -279,42 +278,19 @@ export function ChatScreen({
           );
           return true;
         } else {
-          const session = await api.createSession(
-            modelId,
-            effort,
-            projectId,
-            computerDraft,
-          );
-          if (owner !== actionEpoch.current) return false;
-          try {
-            const snapshot = await api.startRun(session.id, text, options);
-            if (
-              owner === actionEpoch.current &&
-              chat.acceptCreated(session, snapshot, {
-                content: text,
-                attachments: files,
-              })
-            ) {
-              acceptedCreated = true;
-              navigation.setParams({ sessionId: session.id });
-              invalidateLists();
-              return true;
-            }
-            return false;
-          } catch (reason) {
-            if (
-              owner === actionEpoch.current &&
-              chat.acceptCreated(session, null, {
-                content: text,
-                attachments: files,
-              })
-            ) {
-              acceptedCreated = true;
-              setError(errorForDisplay(reason, "error.send"));
-              navigation.setParams({ sessionId: session.id });
-            }
-            throw reason;
+          const result = await chat.createAndSend(text, {
+            ...options, model_id: modelId, effort, project_id: projectId,
+            computer_enabled: computerDraft, attachments: files,
+          });
+          if (!result || owner !== actionEpoch.current) return false;
+          acceptedCreated = true;
+          navigation.setParams({ sessionId: result.session.id });
+          invalidateLists();
+          if (result.error) {
+            setError(errorForDisplay(result.error, "error.send"));
+            throw result.error;
           }
+          return true;
         }
       } catch (reason) {
         if (acceptedCreated || owner === actionEpoch.current) throw reason;
@@ -324,7 +300,7 @@ export function ChatScreen({
     [
       sessionId,
       chat.send,
-      chat.acceptCreated,
+      chat.createAndSend,
       modelId,
       effort,
       projectId,

@@ -390,21 +390,21 @@ func (e coreEvalRunner) run(id, boundary, prompt string, session storage.Session
 	generator, err := agent.NewOpenAI(config)
 	if err == nil {
 		err = generator.Generate(ctx, request, func(update agent.Update) error {
-			if update.ResetOutput {
+			if update.RoundEnd != nil && !update.RoundEnd.Final {
 				result.Output = ""
-				if err := live.ResetOutput(); err != nil {
+				if err := live.EndRound(update.RoundEnd.ID, false); err != nil {
 					return err
 				}
 			}
 			result.Output += update.Text
 			if update.Text != "" {
-				if err := live.Append(update.Text); err != nil {
+				if err := live.AppendText(update.RoundID, update.TextID, update.Text, "pending"); err != nil {
 					return err
 				}
 			}
 			if update.Step != nil {
 				step := update.Step
-				if err := live.UpdateStep(runtime.Step{ID: step.ID, Name: step.Name, Status: step.Status, Arguments: step.Arguments, Output: step.Output}); err != nil {
+				if err := live.UpdateStep(update.RoundID, runtime.Step{ID: step.ID, Name: step.Name, Status: step.Status, Arguments: step.Arguments, Output: step.Output}); err != nil {
 					return err
 				}
 			}
@@ -583,7 +583,7 @@ func TestCoreFlowRealModelEvaluation(t *testing.T) {
 	if err != nil || len(oldHistory) == 0 {
 		t.Fatal("could not seed original history evidence")
 	}
-	oldSnapshot.Status, oldSnapshot.Output = runtime.StatusCompleted, "Delta schedule approval noted."
+	fixtureAnswer(&oldSnapshot, "Delta schedule approval noted.")
 	if err := store.CompleteRun(context.Background(), oldSnapshot); err != nil {
 		t.Fatal("could not complete controlled history evidence")
 	}
@@ -669,7 +669,7 @@ func TestCoreFlowRealModelEvaluation(t *testing.T) {
 			t.Fatal("could not seed controlled long history")
 		}
 	}
-	seedSnapshot.Status, seedSnapshot.Output = runtime.StatusCompleted, "Awaiting the actual batch analysis request."
+	fixtureAnswer(&seedSnapshot, "Awaiting the actual batch analysis request.")
 	if err := store.CompleteRun(context.Background(), seedSnapshot); err != nil {
 		t.Fatal("could not complete controlled constraint history")
 	}

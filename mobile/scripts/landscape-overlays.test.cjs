@@ -92,7 +92,7 @@ function harness(file, name, props, { width = 393, height = 852, insets = { top:
         if (imported === 'react-native-keyboard-controller') return { KeyboardAvoidingView: 'KeyboardAvoidingView', useKeyboardState: (select) => select({ isVisible: keyboard.height.value < 0 }), useGenericKeyboardHandler(handler) { keyboardHandler = handler; }, useKeyboardContext: () => ({ reanimated: keyboard }) };
         if (imported === '../providers/AppProvider') return { useTheme: () => theme, useApp: () => app };
         if (imported === 'expo-router') return { router: {}, useNavigation: () => navigation, useIsFocused: () => true };
-        if (imported === '../hooks/useSessionChat') return { useSessionChat: () => chat };
+        if (imported === '../hooks/useSessionChat') return { useSessionChat: () => ({ ...chat, instructions }) };
         if (imported === '../hooks/useRunInstructions') return { useRunInstructions: () => instructions };
         if (imported === '../hooks/useDrawerNavigation') return { useDrawerNavigation: () => ({ canHandleInput: () => true }) };
         if (imported === '../lib/haptics') return { selectionHaptic() {} };

@@ -143,7 +143,7 @@ func TestResponsesIncompleteUnclassifiedTextRemainsPending(t *testing.T) {
 		t.Fatalf("incomplete public suffix lost or replayed: %+v", updates)
 	}
 	for _, update := range updates {
-		if update.TextKind != "pending" || update.CommitOutput {
+		if update.TextKind != "pending" || (update.RoundEnd != nil && update.RoundEnd.Final) {
 			t.Fatalf("incomplete text falsely promoted: %+v", update)
 		}
 	}

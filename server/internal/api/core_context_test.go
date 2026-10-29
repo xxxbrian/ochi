@@ -58,17 +58,17 @@ func TestTaskCommandEvidenceRequiresObservedSuccess(t *testing.T) {
 	step := runtime.Step{ID: "actual-call", Name: "exec", Status: "completed", Arguments: json.RawMessage(`{"command":"go test ./..."}`)}
 	for _, output := range []string{`{"exit_code":1}`, `{"exit_code":0,"timed_out":true}`, `{"exit_code":0,"isError":true}`, `{"exit_code":0,"error":"interrupted"}`, `{"stdout":"all passed"}`, `not-json`} {
 		step.Output = output
-		if commandEvidence(c, runtime.Snapshot{RunID: "own", Steps: []runtime.Step{step}}).Passed {
+		if commandEvidence(c, fixtureSteps("own", step)).Passed {
 			t.Fatal("failed/unstructured result became verification")
 		}
 	}
 	step.Output = `{"exit_code":0,"timed_out":false}`
-	proof := commandEvidence(c, runtime.Snapshot{RunID: "own", Steps: []runtime.Step{step}})
+	proof := commandEvidence(c, fixtureSteps("own", step))
 	if !proof.Passed || proof.Source != "recorded_exec" || proof.RunID != "own" || !strings.Contains(proof.Detail, "actual-call") {
 		t.Fatal("actual structured success was not traced")
 	}
 	c.Target = "go test ./different"
-	if commandEvidence(c, runtime.Snapshot{Steps: []runtime.Step{step}}).Passed {
+	if commandEvidence(c, fixtureSteps("", step)).Passed {
 		t.Fatal("different command satisfied acceptance")
 	}
 }
@@ -85,13 +85,13 @@ func TestTaskCommandEvidenceUsesLatestMatchingAttempt(t *testing.T) {
 	} {
 		t.Run(later.ID, func(t *testing.T) {
 			later.Name, later.Arguments = success.Name, success.Arguments
-			proof := commandEvidence(c, runtime.Snapshot{RunID: "own", Steps: []runtime.Step{success, later}})
+			proof := commandEvidence(c, fixtureSteps("own", success, later))
 			if proof.Passed || !strings.Contains(proof.Detail, later.ID) {
 				t.Fatal("later failed/unfinished recheck was hidden by earlier success")
 			}
 			later.Status, later.Output = "completed", `{"exit_code":1}`
 			success.ID = "new-success"
-			proof = commandEvidence(c, runtime.Snapshot{RunID: "own", Steps: []runtime.Step{later, success}})
+			proof = commandEvidence(c, fixtureSteps("own", later, success))
 			if !proof.Passed || !strings.Contains(proof.Detail, success.ID) {
 				t.Fatal("latest actual success did not replace prior failure")
 			}
@@ -99,7 +99,7 @@ func TestTaskCommandEvidenceUsesLatestMatchingAttempt(t *testing.T) {
 	}
 	unrelated := success
 	unrelated.ID, unrelated.Arguments, unrelated.Output = "other-command", json.RawMessage(`{"command":"go test ./different"}`), `{"exit_code":1}`
-	if !commandEvidence(c, runtime.Snapshot{Steps: []runtime.Step{success, unrelated}}).Passed {
+	if !commandEvidence(c, fixtureSteps("", success, unrelated)).Passed {
 		t.Fatal("an unrelated failed command invalidated matching evidence")
 	}
 }
@@ -115,4 +115,17 @@ func TestSkillIndexMetadataOnlyAndCombinedBudget(t *testing.T) {
 	if json.Unmarshal([]byte(merged), &index) != nil || len(merged) > 8192 || len(index.Skills) > 32 || !index.Truncated || len(index.Unavailable) != 1 || strings.Contains(merged, "DO_NOT_INJECT_BODY") || len(index.Skills) == 0 || index.Skills[0].ID != "private:checked" {
 		t.Fatal("skill index exceeded shared budget or injected a body")
 	}
+}
+
+func fixtureSteps(runID string, steps ...runtime.Step) runtime.Snapshot {
+	s := runtime.Snapshot{RunID: runID}
+	for _, step := range steps {
+		copy := step
+		s.Items = append(s.Items, runtime.Item{ID: step.ID, SourceID: step.ID, RoundID: "fixture", Kind: "tool", Step: &copy})
+	}
+	return s
+}
+func fixtureAnswer(s *runtime.Snapshot, text string) {
+	s.Status = runtime.StatusCompleted
+	s.Items = []runtime.Item{{ID: "answer", SourceID: "answer", RoundID: "fixture", Kind: "text", Text: text, Phase: "final", State: "completed"}}
 }

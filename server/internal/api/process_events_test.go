@@ -3,42 +3,42 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
+	"ochi/server/internal/runtime"
 	"strings"
 	"testing"
-
-	"ochi/server/internal/agent"
-	"ochi/server/internal/runtime"
 )
 
-func TestProcessSSEUpsertKeepsTransportSequenceAndOccurrenceOrder(t *testing.T) {
+func TestProcessSSEDeltaHasIdentityAndNoAccumulatedContent(t *testing.T) {
 	m := runtime.NewManager()
 	t.Cleanup(func() { _ = m.Shutdown(context.Background()) })
-	r := m.Restore(runtime.Snapshot{RunID: "process", SessionID: "session", Status: runtime.StatusRunning, Timeline: []runtime.ProcessEntry{}})
+	r := m.Restore(runtime.Snapshot{RunID: "process", SessionID: "session", Status: runtime.StatusRunning})
 	_, events, stop := r.Subscribe()
 	defer stop()
-	_ = r.Append("I will search.")
-	text := <-events
-	_ = r.AppendReasoning(agent.ReasoningPart{ID: "round-1:reasoning", Kind: "reasoning", Text: "Choose query"})
-	thought := <-events
-	_ = r.ResetOutput()
-	reset := <-events
-	if reset.Seq != thought.Seq+1 || len(reset.Timeline) != 2 || reset.Timeline[0].Seq != text.Seq {
-		t.Fatal("classification must not assign progress to the later reset seq")
-	}
+	_ = r.AppendText("r1", "provider-id", "First ", "pending")
+	started := <-events
+	_ = <-events
+	_ = r.AppendText("r1", "provider-id", "second", "pending")
+	delta := <-events
 	w := httptest.NewRecorder()
-	if err := writeSSE(w, reset.Type, reset.Seq, reset); err != nil {
+	if err := writeSSE(w, delta.Type, delta.Seq, delta); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(w.Body.String(), "\n")
-	if lines[0] != "id: 3" || lines[1] != "event: output_reset" || !strings.HasPrefix(lines[2], "data: ") {
-		t.Fatalf("SSE envelope missing original sequence/type: %s", w.Body.String())
+	if lines[0] != fmt.Sprintf("id: %d", delta.Seq) || lines[1] != "event: item_delta" {
+		t.Fatal("bad SSE envelope")
 	}
 	var payload runtime.Event
-	if err := json.Unmarshal([]byte(strings.TrimPrefix(lines[2], "data: ")), &payload); err != nil {
-		t.Fatal(err)
+	if e := json.Unmarshal([]byte(strings.TrimPrefix(lines[2], "data: ")), &payload); e != nil {
+		t.Fatal(e)
 	}
-	if payload.Timeline[0].Kind != "progress" || payload.Timeline[1].Reasoning.Text != "Choose query" || payload.Seq != 3 {
-		t.Fatal("SSE did not preserve the authoritative mixed order")
+	if payload.ItemID != started.Item.ID || payload.Delta != "second" || strings.Contains(w.Body.String(), "First") {
+		t.Fatal("SSE resent accumulated text or lost item identity")
+	}
+	_ = r.EndRound("r1", true)
+	phase := <-events
+	if phase.Type != "item_updated" || phase.Patches[0].ItemID != started.Item.ID || phase.Patches[0].Phase != "final" {
+		t.Fatal("classification changed identity")
 	}
 }

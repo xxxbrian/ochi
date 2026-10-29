@@ -91,8 +91,8 @@ func (s *Store) MessagesPage(ctx context.Context, userID, sessionID, before stri
 		return nil, err
 	}
 	rows, err := s.db.Query(ctx, `SELECT m.id::text,m.run_id::text,m.role,m.content,m.created_at,
- CASE WHEN m.role='assistant' THEN COALESCE(jsonb_array_length(r.steps),0) ELSE 0 END,m.model_id,m.model_name,m.effort,m.attachments,
- CASE WHEN m.role='assistant' THEN COALESCE(jsonb_array_length(r.reasoning)>0,false) ELSE false END,
+ CASE WHEN m.role='assistant' THEN `+itemStepCountSQL+` ELSE 0 END,m.model_id,m.model_name,m.effort,m.attachments,
+ CASE WHEN m.role='assistant' THEN `+itemHasReasoningSQL+` ELSE false END,
  CASE WHEN m.role='assistant' THEN COALESCE(r.status,'') ELSE '' END,
  `+messageProcessSQL+`,r.created_at,r.updated_at,`+messagePublicSQL+`
  FROM messages m LEFT JOIN runs r ON r.id=m.run_id WHERE m.session_id=$1 AND NOT m.archived
@@ -165,21 +165,20 @@ func (s *Store) CreateConfiguredRun(ctx context.Context, userID, sessionID, prom
 	}
 	var snapshot runtime.Snapshot
 	snapshot.ModelID, snapshot.ModelName, snapshot.Effort = model.ID, model.Name, effort
-	snapshot.Steps = []runtime.Step{}
 	snapshot.Artifacts = []agent.Attachment{}
-	snapshot.Timeline = []runtime.ProcessEntry{}
-	err = tx.QueryRow(ctx, `INSERT INTO runs (id,session_id,status,model_id,model_name,effort,timeline) VALUES ($1,$2,'running',$3,$4,$5,'[]'::jsonb) ON CONFLICT(id) DO UPDATE SET status='running',updated_at=now(),model_id=EXCLUDED.model_id,model_name=EXCLUDED.model_name,effort=EXCLUDED.effort,timeline=EXCLUDED.timeline RETURNING id::text,session_id::text,status,output,seq,updated_at,created_at`, runID, sessionID, model.ID, model.Name, effort).Scan(&snapshot.RunID, &snapshot.SessionID, &snapshot.Status, &snapshot.Output, &snapshot.Seq, &snapshot.UpdatedAt, &snapshot.CreatedAt)
+	snapshot.Items = []runtime.Item{}
+	err = tx.QueryRow(ctx, `INSERT INTO runs (id,session_id,status,model_id,model_name,effort,items) VALUES ($1,$2,'running',$3,$4,$5,'[]'::jsonb) ON CONFLICT(id) DO UPDATE SET status='running',updated_at=now(),model_id=EXCLUDED.model_id,model_name=EXCLUDED.model_name,effort=EXCLUDED.effort,items=EXCLUDED.items RETURNING id::text,session_id::text,status,seq,updated_at,created_at`, runID, sessionID, model.ID, model.Name, effort).Scan(&snapshot.RunID, &snapshot.SessionID, &snapshot.Status, &snapshot.Seq, &snapshot.UpdatedAt, &snapshot.CreatedAt)
 	if err != nil {
 		return snapshot, nil, err
 	}
-	rows, err := tx.Query(ctx, `SELECT seq,COALESCE(run_id::text,''),model_id,provider_id,payload FROM canonical_messages WHERE session_id=$1 AND NOT archived AND seq > COALESCE((SELECT through_seq FROM context_compactions WHERE session_id=$1),0) ORDER BY seq`, sessionID)
+	rows, err := tx.Query(ctx, `SELECT seq,COALESCE(run_id::text,''),round_id,model_id,provider_id,payload FROM canonical_messages WHERE session_id=$1 AND NOT archived AND seq > COALESCE((SELECT through_seq FROM context_compactions WHERE session_id=$1),0) ORDER BY seq`, sessionID)
 	if err != nil {
 		return snapshot, nil, err
 	}
 	history := []agent.CanonicalMessage{}
 	for rows.Next() {
 		var m agent.CanonicalMessage
-		if err = rows.Scan(&m.Seq, &m.RunID, &m.ModelID, &m.ProviderID, &m.Payload); err != nil {
+		if err = rows.Scan(&m.Seq, &m.RunID, &m.RoundID, &m.ModelID, &m.ProviderID, &m.Payload); err != nil {
 			rows.Close()
 			return snapshot, nil, err
 		}
@@ -191,9 +190,9 @@ func (s *Store) CreateConfiguredRun(ctx context.Context, userID, sessionID, prom
 	}
 	// Fill only interrupted, unfinished tool-result slots. This preserves call IDs
 	// and ordering while never claiming an unknown side effect succeeded.
-	pending := []string{}
-	done := map[string]bool{}
-	callRuns := map[string]string{}
+	type pendingCall struct{ ID, RoundID, RunID string }
+	pending := []pendingCall{}
+	done := map[pendingCall]bool{}
 	for _, m := range history {
 		var v struct {
 			Role       string `json:"role"`
@@ -205,23 +204,22 @@ func (s *Store) CreateConfiguredRun(ctx context.Context, userID, sessionID, prom
 		_ = json.Unmarshal(m.Payload, &v)
 		if v.Role == "assistant" {
 			for _, call := range v.ToolCalls {
-				pending = append(pending, call.ID)
-				callRuns[call.ID] = m.RunID
+				pending = append(pending, pendingCall{call.ID, m.RoundID, m.RunID})
 			}
 		}
 		if v.Role == "tool" {
-			done[v.ToolCallID] = true
+			done[pendingCall{v.ToolCallID, m.RoundID, m.RunID}] = true
 		}
 	}
-	for _, id := range pending {
-		if done[id] {
+	for _, call := range pending {
+		if done[call] {
 			continue
 		}
-		data, _ := json.Marshal(map[string]any{"role": "tool", "tool_call_id": id, "content": "上一次任务在此工具调用完成前中断；结果未确认。继续前请检查工作区的实际状态，不要假设此操作成功。"})
+		data, _ := json.Marshal(map[string]any{"role": "tool", "tool_call_id": call.ID, "content": "上一次任务在此工具调用完成前中断；结果未确认。继续前请检查工作区的实际状态，不要假设此操作成功。"})
 		var m agent.CanonicalMessage
 		m.Payload = data
-		m.RunID = callRuns[id]
-		if err = tx.QueryRow(ctx, `INSERT INTO canonical_messages (session_id,run_id,payload) VALUES ($1,NULLIF($2,'')::uuid,$3) RETURNING seq`, sessionID, m.RunID, data).Scan(&m.Seq); err != nil {
+		m.RunID, m.RoundID = call.RunID, call.RoundID
+		if err = tx.QueryRow(ctx, `INSERT INTO canonical_messages (session_id,run_id,round_id,payload) VALUES ($1,NULLIF($2,'')::uuid,$3,$4) RETURNING seq`, sessionID, m.RunID, m.RoundID, data).Scan(&m.Seq); err != nil {
 			return snapshot, nil, err
 		}
 		history = append(history, m)
@@ -238,6 +236,36 @@ func (s *Store) CreateConfiguredRun(ctx context.Context, userID, sessionID, prom
 		return snapshot, nil, err
 	}
 	if marker := endedTurnMessage(previousStatus); marker != "" {
+		var savedItems []byte
+		if err = tx.QueryRow(ctx, `SELECT items FROM runs WHERE id=$1`, previousRunID).Scan(&savedItems); err != nil {
+			return snapshot, nil, err
+		}
+		var publicItems []runtime.Item
+		if err = json.Unmarshal(savedItems, &publicItems); err != nil {
+			return snapshot, nil, err
+		}
+		// Round linkage avoids both duplicating completed provider messages and
+		// promoting partially streamed tool calls/private replay into history.
+		committed := map[string]bool{}
+		roundRows, e := tx.Query(ctx, `SELECT DISTINCT round_id FROM canonical_messages WHERE run_id=$1 AND NOT archived AND payload->>'role'='assistant'`, previousRunID)
+		if e != nil {
+			return snapshot, nil, e
+		}
+		for roundRows.Next() {
+			var id string
+			if e = roundRows.Scan(&id); e != nil {
+				roundRows.Close()
+				return snapshot, nil, e
+			}
+			committed[id] = true
+		}
+		roundRows.Close()
+		if e = roundRows.Err(); e != nil {
+			return snapshot, nil, e
+		}
+		if partial := interruptedPublic(publicItems, committed); partial != "" {
+			marker += "\n\n此前已向用户展示但未完成的文字（只作为不完整的历史观察，不代表任务或工具执行成功）：\n" + partial
+		}
 		data, _ := json.Marshal(map[string]any{"role": "assistant", "content": marker, "ochi_run_status": previousStatus})
 		var m agent.CanonicalMessage
 		m.RunID, m.Payload = previousRunID, data
@@ -307,7 +335,7 @@ func endedTurnMessage(status string) string {
 }
 
 func (s *Store) AppendCanonical(ctx context.Context, sessionID, runID string, m *agent.CanonicalMessage) error {
-	return s.db.QueryRow(ctx, `INSERT INTO canonical_messages (session_id,run_id,model_id,provider_id,payload) VALUES ($1,$2,$3,$4,$5) RETURNING seq`, sessionID, runID, m.ModelID, m.ProviderID, m.Payload).Scan(&m.Seq)
+	return s.db.QueryRow(ctx, `INSERT INTO canonical_messages (session_id,run_id,round_id,model_id,provider_id,payload) VALUES ($1,$2,$3,$4,$5,$6) RETURNING seq`, sessionID, runID, m.RoundID, m.ModelID, m.ProviderID, m.Payload).Scan(&m.Seq)
 }
 func (s *Store) Compaction(ctx context.Context, sessionID string) (*agent.Compaction, error) {
 	var c agent.Compaction
@@ -322,21 +350,17 @@ func (s *Store) SaveCompaction(ctx context.Context, sessionID string, c agent.Co
 	return err
 }
 func (s *Store) Checkpoint(ctx context.Context, v runtime.Snapshot) error {
-	steps, _ := json.Marshal(v.Steps)
-	usage, _ := json.Marshal(v.Usage)
-	waiting, _ := json.Marshal(v.WaitingInput)
-	artifacts, _ := json.Marshal(v.Artifacts)
-	reasoning, _ := json.Marshal(v.Reasoning)
-	timeline, err := marshalTimeline(v.Timeline)
+	items, err := marshalItems(v.Items)
 	if err != nil {
 		return err
 	}
-	if v.Reasoning == nil {
-		reasoning = []byte("[]")
-	}
-	_, err = s.db.Exec(ctx, `UPDATE runs SET status=$2,output=$3,steps=$4,seq=$5,updated_at=$6,usage=$7,waiting_input=$8,artifacts=$9,resource=$10,computer_granted=$11,reasoning=$12,timeline=$13 WHERE id=$1 AND seq<=$5`, v.RunID, v.Status, v.Output, steps, v.Seq, v.UpdatedAt, usage, waiting, artifacts, v.Resource, v.ComputerGranted, reasoning, timeline)
+	usage, _ := json.Marshal(v.Usage)
+	waiting, _ := json.Marshal(v.WaitingInput)
+	artifacts, _ := json.Marshal(v.Artifacts)
+	_, err = s.db.Exec(ctx, `UPDATE runs SET status=$2,items=$3,seq=$4,updated_at=$5,usage=$6,waiting_input=$7,artifacts=$8,resource=$9,computer_granted=$10 WHERE id=$1 AND seq<=$4`, v.RunID, v.Status, items, v.Seq, v.UpdatedAt, usage, waiting, artifacts, v.Resource, v.ComputerGranted)
 	return err
 }
+
 func (s *Store) HasImages(ctx context.Context, sessionID string) (bool, error) {
 	var found bool
 	err := s.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM canonical_messages WHERE session_id=$1 AND NOT archived AND jsonb_typeof(payload->'content')='array' AND payload->'content' @> '[{"type":"image_url"}]'::jsonb)`, sessionID).Scan(&found)
@@ -368,4 +392,16 @@ func (s *Store) LastUserMessage(ctx context.Context, userID, sessionID string, r
 		return m, i18n.New("edit_latest_only")
 	}
 	return m, nil
+}
+
+// Only public text from uncommitted model rounds needs a continuity observation.
+// Completed assistant/tool transcript records remain the semantic source of truth.
+func interruptedPublic(items []runtime.Item, committed map[string]bool) string {
+	visible := make([]runtime.Item, 0, len(items))
+	for _, item := range items {
+		if item.Kind == "text" && !committed[item.RoundID] {
+			visible = append(visible, item)
+		}
+	}
+	return runtime.PublicReply(runtime.Snapshot{Status: runtime.StatusInterrupted, Items: visible})
 }

@@ -2,116 +2,11 @@ package runtime
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
 	"ochi/server/internal/agent"
 )
-
-func TestReasoningSnapshotAndDeltasStaySeparateFromReply(t *testing.T) {
-	m := NewManager()
-	r := m.Restore(Snapshot{RunID: "reasoning-run", SessionID: "session", Status: StatusRunning})
-	if err := r.AppendReasoning(agent.ReasoningPart{ID: "round-1:summary", Kind: "summary", Text: "First "}); err != nil {
-		t.Fatal(err)
-	}
-	snapshot, events, unsubscribe := r.Subscribe()
-	defer unsubscribe()
-	if err := r.AppendReasoning(agent.ReasoningPart{ID: "round-1:summary", Kind: "summary", Text: "second", Done: true}); err != nil {
-		t.Fatal(err)
-	}
-	event := <-events
-	if event.Type != "reasoning_delta" || event.Seq != snapshot.Seq+1 || snapshot.Output != "" || snapshot.Reasoning[0].Text != "First " {
-		t.Fatalf("bad snapshot/delta: %+v %+v", snapshot, event)
-	}
-	snapshot.Reasoning[0].Text = "mutated"
-	if got := r.Snapshot(); got.Reasoning[0].Text != "First second" || !got.Reasoning[0].Done || got.Output != "" {
-		t.Fatalf("reasoning snapshot was lost or leaked to answer: %+v", got)
-	}
-	if err := r.AppendReasoning(agent.ReasoningPart{ID: "round-2:reasoning", Kind: "reasoning", Text: "Partial"}); err != nil {
-		t.Fatal(err)
-	}
-	<-events
-	if err := r.Finalize(StatusFailed, errors.New("upstream interrupted"), func(final Snapshot) error {
-		if !final.Reasoning[1].Done {
-			t.Error("unfinished provider reasoning remained active after failure")
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if done, terminal := <-events, <-events; done.Type != "reasoning_delta" || !done.Reasoning.Done || terminal.Type != "status" || terminal.Seq != done.Seq+1 {
-		t.Fatal("reasoning end was not sequenced before terminal status")
-	}
-}
-
-func TestSnapshotThenDeltasRebuildOutput(t *testing.T) {
-	manager := NewManager()
-	defer manager.Shutdown(context.Background())
-	started, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	// Loading a committed row for an early reader must not prevent execution.
-	preloaded := manager.Restore(Snapshot{RunID: "run", SessionID: "session", Status: StatusRunning})
-	run, err := manager.Start(Snapshot{RunID: "run", SessionID: "session"}, func(run *Run) {
-		defer close(finished)
-		if err := run.Append("before "); err != nil {
-			t.Error(err)
-		}
-		if err := run.UpdateStep(Step{ID: "tool", Name: "read_file", Status: "completed", Arguments: json.RawMessage(`{"path":"a"}`)}); err != nil {
-			t.Error(err)
-		}
-		close(started)
-		<-release
-		for _, part := range []string{"after ", "reconnect"} {
-			if err := run.Append(part); err != nil {
-				t.Error(err)
-			}
-		}
-		run.Finish(StatusCompleted, nil)
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if run != preloaded {
-		t.Fatal("Start replaced an early restored snapshot and its subscribers")
-	}
-	<-started
-	snapshot, events, unsubscribe := run.Subscribe()
-	defer unsubscribe()
-	if len(snapshot.Steps) != 1 {
-		t.Fatalf("steps = %v", snapshot.Steps)
-	}
-	// Mutating a caller's snapshot must not alter the live run projection.
-	snapshot.Steps[0].Name = "changed"
-	snapshot.Steps[0].Arguments[0] = '['
-	if live := run.Snapshot(); live.Steps[0].Name != "read_file" || string(live.Steps[0].Arguments) != `{"path":"a"}` {
-		t.Fatalf("snapshot shares writable tool state: %+v", live.Steps)
-	}
-	output := snapshot.Output
-	seq := snapshot.Seq
-	close(release)
-	for {
-		select {
-		case event := <-events:
-			if event.Seq != seq+1 {
-				t.Fatalf("event sequence jumped: %d -> %d", seq, event.Seq)
-			}
-			seq = event.Seq
-			if event.Type == "text_delta" {
-				output += event.Text
-			}
-			if event.Type == "status" && IsTerminal(event.Status) {
-				<-finished
-				if got := run.Snapshot().Output; got != output || got != "before after reconnect" {
-					t.Fatalf("reconstructed output %q, current output %q", output, got)
-				}
-				return
-			}
-		case <-time.After(2 * time.Second):
-			t.Fatal("timed out waiting for terminal event")
-		}
-	}
-}
 
 func TestCancelWaitsForPersistenceAndKeepsSessionBusy(t *testing.T) {
 	manager := NewManager()
@@ -122,7 +17,7 @@ func TestCancelWaitsForPersistenceAndKeepsSessionBusy(t *testing.T) {
 		<-run.Context().Done()
 		close(cancelled)
 		<-release
-		if err := run.UpdateStep(Step{ID: "tool", Name: "read_file", Status: "completed", Output: "finished before releasing the workspace"}); err != nil {
+		if err := run.UpdateStep("r", Step{ID: "tool", Name: "read_file", Status: "completed", Output: "finished before releasing the workspace"}); err != nil {
 			t.Errorf("cancel prevented an in-flight tool from finishing: %v", err)
 		}
 		if err := run.Finalize(StatusCompleted, nil, func(snapshot Snapshot) error {
@@ -135,7 +30,7 @@ func TestCancelWaitsForPersistenceAndKeepsSessionBusy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := run.UpdateStep(Step{ID: "tool", Name: "read_file", Status: "running"}); err != nil {
+	if err := run.UpdateStep("r", Step{ID: "tool", Name: "read_file", Status: "running"}); err != nil {
 		t.Fatal(err)
 	}
 	_, events, unsubscribe := run.Subscribe()
@@ -147,10 +42,10 @@ func TestCancelWaitsForPersistenceAndKeepsSessionBusy(t *testing.T) {
 	if got := run.Snapshot().Status; got != StatusCancelling {
 		t.Fatalf("cancel published premature terminal state: %q", got)
 	}
-	if err := run.Append("late output"); err == nil {
+	if err := run.AppendText("r", "text", "late output", "pending"); err == nil {
 		t.Fatal("cancelled run accepted new text")
 	}
-	if err := run.UpdateStep(Step{ID: "another-tool", Status: "running"}); err == nil {
+	if err := run.UpdateStep("r", Step{ID: "another-tool", Status: "running"}); err == nil {
 		t.Fatal("cancelled run started another tool")
 	}
 	if _, err := manager.Start(Snapshot{RunID: "other", SessionID: "session"}, nil); err != ErrRunExists {
@@ -166,15 +61,15 @@ func TestCancelWaitsForPersistenceAndKeepsSessionBusy(t *testing.T) {
 		if final.Status != StatusCancelled {
 			t.Fatalf("saved status = %q", final.Status)
 		}
-		if len(final.Steps) != 1 || final.Steps[0].Status != "completed" {
-			t.Fatalf("in-flight tool result was not saved: %+v", final.Steps)
+		if len(final.Steps()) != 1 || final.Steps()[0].Status != "completed" {
+			t.Fatalf("in-flight tool result was not saved: %+v", final.Steps())
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("result was not persisted")
 	}
 	select {
 	case step := <-events:
-		if step.Type != "step" || step.Step.Status != "completed" {
+		if step.Type != "item_updated" || step.Patches[0].Step.Status != "completed" {
 			t.Fatalf("tool completion event = %+v", step)
 		}
 	case <-time.After(2 * time.Second):

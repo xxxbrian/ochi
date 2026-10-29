@@ -165,7 +165,7 @@ func (s *Server) registerScheduleRoutes(mux *http.ServeMux) {
 		for i := range items {
 			if live, ok := s.runtime.Get(items[i].RunID); ok {
 				v := live.Snapshot()
-				items[i].Status, items[i].Output, items[i].Error, items[i].ErrorCode, items[i].Artifacts = v.Status, v.Output, v.Error, v.ErrorCode, v.Artifacts
+				items[i].Status, items[i].Output, items[i].Error, items[i].ErrorCode, items[i].Artifacts = v.Status, runtime.PublicReply(v), v.Error, v.ErrorCode, v.Artifacts
 			}
 		}
 		writeJSON(w, http.StatusOK, items)
@@ -179,7 +179,7 @@ func (s *Server) registerScheduleRoutes(mux *http.ServeMux) {
 		if live, ok := s.runtime.Get(item.RunID); ok {
 			v := live.Snapshot()
 			item.Snapshot = &v
-			item.Status, item.Output, item.Error, item.ErrorCode, item.Artifacts = v.Status, v.Output, v.Error, v.ErrorCode, v.Artifacts
+			item.Status, item.Output, item.Error, item.ErrorCode, item.Artifacts = v.Status, runtime.PublicReply(v), v.Error, v.ErrorCode, v.Artifacts
 		}
 		writeJSON(w, http.StatusOK, item)
 	}))

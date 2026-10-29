@@ -37,7 +37,7 @@ func (c *cutoffCapture) emit(update Update) error {
 	if update.Step != nil {
 		c.steps++
 	}
-	if update.ResetOutput {
+	if update.RoundEnd != nil && !update.RoundEnd.Final {
 		c.resets++
 	}
 	return nil

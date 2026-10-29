@@ -18,7 +18,7 @@ function load(file, imports = {}, globals = {}) {
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(output, { module, exports: module.exports, AbortController, TextEncoder, Date, Math, Map, Set, Promise, JSON, Error, ...globals,
-    require(name) { if (name in imports) return imports[name]; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
+    require(name) { if (name in imports) return imports[name]; const locale = (name === "../i18n/errors" ? i18n.errors : name === "../i18n/process" ? i18n.process : name === "../i18n" ? i18n.runtime : undefined) ?? i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
   }, { filename: file });
   return module.exports;
 }
@@ -39,7 +39,7 @@ function storeHarness(overrides = {}) {
     supplementRun: async (runId, content, clientKey, signal) => { posts.push({ runId, content, clientKey, signal }); return item({ content, client_key: clientKey }); },
     ...overrides,
   };
-  const domain = load('web/src/lib/runInstructions.ts', {}, { setTimeout: time.setTimeout, clearTimeout: time.clearTimeout });
+  const domain = load('shared/conversation/instructions.ts', {}, { setTimeout: time.setTimeout, clearTimeout: time.clearTimeout });
   const store = domain.createRunInstructionsStore(transport);
   store.select('S:1', 'S', 'A', 'running'); store.setEnabled(true);
   return { domain, store, reads, posts, time };
@@ -347,46 +347,3 @@ test('native edit mode never exposes a supplement action and preserves the exist
   h.render({ editingMessage: { id: 'message', content: 'Edit original', role: 'user' } }); await h.settle();
   assert.equal(h.find('补充当前任务要求'), undefined); assert.equal(h.input().type, type); assert.equal(h.input().props.value, 'Edit original'); h.unmount();
 });
-
-function hookHarness(native, transport = {}) {
-  const slots = [], effects = [], time = clock(), listeners = new Map();
-  let cursor = 0, value, dirty = false, reads = 0;
-  const different = (left, right) => !left || !right || left.length !== right.length || left.some((dep, index) => dep !== right[index]);
-  const react = {
-    useRef(initial) { const index = cursor++; slots[index] ??= { current: initial }; return slots[index]; },
-    useEffect(effect, dependencies) { const index = cursor++, previous = slots[index]; if (different(previous?.dependencies, dependencies)) effects.push(() => { previous?.cleanup?.(); slots[index] = { dependencies, cleanup: effect() }; }); },
-    useCallback(callback, dependencies) { const index = cursor++; if (different(slots[index]?.dependencies, dependencies)) slots[index] = { dependencies, callback }; return slots[index].callback; },
-    useSyncExternalStore(subscribe, snapshot) { const index = cursor++; slots[index] ??= { cleanup: subscribe(() => { dirty = true; }) }; return snapshot(); },
-  };
-  react.useLayoutEffect = react.useEffect;
-  const domain = load('web/src/lib/runInstructions.ts', {}, { setTimeout: time.setTimeout, clearTimeout: time.clearTimeout });
-  const appState = { currentState: 'active', addEventListener(name, callback) { listeners.set(name, callback); return { remove() { listeners.delete(name); } }; } };
-  const document = { visibilityState: 'visible', addEventListener(name, callback) { listeners.set(name, callback); }, removeEventListener(name) { listeners.delete(name); } };
-  const api = { runInstructions: async () => { reads++; return []; }, supplementRun: async (_run, content, key) => item({ content, client_key: key }), ...transport };
-  const module = load(`${native ? 'mobile' : 'web'}/src/hooks/useRunInstructions.ts`, { react, '../lib/api': { api }, 'react-native': { AppState: appState }, '../lib/runInstructions': domain, '../../../web/src/lib/runInstructions': domain }, { document });
-  let props = { owner: 'S:1', sessionId: 'S', snapshot: snapshot(), focused: true };
-  const render = (changes = {}) => { props = { ...props, ...changes }; cursor = 0; dirty = false; value = module.useRunInstructions(props.owner, props.sessionId, props.snapshot, props.focused); effects.splice(0).forEach((effect) => effect()); };
-  const settle = async () => { for (let index = 0; index < 24; index++) { await Promise.resolve(); if (dirty) render(); } };
-  render();
-  return { render, settle, time, get value() { return value; }, get reads() { return reads; },
-    background() { if (native) { appState.currentState = 'background'; listeners.get('change')?.('background'); } else { document.visibilityState = 'hidden'; listeners.get('visibilitychange')?.(); } },
-    unmount() { slots.forEach((slot) => slot?.cleanup?.()); },
-  };
-}
-for (const native of [false, true]) {
-  test(`${native ? 'native' : 'web'} actual hook does not restart instruction requests on hundreds of token renders; focus/background pauses polling`, async () => {
-    const h = hookHarness(native); await h.settle(); const initial = h.reads, items = h.value.items;
-    for (let seq = 2; seq < 302; seq++) h.render({ snapshot: snapshot(seq) });
-    await h.settle(); assert.equal(h.reads, initial); assert.equal(h.value.items, items);
-    h.background(); h.time.tick(120000); await h.settle(); assert.equal(h.reads, initial);
-    h.render({ focused: false }); assert.equal(h.value.canSend, false); h.unmount(); assert.equal(h.time.size, 0);
-  });
-  test(`${native ? 'native' : 'web'} actual hook masks a foreign snapshot and invalidates a captured old send on New`, async () => {
-    const post = deferred(); const h = hookHarness(native, { supplementRun: () => post.promise }); await h.settle();
-    const oldSend = h.value.send; const pending = oldSend('Keep CSV'); await h.settle();
-    h.render({ owner: 'New:2', sessionId: undefined, snapshot: snapshot(9) });
-    assert.equal(h.value.canSend, false); assert.equal(h.value.submitting, false); assert.equal(h.value.items.length, 0);
-    post.resolve(item()); assert.equal(await pending, false); await h.settle();
-    assert.equal(await oldSend('Old callback'), false); assert.equal(h.value.accepted, undefined); h.unmount();
-  });
-}

@@ -61,7 +61,7 @@ func (s *Server) taskTool(ctx context.Context, userID, name string, raw json.Raw
 
 func commandEvidence(criterion storage.TaskCriterion, snapshot runtime.Snapshot) storage.TaskEvidence {
 	v := storage.TaskEvidence{ID: criterion.ID, Source: "recorded_exec", RunID: snapshot.RunID, CheckedAt: time.Now().UTC(), Detail: "No matching command was observed in this run."}
-	for _, step := range snapshot.Steps {
+	for _, step := range snapshot.Steps() {
 		var args struct {
 			Command string `json:"command"`
 		}

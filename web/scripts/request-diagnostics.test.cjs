@@ -4,6 +4,8 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const ts = require('typescript');
+const sharedLoad = require("../../shared/conversation/test-loader.cjs").createLoader(ts, require);
+const sharedModule = (name) => name.includes("shared/conversation/") ? sharedLoad(path.resolve(__dirname, "../..", "shared/conversation", name.split("shared/conversation/")[1] + ".ts")) : undefined;
 const { createI18nHarness } = require('./i18n-harness.cjs');
 
 const root = path.resolve(__dirname, '..');
@@ -25,6 +27,7 @@ function evaluate(source, imports = {}, globals = {}, filename = 'fixture.tsx') 
   const module = { exports: {} };
   vm.runInNewContext(output, { module, exports: module.exports, AbortController, Date, Error, JSON, Map, Promise, Set, ...globals,
     require(name) {
+      if (sharedModule(name)) return sharedModule(name);
       if (name in imports) return imports[name];
       const locale = i18n.resolve(name, 'admin');
       if (locale) return { ...locale, useAdminI18n: locale.useI18n, ...i18n.errors };
@@ -108,7 +111,7 @@ test('admin diagnostics transport scopes list/detail/clear routes and forwards a
 });
 
 test('diagnostic summaries remain payload-free while detail preserves raw bodies, headers and ordered SSE timing', () => {
-  const filename = path.join(root, 'src/lib/types.ts');
+  const filename = path.join(root, '../shared/contracts.ts');
   const program = ts.createProgram([filename], { noEmit: true, skipLibCheck: true, target: ts.ScriptTarget.ES2022 });
   const source = program.getSourceFile(filename), checker = program.getTypeChecker();
   const alias = (name) => {

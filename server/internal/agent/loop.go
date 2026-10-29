@@ -46,6 +46,17 @@ func (g *OpenAI) Generate(ctx context.Context, req Request, emit func(Update) er
 }
 
 func (g *OpenAI) generate(ctx context.Context, req Request, emit func(Update) error) error {
+	roundID := ""
+	sink := emit
+	emit = func(update Update) error {
+		if update.RoundID == "" {
+			update.RoundID = roundID
+		}
+		if update.Canonical != nil && update.Canonical.RoundID == "" {
+			update.Canonical.RoundID = update.RoundID
+		}
+		return sink(update)
+	}
 	if g.config.BaseURL == "" || (g.config.APIKey == "" && !g.config.AllowNoKey) || g.config.Model == "" {
 		return i18n.New("model_configuration_required")
 	}
@@ -116,6 +127,7 @@ func (g *OpenAI) generate(ctx context.Context, req Request, emit func(Update) er
 				return err
 			}
 		}
+		roundID = fmt.Sprintf("round-%d", round+1)
 		response, usage, nextMessages, err := g.streamWithRecovery(ctx, &req, messages, tools, fmt.Sprintf("round-%d", round+1), emit)
 		messages = nextMessages
 		if usage != nil {
@@ -143,15 +155,15 @@ func (g *OpenAI) generate(ctx context.Context, req Request, emit func(Update) er
 				return err
 			}
 			if !accepted {
-				return emit(Update{CommitOutput: true})
+				return emit(Update{RoundEnd: &RoundEnd{ID: roundID, Final: true}})
 			}
-			if err := emit(Update{ResetOutput: true}); err != nil {
+			if err := emit(Update{RoundEnd: &RoundEnd{ID: roundID}}); err != nil {
 				return err
 			}
 			continue
 		}
 		// Tool preambles remain in the canonical transcript, never in the final reply.
-		if err := emit(Update{ResetOutput: true}); err != nil {
+		if err := emit(Update{RoundEnd: &RoundEnd{ID: roundID}}); err != nil {
 			return err
 		}
 		var screenshots []map[string]any
@@ -287,6 +299,15 @@ func (g *OpenAI) availableTools(ctx context.Context, req Request) ([]wireTool, e
 const finalAnswerPolicy = "不要再调用工具，立即给出最终答复：交付已经完成的实际成果与真实文件链接；仅在仍有未完成内容时简短说明，不声称未验证的内容成功。保留用户要求的输出形式，不额外添加格式包装；纯 JSON 不添加 Markdown 代码围栏，未完成内容也在用户指定形式中如实表达。"
 
 func (g *OpenAI) finish(ctx context.Context, req Request, messages []wireMessage, reason string, emit func(Update) error) error {
+	const roundID = "final"
+	sink := emit
+	emit = func(update Update) error {
+		update.RoundID = roundID
+		if update.Canonical != nil {
+			update.Canonical.RoundID = roundID
+		}
+		return sink(update)
+	}
 	messages = append(messages, wireMessage{Role: "system", Content: reason + finalAnswerPolicy})
 	messages, err := g.compact(ctx, &req, messages, nil, emit)
 	if err != nil {
@@ -309,7 +330,7 @@ func (g *OpenAI) finish(ctx context.Context, req Request, messages []wireMessage
 	if err := emit(Update{Canonical: &canonical}); err != nil {
 		return err
 	}
-	return emit(Update{CommitOutput: true})
+	return emit(Update{RoundEnd: &RoundEnd{ID: roundID, Final: true}})
 }
 func toolOutputFailed(output string) bool {
 	var result struct {

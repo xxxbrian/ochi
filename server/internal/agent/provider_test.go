@@ -126,7 +126,7 @@ func TestCanonicalToolImagesAndNextTurnPrefix(t *testing.T) {
 			copy.Payload = append(json.RawMessage(nil), copy.Payload...)
 			history = append(history, copy)
 		}
-		if update.ResetOutput {
+		if update.RoundEnd != nil && !update.RoundEnd.Final {
 			resets++
 		}
 		if update.Usage != nil {
