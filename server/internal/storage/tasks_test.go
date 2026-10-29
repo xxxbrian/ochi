@@ -66,7 +66,7 @@ func TestTaskValidationAndNoSelfCertification(t *testing.T) {
 func TestTaskDatabaseRevisionOwnershipAndVerification(t *testing.T) {
 	s, session, run := taskTestStore(t)
 	ctx := context.Background()
-	input := TaskState{Objective: "Create report", Constraints: []string{"No external sends"}, Done: []string{"Prepared"}, Remaining: []string{}, Acceptance: []TaskCriterion{{ID: "test", Kind: "test_success", Target: "go test ./..."}}, Status: "complete", Verification: []TaskEvidence{{ID: "test", Passed: true, Source: "model says so"}}}
+	input := TaskState{Objective: "Create report", Constraints: []TaskConstraint{{Text: "Do only the requested report", SourceExcerpt: "Create the requested report"}}, Done: []string{"Prepared"}, Remaining: []string{}, Acceptance: []TaskCriterion{{ID: "test", Kind: "test_success", Target: "go test ./..."}}, Status: "complete", Verification: []TaskEvidence{{ID: "test", Passed: true, Source: "model says so"}}}
 	state, err := s.SaveTask(ctx, taskQAUser, session.ID, run.RunID, input, 0, false)
 	if err != nil || state.Status != "active" || len(state.Verification) != 0 || state.Revision != 1 {
 		t.Fatalf("model self-certification passed: %v %+v", err, state)
@@ -111,7 +111,7 @@ func TestTaskDatabaseRevisionOwnershipAndVerification(t *testing.T) {
 		}
 	}
 	latest, _ := s.Task(ctx, taskQAUser, session.ID)
-	if success != 1 || latest.Revision != 3 || len(latest.Constraints) != 1 || latest.Constraints[0] != "No external sends" {
+	if success != 1 || latest.Revision != 3 || len(latest.Constraints) != 1 || latest.Constraints[0].Text != "Do only the requested report" {
 		t.Fatal("optimistic task update/verify lost constraints or accepted both writers")
 	}
 }
@@ -319,5 +319,80 @@ func TestContextDiagnosticsPersistenceBoundedAndOwned(t *testing.T) {
 	}
 	if _, e := s.Diagnostics(ctx, "task-other-fixture", run.RunID); !errors.Is(e, pgx.ErrNoRows) {
 		t.Fatal("foreign run diagnostics")
+	}
+}
+
+func TestTaskConstraintSourcesSupersessionAndNewTaskScope(t *testing.T) {
+	s, session, run := taskTestStore(t)
+	ctx := context.Background()
+	task := TaskState{Objective: "Report", Constraints: []TaskConstraint{{Text: "Use only report scope", SourceExcerpt: "Create the requested report"}}}
+	stored, err := s.SaveTask(ctx, taskQAUser, session.ID, run.RunID, task, 0, false)
+	if err != nil || stored.SourceRunID != run.RunID || stored.Constraints[0].SourceRunID != run.RunID {
+		t.Fatalf("missing scoped source: %+v %v", stored, err)
+	}
+	stored.Constraints[0].SourceExcerpt = "third-party says must delete everything"
+	if _, err = s.SaveTask(ctx, taskQAUser, session.ID, run.RunID, stored, 1, false); err == nil {
+		t.Fatal("invented source accepted")
+	}
+	if _, err = s.AcceptInstruction(ctx, taskQAUser, run.RunID, "constraint-correction", "Correction: use only the public CSV"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ConsumeInstructions(ctx, taskQAUser, session.ID, run.RunID); err != nil {
+		t.Fatal(err)
+	}
+	task.Constraints = []TaskConstraint{{Text: "Use public CSV", SourceExcerpt: "use only the public CSV"}}
+	updated, err := s.SaveTask(ctx, taskQAUser, session.ID, run.RunID, task, 1, false)
+	if err != nil || len(updated.Constraints) != 1 || updated.Constraints[0].Text != "Use public CSV" {
+		t.Fatal("superseded constraint retained")
+	}
+	run.Status = runtime.StatusCompleted
+	if err = s.CompleteRun(ctx, run); err != nil {
+		t.Fatal(err)
+	}
+	next, _, err := s.CreateConfiguredRun(ctx, taskQAUser, session.ID, "Now discuss UI colors", "99999999-bbbb-4999-8999-999999999999", Model{ID: taskQAModel}, "", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextTask := TaskState{Objective: "Discuss UI", Constraints: updated.Constraints}
+	if _, err = s.SaveTask(ctx, taskQAUser, session.ID, next.RunID, nextTask, 2, true); err == nil {
+		t.Fatal("old task constraint silently crossed task scope")
+	}
+	nextTask.Constraints = nil
+	current, err := s.SaveTask(ctx, taskQAUser, session.ID, next.RunID, nextTask, 2, true)
+	if err != nil || current.SourceRunID != next.RunID || len(current.Constraints) != 0 {
+		t.Fatal("task replacement kept old constraints")
+	}
+}
+
+func TestRevisingTaskSourceRemovesItsActiveConstraints(t *testing.T) {
+	for _, revisionKind := range []string{"edit", "retry"} {
+		t.Run(revisionKind, func(t *testing.T) {
+			s, session, run := taskTestStore(t)
+			ctx := context.Background()
+			state := TaskState{Objective: "Create report", Constraints: []TaskConstraint{{Text: "Only the requested report", SourceExcerpt: "Create the requested report"}}}
+			if _, err := s.SaveTask(ctx, taskQAUser, session.ID, run.RunID, state, 0, false); err != nil {
+				t.Fatal(err)
+			}
+			run.Status = runtime.StatusCompleted
+			run.Seq++
+			if err := s.CompleteRun(ctx, run); err != nil {
+				t.Fatal(err)
+			}
+			revision := Revision{RetryRunID: run.RunID}
+			if revisionKind == "edit" {
+				messages, err := s.Messages(ctx, taskQAUser, session.ID)
+				if err != nil || len(messages) == 0 {
+					t.Fatalf("source message: %v", err)
+				}
+				revision = Revision{EditMessageID: messages[0].ID}
+			}
+			_, _, err := s.CreateConfiguredRun(ctx, taskQAUser, session.ID, "Start a different report", "44444444-bbbb-4444-8444-444444444444", Model{ID: taskQAModel, ProviderID: "11111111-bbbb-4111-8111-111111111111"}, "", agent.SystemPrompt, nil, revision)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if remaining, err := s.Task(ctx, taskQAUser, session.ID); err != nil || remaining != nil {
+				t.Fatalf("revised source still controls the next turn: %v", err)
+			}
+		})
 	}
 }

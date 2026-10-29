@@ -207,7 +207,7 @@ func TestTaskVerificationUsesActualOwnedBytesAndConversation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state := storage.TaskState{Objective: "Create report", Constraints: []string{"No external send"}, Acceptance: []storage.TaskCriterion{{ID: "file", Kind: "artifact_exists", Target: file.ID}}}
+	state := storage.TaskState{Objective: "Create report", Constraints: []storage.TaskConstraint{}, Acceptance: []storage.TaskCriterion{{ID: "file", Kind: "artifact_exists", Target: file.ID}}}
 	if _, err = f.server.store.SaveTask(ctx, f.owner, f.session.ID, f.run.RunID, state, 0, false); err != nil {
 		t.Fatal(err)
 	}

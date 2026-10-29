@@ -129,3 +129,14 @@ func fixtureAnswer(s *runtime.Snapshot, text string) {
 	s.Status = runtime.StatusCompleted
 	s.Items = []runtime.Item{{ID: "answer", SourceID: "answer", RoundID: "fixture", Kind: "text", Text: text, Phase: "final", State: "completed"}}
 }
+
+func TestOnlyActiveTaskContextCarriesConstraints(t *testing.T) {
+	task := &storage.TaskState{Objective: "Prepare report", Status: "complete", Constraints: []storage.TaskConstraint{{Text: "Only JSON", SourceExcerpt: "Only JSON"}}}
+	if taskContext(task) != "" {
+		t.Fatal("completed task rules leaked into later unrelated requests")
+	}
+	task.Status = "active"
+	if !strings.Contains(taskContext(task), "source_excerpt") {
+		t.Fatal("active task lost source context")
+	}
+}

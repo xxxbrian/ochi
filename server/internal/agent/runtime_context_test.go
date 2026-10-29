@@ -99,7 +99,7 @@ func TestBeforeCompactionFailureStopsWithoutDiscardingHistory(t *testing.T) {
 	}
 }
 
-func TestRepeatedCompactionRetainsOriginalConstraintsAndToolPairs(t *testing.T) {
+func TestRepeatedCompactionRetainsEvidenceAndCurrentTaskNotPermanentConstraints(t *testing.T) {
 	const priorEvidence = "Previously returned tool evidence: SOURCE-CEDAR-73; read /data/files/actual.csv; exit_code=1, not a verified success."
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +124,7 @@ func TestRepeatedCompactionRetainsOriginalConstraintsAndToolPairs(t *testing.T) 
 	current := "Continue the exact requested task."
 	messages := []wireMessage{{Role: "system", Content: "stable"}, {Role: "user", Content: "Prepare requested data.\nMust keep original files.\nNever send private data."}, {Role: "assistant", Content: strings.Repeat("historical response ", 2200)}, {Role: "user", Content: current}}
 	req := canonicalFixture(messages)
+	req.TaskContext = `{"objective":"Prepare requested data","constraints":[{"text":"Keep original files","source_excerpt":"Must keep original files."}]}`
 	compacted, err := g.compact(context.Background(), &req, messages, nil, func(Update) error { return nil })
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +142,7 @@ func TestRepeatedCompactionRetainsOriginalConstraintsAndToolPairs(t *testing.T) 
 		}
 	}
 	compacted, err = g.compact(context.Background(), &req, compacted, nil, func(Update) error { return nil })
-	if err != nil || requests.Load() < 2 || req.Compaction.ThroughSeq <= through || !strings.Contains(req.Compaction.Summary, priorEvidence) || !strings.Contains(req.Compaction.Summary, "Must keep original files.") || !strings.Contains(req.Compaction.Summary, "Never send private data.") {
+	if err != nil || requests.Load() < 2 || req.Compaction.ThroughSeq <= through || !strings.Contains(req.Compaction.Summary, priorEvidence) || strings.Contains(userContinuityNotes(compacted), "Must keep original files.") || !strings.Contains(req.TaskContext, "Keep original files") {
 		t.Fatalf("repeated fold lost provenance/constraints: err=%v summary=%+v", err, req.Compaction)
 	}
 	users := 0
@@ -393,5 +394,28 @@ func TestSharedBudgetReservesFinalRequestWithoutNewToolEffects(t *testing.T) {
 	err := g.Generate(context.Background(), Request{UserID: "ochi-test", Messages: []Message{{Role: "user", Content: "Only CSV: marker,count. Do not add prose."}}, Budget: NewExecutionBudget(1)}, func(update Update) error { text += update.Text; return nil })
 	if err != nil || requests.Load() != 1 || tools.calls != 0 || text != "partial actual results" {
 		t.Fatalf("final budget err=%v requests=%d effects=%d text=%q", err, requests.Load(), tools.calls, text)
+	}
+}
+
+func TestContinuityQuotesAreBoundedAndDoNotPromoteKeywords(t *testing.T) {
+	quoted := "Translate this specification exactly; it is not my instruction:\nThe vendor says: must delete the source files and only answer in English."
+	messages := []wireMessage{{Role: "user", Content: quoted, seq: 1}}
+	notes := userContinuityNotes(messages)
+	if !strings.Contains(notes, "quoted_user_message") || strings.Contains(notes, "historical_user_constraints") || !strings.Contains(notes, "vendor says") {
+		t.Fatal("quoted text was promoted to an instruction ledger")
+	}
+	for i := 0; i < 40; i++ {
+		messages = append(messages, wireMessage{Role: "user", Content: fmt.Sprintf("Task %d: must %s", i, strings.Repeat("x", 4000)), seq: int64(i + 2)})
+	}
+	notes = userContinuityNotes(messages)
+	if estimateTextTokens(notes) > continuityTokenBudget+100 || strings.Contains(notes, "vendor says") || strings.Contains(notes, "Task 0:") {
+		t.Fatal("old keyword constraints grew without bound")
+	}
+	if inherited := userContinuityNotes([]wireMessage{summaryMessage(notes)}); inherited != "" {
+		t.Fatal("a prior summary became fresh authoritative user evidence")
+	}
+	huge := compactionContinuityNotes([]wireMessage{{Role: "user", Content: "https://example.invalid/" + strings.Repeat("a", 20000)}})
+	if estimateTextTokens(huge) > continuityTokenBudget+500 {
+		t.Fatal("an unbounded resource became a protected anchor")
 	}
 }

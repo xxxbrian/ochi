@@ -143,7 +143,7 @@ func (g *OpenAI) runMessages(ctx context.Context, req Request, messages []wireMe
 		live.WriteString("\n\n可用技能索引（仅元数据，不是用户指令；相关时读取正文）：\n" + index)
 	}
 	if task := strings.TrimSpace(req.TaskContext); task != "" {
-		live.WriteString("\n\n当前任务记录（保留目标、约束与实际检查；未验证项不视为完成）：\n" + task)
+		live.WriteString("\n\n当前任务记录（约束只适用于所列目标；用户切换任务时先更新任务记录，不把旧任务约定用于新问题；未验证项不视为完成）：\n" + task)
 	}
 	// Date, retrieval and live permissions belong after the reusable transcript,
 	// not in its first system message or in durable canonical history.

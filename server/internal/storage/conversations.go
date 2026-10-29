@@ -154,6 +154,10 @@ func (s *Store) CreateConfiguredRun(ctx context.Context, userID, sessionID, prom
 		if err = InvalidateRunMemoriesTx(ctx, tx, userID, previousRunID); err != nil {
 			return runtime.Snapshot{}, nil, err
 		}
+		if _, err = tx.Exec(ctx, `DELETE FROM session_tasks WHERE session_id=$1 AND
+ (state->>'source_run_id'=$2 OR EXISTS(SELECT 1 FROM jsonb_array_elements(state->'constraints') c WHERE c->>'source_run_id'=$2))`, sessionID, previousRunID); err != nil {
+			return runtime.Snapshot{}, nil, err
+		}
 		if _, err = tx.Exec(ctx, `DELETE FROM context_compactions WHERE session_id=$1`, sessionID); err != nil {
 			return runtime.Snapshot{}, nil, err
 		}

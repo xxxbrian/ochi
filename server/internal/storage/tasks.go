@@ -29,22 +29,29 @@ type TaskEvidence struct {
 	CheckedAt time.Time `json:"checked_at"`
 }
 
+type TaskConstraint struct {
+	Text          string `json:"text"`
+	SourceExcerpt string `json:"source_excerpt"`
+	SourceRunID   string `json:"source_run_id,omitempty"`
+}
+
 type TaskState struct {
-	Objective    string          `json:"objective"`
-	Constraints  []string        `json:"constraints"`
-	Done         []string        `json:"done"`
-	Remaining    []string        `json:"remaining"`
-	Acceptance   []TaskCriterion `json:"acceptance"`
-	Verification []TaskEvidence  `json:"verification"`
-	Status       string          `json:"status"`
-	Revision     int64           `json:"revision"`
+	SourceRunID  string           `json:"source_run_id"`
+	Objective    string           `json:"objective"`
+	Constraints  []TaskConstraint `json:"constraints"`
+	Done         []string         `json:"done"`
+	Remaining    []string         `json:"remaining"`
+	Acceptance   []TaskCriterion  `json:"acceptance"`
+	Verification []TaskEvidence   `json:"verification"`
+	Status       string           `json:"status"`
+	Revision     int64            `json:"revision"`
 }
 
 func ValidateTask(v TaskState) error {
 	if strings.TrimSpace(v.Objective) == "" || len(v.Objective) > 3000 {
 		return i18n.New("task_objective_invalid")
 	}
-	for _, list := range [][]string{v.Constraints, v.Done, v.Remaining} {
+	for _, list := range [][]string{v.Done, v.Remaining} {
 		if len(list) > 24 {
 			return i18n.New("task_list_too_long")
 		}
@@ -52,6 +59,14 @@ func ValidateTask(v TaskState) error {
 			if strings.TrimSpace(item) == "" || len(item) > 1000 {
 				return i18n.New("task_item_invalid")
 			}
+		}
+	}
+	if len(v.Constraints) > 24 {
+		return i18n.New("task_list_too_long")
+	}
+	for _, constraint := range v.Constraints {
+		if strings.TrimSpace(constraint.Text) == "" || len(constraint.Text) > 1000 || strings.TrimSpace(constraint.SourceExcerpt) == "" || len(constraint.SourceExcerpt) > 3000 {
+			return i18n.New("task_item_invalid")
 		}
 	}
 	if len(v.Acceptance) > 16 {
@@ -118,14 +133,48 @@ func (s *Store) SaveTask(ctx context.Context, userID, sessionID, runID string, v
 	if expected != revision {
 		return TaskState{}, i18n.New("task_revision_changed")
 	}
-	if len(old) > 0 && !replace {
-		var previous TaskState
+	var previous TaskState
+	if len(old) > 0 {
 		if err = json.Unmarshal(old, &previous); err != nil {
 			return TaskState{}, err
 		}
+	}
+	if len(old) > 0 && !replace {
 		if v.Objective != previous.Objective {
 			return TaskState{}, i18n.New("task_objective_changed")
 		}
+	}
+	v.SourceRunID = runID
+	if !replace && previous.SourceRunID != "" {
+		v.SourceRunID = previous.SourceRunID
+	}
+	for index := range v.Constraints {
+		constraint := &v.Constraints[index]
+		retained := false
+		if !replace {
+			for _, old := range previous.Constraints {
+				if *constraint == old {
+					retained = true
+					break
+				}
+			}
+		}
+		if retained {
+			continue
+		}
+		// New or changed constraints need a current accepted user source. Full-state
+		// replacement can remove/supersede constraints without a second stale ledger.
+		if constraint.SourceRunID != "" && constraint.SourceRunID != runID {
+			return TaskState{}, i18n.New("task_item_invalid")
+		}
+		evidence := Memory{Kind: "fact", Source: "agent", SourceSessionID: sessionID, SourceRunID: runID, SourceExcerpt: constraint.SourceExcerpt}
+		if err = validateMemorySourceTx(ctx, tx, userID, evidence); err != nil {
+			if errors.Is(err, ErrMemorySource) {
+				return TaskState{}, i18n.New("task_item_invalid")
+			}
+			return TaskState{}, err
+		}
+		constraint.SourceRunID = runID
 	}
 	v.Status, v.Verification, v.Revision = "active", nil, revision+1
 	data, _ := json.Marshal(v)
