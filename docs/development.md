@@ -49,7 +49,7 @@ before invoking pnpm so Corepack reads that client's `packageManager`:
 .venv/bin/python -B -m unittest discover -s workspace/tests -v
 (cd web && pnpm build && pnpm test)
 (cd mobile && pnpm typecheck && pnpm test)
-(cd mobile && pnpm exec expo install --check)
+(cd mobile && EXPO_OFFLINE=1 pnpm exec expo install --check)
 ```
 
 Workspace fixtures use the test requirements above, including the same JSON
@@ -68,6 +68,12 @@ The native bootstrap supplies Hermes' missing `Intl.Locale` and
 data. Node's Intl capabilities are not a substitute for Hermes checks: retain
 the missing-capability bootstrap test and exercise counted process/tool status
 on both built platforms.
+
+The locked Expo alignment check uses the installed SDK's bundled dependency
+map. Run `pnpm exec expo install --check` inside `mobile/` without offline mode
+when reviewing upstream patch recommendations; its remote SDK map can change
+without a lockfile change. Apply those upgrades deliberately and repeat native
+build/interaction checks.
 
 CI runs the same Web and native checks on pull requests and client changes.
 Container publication calls the shared checks workflow and waits for every

@@ -51,7 +51,7 @@ must be fixed, not silently disabled.
 ```sh
 pnpm typecheck
 pnpm test
-pnpm exec expo install --check
+EXPO_OFFLINE=1 pnpm exec expo install --check
 pnpm export:ios
 pnpm export:android
 ```
@@ -60,6 +60,9 @@ Tests exercise state, rendering and interaction contracts. Exports and type
 checking do not replace native QA: verify light/dark, both landscape directions,
 keyboard/focus retention, menus, image gestures and accessibility on the built
 clients. Emulator timing is not a claim about physical-device performance.
+Offline alignment validates against the installed Expo SDK's bundled map.
+Use `pnpm exec expo install --check` without offline mode to review current
+upstream patch recommendations before a deliberate SDK dependency update.
 
 ## Local Distribution
 

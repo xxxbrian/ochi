@@ -96,8 +96,8 @@ jobs:
       - name: Build Web
         if: matrix.client == 'web'
         run: pnpm build
-      - name: Check native types and Expo dependency alignment
+      - name: Check native types and locked Expo dependency alignment
         if: matrix.client == 'mobile'
         run: |
           pnpm typecheck
-          pnpm exec expo install --check
+          EXPO_OFFLINE=1 pnpm exec expo install --check
