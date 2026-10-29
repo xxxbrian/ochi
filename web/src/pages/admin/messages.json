@@ -2348,5 +2348,20 @@
     "en": "Unknown",
     "zh-CN": "未知",
     "zh-TW": "未知"
+  },
+  "skillTargetWorkspace": {
+    "en": "Prepare in workspace",
+    "zh-CN": "安装到工作空间",
+    "zh-TW": "安裝到工作空間"
+  },
+  "skillCurrentWorkspace": {
+    "en": "My workspace",
+    "zh-CN": "我的工作空间",
+    "zh-TW": "我的工作空間"
+  },
+  "skillPreparationScope": {
+    "en": "Preparation applies only to this user and this Skill revision. Other users prepare their own dependencies; rebuilding the runtime requires another check.",
+    "zh-CN": "安装结果只属于所选用户和当前 Skill 版本。其他用户需独立安装依赖，重建运行环境后需重新检查。",
+    "zh-TW": "安裝結果只屬於所選使用者和目前 Skill 版本。其他使用者需獨立安裝依賴，重建執行環境後需重新檢查。"
   }
 }

@@ -117,7 +117,7 @@ class ToolContracts(unittest.TestCase):
     def test_discovery_is_bounded_and_does_not_connect(self) -> None:
         tools = [{"name": f"search_{i}", "description": "Search website documents", "parameters": {"type": "object"},
                   "annotations": {"readOnlyHint": True}} for i in range(15)]
-        tools.append({"name": "search_000_bad", "description": "Search website documents", "parameters": {"patternProperties": {}}})
+        tools.append({"name": "search_000_bad", "description": "Search website documents", "parameters": {"patternProperties": "invalid"}})
         config = {"skills": {}, "mcp": {"enabled": {"name": "Documentation", "enabled": True, "tools": tools},
                   "disabled": {"enabled": False, "tools": tools}}}
         runtime = workspace_mcp.MCPRuntime()
@@ -151,7 +151,7 @@ class ToolContracts(unittest.TestCase):
             self.assertEqual(index["total"], 70)
             self.assertTrue(index["truncated"])
             self.assertTrue(all(set(item) == {"id", "name", "description"} for item in index["skills"]))
-        config = {"skills": {"one": {"name": "one", "path": "/fake", "enabled": True}}}
+        config = {"skills": {"one": {"id": "one", "name": "one", "path": "/fake", "enabled": True}}}
         with patch.object(workspace_skills, "_load_extensions", return_value=config), patch.object(workspace_skills, "_skill_content", return_value=({}, "frontmatter and body", "actual instructions")), patch.object(workspace_skills, "_skill_public", return_value={"id": "one"}):
             self.assertEqual(workspace_skills.tool_skills_read({"id": "one"})["instructions"], "actual instructions")
             config["skills"]["one"]["enabled"] = False

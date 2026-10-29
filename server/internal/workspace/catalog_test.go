@@ -45,6 +45,17 @@ func TestCatalogDiscoveryRunScopeAndAtomicAdmission(t *testing.T) {
 		if def.Execution != nil {
 			t.Fatal("untrusted MCP annotations acquired scheduler safety")
 		}
+		if !def.ExternalSchema {
+			t.Fatal("MCP schema was routed through the intrinsic validator")
+		}
+	}
+	last, err := d.recordDiscovery(ctx, "user", discoveredFixture(99, 1))
+	if err != nil || !strings.Contains(string(last), `"mcp_fixture_99"`) || !strings.Contains(string(last), `"evicted":["mcp_fixture_2"]`) {
+		t.Fatalf("newly discovered tool could not replace an old slot: %s %v", last, err)
+	}
+	active := d.discovered(ctx, "user")
+	if len(active) != 16 || active[len(active)-1].Name != "mcp_fixture_99" {
+		t.Fatal("active catalog is not a replaceable bounded window")
 	}
 	newScope := scopedCatalog("user", "new-run", false)
 	bad := json.RawMessage(`{"tools":[{"name":"mcp_valid","parameters":{}},{"name":"exec","parameters":{}}]}`)
@@ -58,6 +69,27 @@ func TestCatalogDiscoveryRunScopeAndAtomicAdmission(t *testing.T) {
 	}
 	if len(d.discoveries) > maxRunCatalogs {
 		t.Fatal("catalog cache exceeded its run bound")
+	}
+}
+
+func TestExternalSchemaIsPreservedButIntrinsicSubsetStaysStrict(t *testing.T) {
+	wire := []byte(`[{"name":"mcp_pattern","parameters":{"type":"object","patternProperties":{"^tag_":{"type":"string"}}}}]`)
+	defs, err := decodeDefinitions(wire, false)
+	if err != nil || len(defs) != 1 {
+		t.Fatalf("valid external schema rejected: %v", err)
+	}
+	if err := agent.ValidateToolArguments(defs[0], json.RawMessage(`{"tag_x":2}`)); err != nil {
+		t.Fatal("external execution validation must be owned by MCP bridge:", err)
+	}
+	if err := agent.ValidateToolArguments(defs[0], json.RawMessage(`{"x":1,"x":2}`)); err == nil {
+		t.Fatal("external preflight accepted duplicate JSON keys")
+	}
+	if _, err := decodeDefinitions(wire, true); err == nil {
+		t.Fatal("intrinsic unsupported predicate was silently ignored")
+	}
+	encoded, _ := json.Marshal(defs[0])
+	if !strings.Contains(string(encoded), "patternProperties") || strings.Contains(string(encoded), "ExternalSchema") {
+		t.Fatal("schema transport lost predicates or exposed private validation metadata")
 	}
 }
 

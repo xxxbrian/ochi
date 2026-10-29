@@ -41,10 +41,11 @@ type Config struct {
 }
 
 type ToolDefinition struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters"`
-	Execution   *ToolExecution  `json:"-"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	Parameters     json.RawMessage `json:"parameters"`
+	Execution      *ToolExecution  `json:"-"`
+	ExternalSchema bool            `json:"-"`
 }
 type ToolResult struct {
 	Output     string

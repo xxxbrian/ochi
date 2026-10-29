@@ -59,6 +59,7 @@ jobs:
             -c 'CREATE EXTENSION pgcrypto; CREATE EXTENSION vector; CREATE EXTENSION pg_trgm;'
       - name: Check build tooling and workspace
         run: |
+          python3 -m pip install -r workspace/requirements-test.txt
           python3 -B -m unittest discover -s scripts/tests -v
           python3 -B -m unittest discover -s workspace/tests -v
       - name: Check server with database integration enabled

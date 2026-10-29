@@ -18,7 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { adminApi, api } from "../../lib/api";
-import type { MCPServer, Skill } from "../../lib/types";
+import type { MCPServer, Skill, User } from "../../lib/types";
 import { Modal } from "../../components/Modal";
 import { SelectField } from "../../components/ui/Select";
 import { ActionMenu, MenuAction } from "../../components/ui/Menu";
@@ -51,9 +51,19 @@ export function SkillsPage() {
   const [notice, setNotice] = useState("");
   const [install, setInstall] = useState<Skill | null>(null);
   const [command, setCommand] = useState("");
+  const [targetUser, setTargetUser] = useState("");
+  const [users, setUsers] = useState<User[]>([]);
   const [result, setResult] = useState("");
   const [deleting, setDeleting] = useState<Skill | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!install) return;
+    let cancelled = false;
+    setTargetUser("");
+    void adminApi.users().then((value) => { if (!cancelled) setUsers(value); })
+      .catch((reason: Error) => { if (!cancelled) setError(reason.message); });
+    return () => { cancelled = true; };
+  }, [install]);
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -441,7 +451,7 @@ export function SkillsPage() {
               event.preventDefault();
               setBusy("install");
               void adminApi
-                .installSkill(install.id, command)
+                .installSkill(install.id, command, targetUser)
                 .then((value) => {
                   setResult(
                     [value.stdout, value.stderr].filter(Boolean).join("\n") ||
@@ -452,6 +462,12 @@ export function SkillsPage() {
                 .finally(() => setBusy(""));
             }}
           >
+            <Field title={t("skillTargetWorkspace")}>
+              <SelectField value={targetUser} onChange={setTargetUser}
+                options={[{ value: "", label: t("skillCurrentWorkspace") },
+                  ...users.map((user) => ({ value: user.id, label: user.username }))]} />
+              <p className="field-help">{t("skillPreparationScope")}</p>
+            </Field>
             <Field title={t("command")}>
               <textarea
                 rows={4}

@@ -18,7 +18,8 @@ from workspace_control import CONTROL_ONLY, stdio_runtime
 from workspace_extensions import EXTENSIONS_LOCK, _extension_id, _load_extensions, _save_extensions
 from workspace_plugins import extension_allowed
 from workspace_runtime import RUN_SCOPE
-from workspace_schema import ToolArgumentError, validate_arguments, validate_schema
+from workspace_schema import ToolArgumentError
+from workspace_mcp_schema import validate_mcp_arguments, validate_mcp_schema
 
 MAX_DISCOVERED_TOOLS = 6
 MAX_DISCOVERY_CANDIDATES = 32
@@ -31,7 +32,7 @@ def _checked_tool(tool: dict[str, Any]) -> dict[str, Any]:
     try:
         if len(json.dumps(value.get("parameters"), ensure_ascii=True).encode()) > MAX_TOOL_SCHEMA_BYTES:
             raise ToolArgumentError("unsupported_schema", "$", "schema exceeds 16 KB")
-        validate_schema(value.get("parameters"))
+        validate_mcp_schema(value.get("parameters"))
         value.pop("schema_error", None)
     except ToolArgumentError as exc:
         value["schema_error"] = exc.detail
@@ -202,6 +203,8 @@ class MCPConnection:
                     cursor = listing.next_cursor
                     if not cursor:
                         break
+                if cursor:
+                    raise ValueError("MCP catalog exceeds 20 pages; the server must narrow its advertised catalog")
                 self.ready.set()
                 while True:
                     name, args, done, result = await asyncio.to_thread(self.jobs.get)
@@ -311,10 +314,8 @@ class MCPRuntime:
         return next(iter(self.definitions({name})), None)
 
     def search(self, args: dict[str, Any]) -> dict[str, Any]:
-        query = args["query"].strip().casefold()
+        query = args.get("query", "").strip().casefold()
         words = set(re.findall(r"[^\W_]+", query)) - {"the", "a", "an", "to", "for", "and", "with", "tool", "tools"}
-        if not words:
-            return {"tools": [], "matched": 0, "truncated": False, "unsupported": []}
         candidates, unsupported = [], []
         # Discovery reads already tested metadata only. It never launches a
         # subprocess or connects to the extension merely to find a tool.
@@ -326,17 +327,17 @@ class MCPRuntime:
                 label = str(config.get("name", server_id)) + " " + tool["name"]
                 description = str(tool.get("description", ""))[:1200]
                 score = sum(4 * (word in label.casefold()) + (word in description.casefold()) for word in words)
-                if not score:
+                if words and not score:
                     continue
                 candidates.append((-score, name, {"name": name, "description": f"[{config.get('name', server_id)}] {description}", "parameters": tool.get("parameters")}))
         candidates.sort(key=lambda item: (item[0], item[1]))
         limit = min(MAX_DISCOVERED_TOOLS, int(args.get("limit", MAX_DISCOVERED_TOOLS)))
-        selected, size = [], 0
-        for _, name, definition in candidates[:MAX_DISCOVERY_CANDIDATES]:
-            if len(selected) >= limit:
-                break
+        offset = max(0, int(args.get("offset", 0)))
+        selected, size, consumed = [], 0, offset
+        for _, name, definition in candidates[offset:offset + MAX_DISCOVERY_CANDIDATES]:
             checked = _checked_tool(definition)
             if "schema_error" in checked:
+                consumed += 1
                 if len(unsupported) < 6:
                     unsupported.append({"name": name, "error": checked["schema_error"]})
                 continue
@@ -344,15 +345,20 @@ class MCPRuntime:
             if size + encoded > MAX_DISCOVERY_BYTES:
                 break
             selected.append(definition)
+            consumed += 1
             size += encoded
-        return {"tools": selected, "matched": len(candidates), "truncated": len(selected) < len(candidates), "unsupported": unsupported}
+            if len(selected) >= limit:
+                break
+        more = consumed < len(candidates)
+        return {"tools": selected, "matched": len(candidates), "truncated": more,
+                "next_offset": consumed if more else None, "unsupported": unsupported}
 
     def call(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
         for server_id, config in _load_extensions()["mcp"].items():
             if config.get("enabled", True) and extension_allowed("mcp", server_id):
                 for tool in config.get("tools", []):
                     if _mcp_tool_name(server_id, tool["name"]) == name:
-                        validate_arguments({"name": name, "parameters": tool["parameters"]}, args)
+                        validate_mcp_arguments(name, tool["parameters"], args)
                         scope = RUN_SCOPE.get()
                         if scope.get("session_id"):
                             config = {**config, "connection_id": server_id + ":" + scope.get("user_id", "") + ":" + scope["session_id"]}

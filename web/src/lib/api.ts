@@ -475,7 +475,7 @@ export const adminApi = {
       method: "POST",
       body: JSON.stringify(options),
     }),
-  installSkill: async (id: string, command: string) => {
+  installSkill: async (id: string, command: string, userId = "") => {
     const result = await request<{
       exit_code?: number;
       stdout?: string;
@@ -484,7 +484,7 @@ export const adminApi = {
       isError?: boolean;
     }>(`/api/admin/skills/${encodeURIComponent(id)}/install`, {
       method: "POST",
-      body: JSON.stringify({ command, timeout_ms: 120000 }),
+      body: JSON.stringify({ command, user_id: userId, timeout_ms: 120000 }),
     });
     if (
       result.timed_out ||

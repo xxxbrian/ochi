@@ -99,6 +99,8 @@ COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
+RUN /opt/venv/bin/pip install --no-cache-dir "fastembed==0.9.0" "jsonschema==4.26.0"
+
 COPY workspace/bridge.py /opt/workspace/bridge.py
 COPY workspace/workspace_*.py /opt/workspace/
 COPY workspace/memory_embeddings.py /opt/workspace/memory_embeddings.py
@@ -114,8 +116,6 @@ RUN chmod 0755 /usr/local/bin/workspace-entrypoint /usr/local/bin/workspace-desk
     && /opt/venv/bin/python -c 'import gi, pyatspi' \
     && test -x /usr/bin/wmctrl \
     && test -x /usr/bin/xfce4-session
-
-RUN /opt/venv/bin/pip install --no-cache-dir "fastembed==0.9.0"
 
 VOLUME ["/data"]
 EXPOSE 8080 6080 6081

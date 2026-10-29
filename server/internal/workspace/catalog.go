@@ -41,10 +41,15 @@ func decodeDefinitions(raw []byte, trusted bool) ([]agent.ToolDefinition, error)
 		if item.Name == "" || len(item.Name) > 64 {
 			return nil, errors.New("invalid tool name")
 		}
-		if err := agent.ValidateToolSchema(item.Parameters); err != nil {
+		validate := agent.ValidateExternalToolSchema
+		if trusted {
+			validate = agent.ValidateToolSchema
+		}
+		if err := validate(item.Parameters); err != nil {
 			return nil, fmt.Errorf("tool %s: %w", item.Name, err)
 		}
 		definition := agent.ToolDefinition{Name: item.Name, Description: item.Description, Parameters: item.Parameters}
+		definition.ExternalSchema = !trusted
 		if trusted {
 			definition.Execution = item.Execution
 		}
@@ -124,28 +129,27 @@ func (d *Docker) recordDiscovery(ctx context.Context, userID string, raw json.Ra
 		entry = &runCatalog{}
 		d.discoveries[key] = entry
 	}
-	known := map[string]agent.ToolDefinition{}
-	for _, definition := range entry.definitions {
-		known[definition.Name] = definition
-	}
-	selected := []agent.ToolDefinition{}
+	requested := map[string]bool{}
 	for _, definition := range definitions {
-		if existing, ok := known[definition.Name]; ok {
-			selected = append(selected, existing)
-		} else if len(entry.definitions) < maxDiscoveredTools {
-			entry.definitions = append(entry.definitions, definition)
-			known[definition.Name] = definition
-			selected = append(selected, definition)
+		requested[definition.Name] = true
+	}
+	active := make([]agent.ToolDefinition, 0, maxDiscoveredTools+len(definitions))
+	for _, previous := range entry.definitions {
+		if !requested[previous.Name] {
+			active = append(active, previous)
 		}
 	}
-	entry.updated = now
-	result["tools"], _ = json.Marshal(selected)
-	result["discovered_this_run"], _ = json.Marshal(len(entry.definitions))
-	result["run_limit"], _ = json.Marshal(maxDiscoveredTools)
-	if len(selected) < len(definitions) {
-		result["truncated"] = json.RawMessage("true")
-		result["limit_reached"] = json.RawMessage("true")
+	active = append(active, definitions...)
+	evicted := []string{}
+	for len(active) > maxDiscoveredTools {
+		evicted = append(evicted, active[0].Name)
+		active = active[1:]
 	}
+	entry.definitions = active
+	entry.updated = now
+	result["active_tool_count"], _ = json.Marshal(len(active))
+	result["active_limit"], _ = json.Marshal(maxDiscoveredTools)
+	result["evicted"], _ = json.Marshal(evicted)
 	return json.Marshal(result)
 }
 
@@ -235,16 +239,16 @@ func (d *Docker) extensionDefinitions(ctx context.Context, userID string) []agen
 	if err != nil {
 		return nil
 	}
-	live := map[string]bool{}
+	live := map[string]agent.ToolDefinition{}
 	for _, definition := range current {
 		if allowed[definition.Name] {
-			live[definition.Name] = true
+			live[definition.Name] = definition
 		}
 	}
 	definitions := []agent.ToolDefinition{}
 	for _, definition := range known {
-		if live[definition.Name] {
-			definitions = append(definitions, definition)
+		if current, ok := live[definition.Name]; ok {
+			definitions = append(definitions, current)
 		}
 	}
 	return definitions

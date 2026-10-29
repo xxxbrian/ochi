@@ -50,7 +50,7 @@ from workspace_extensions import EXTENSIONS_ROOT, EXTENSIONS_LOCK, _extension_id
 from workspace_control import CONTROL_ONLY, authorize_control
 from workspace_contract import CONTRACT
 from workspace_plugins import set_extension_access
-from workspace_skills import _skill_content, _skill_public, install_skill, tool_skills_list, tool_skills_read, skills_index
+from workspace_skills import _skill_content, _skill_public, install_skill, prepare_skill, tool_skills_list, tool_skills_read, skills_index
 from workspace_mcp import MCP, _mcp_public, save_mcp
 from workspace_schema import ToolArgumentError, strict_json, validate_arguments, validate_schema
 from workspace_browser import (BROWSER, sync_playwright, _browser_call, _page_summary,
@@ -412,9 +412,7 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and kind == "skills" and suffix == "install":
             if CONTROL_ONLY:
                 raise ValueError("select a user workspace for skill dependency installation")
-            dependency_root = DATA_ROOT / "skill-deps" / item_id
-            shutil.copytree(item["path"], dependency_root, dirs_exist_ok=True)
-            self._write(tool_exec({"command": args.get("command"), "cwd": str(dependency_root), "env": args.get("env"), "timeout_ms": args.get("timeout_ms", 120_000)}))
+            self._write(prepare_skill(item, args, tool_exec))
             return True
         if method == "PATCH" and suffix is None:
             if kind == "mcp":
@@ -576,7 +574,8 @@ class Handler(BaseHTTPRequestHandler):
             self._write(_json_error(f"unknown tool: {tool_name}"), HTTPStatus.NOT_FOUND)
             return
         try:
-            validate_arguments(definition, strict_json(self._last_json_bytes))
+            if tool_name in DISPATCH:
+                validate_arguments(definition, strict_json(self._last_json_bytes))
             result = DISPATCH[tool_name](args) if tool_name in DISPATCH else MCP.call(tool_name, args)
             self._write({"ok": True, "result": result})
         except ToolArgumentError as exc:

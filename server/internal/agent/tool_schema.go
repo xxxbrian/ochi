@@ -114,11 +114,17 @@ func ValidateToolSchema(raw json.RawMessage) error {
 }
 
 func ValidateToolArguments(def ToolDefinition, raw json.RawMessage) error {
-	if err := ValidateToolSchema(def.Parameters); err != nil {
-		if classified, ok := err.(*ToolArgumentError); ok {
+	var schemaErr error
+	if def.ExternalSchema {
+		schemaErr = ValidateExternalToolSchema(def.Parameters)
+	} else {
+		schemaErr = ValidateToolSchema(def.Parameters)
+	}
+	if schemaErr != nil {
+		if classified, ok := schemaErr.(*ToolArgumentError); ok {
 			classified.Tool = def.Name
 		}
-		return err
+		return schemaErr
 	}
 	value, err := decodeToolJSON(raw)
 	if err != nil {
@@ -127,12 +133,28 @@ func ValidateToolArguments(def ToolDefinition, raw json.RawMessage) error {
 	if _, ok := value.(map[string]any); !ok {
 		return &ToolArgumentError{Tool: def.Name, Code: "invalid_arguments", Path: "$", Message: "tool arguments must be an object"}
 	}
+	if def.ExternalSchema {
+		// The MCP executor validates the original schema with its standard
+		// dialect implementation. Provider schema transport stays unchanged.
+		return nil
+	}
 	root, _ := decodeToolJSON(def.Parameters)
 	if err := checkToolValue(root, root, value, "$", 0); err != nil {
 		if classified, ok := err.(*ToolArgumentError); ok {
 			classified.Tool = def.Name
 		}
 		return err
+	}
+	return nil
+}
+
+func ValidateExternalToolSchema(raw json.RawMessage) error {
+	root, err := decodeToolJSON(raw)
+	if err != nil {
+		return schemaError("invalid_schema", "$", "schema must be valid JSON")
+	}
+	if _, ok := root.(map[string]any); !ok {
+		return schemaError("invalid_schema", "$", "MCP input schema must be an object")
 	}
 	return nil
 }

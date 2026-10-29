@@ -4,18 +4,66 @@ from __future__ import annotations
 import os
 import base64
 import json
+import hashlib
 import re
 import shutil
 import tarfile
 import tempfile
 import time
+import threading
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from workspace_extensions import EXTENSIONS_ROOT, EXTENSIONS_LOCK, _extension_id, _load_extensions, _save_extensions
 from workspace_plugins import extension_allowed
-from workspace_runtime import _run_command, _safe_relative, _truncate
+from workspace_runtime import DATA_ROOT, _run_command, _safe_relative, _truncate
+from workspace_contract import CONTRACT
+
+PREPARATION_LOCK = threading.Lock()
+
+
+def _skill_revision(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        if path.is_file():
+            digest.update(str(path.relative_to(root)).encode() + b"\0")
+            digest.update(path.read_bytes())
+            digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _runtime_revision() -> str:
+    # A rebuilt container must recheck preparation even when persistent language
+    # dependencies remain; system libraries and executables may have changed.
+    value = os.environ.get("HOSTNAME", "") + ":" + CONTRACT["contract_sha256"]
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def skill_readiness(skill: dict[str, Any]) -> dict[str, Any]:
+    root = DATA_ROOT / "skill-deps" / skill["id"]
+    try:
+        state = json.loads((root / ".ochi-ready.json").read_text())
+    except (FileNotFoundError, ValueError):
+        state = {}
+    ready = bool(skill.get("revision")) and state.get("revision") == skill["revision"] and state.get("runtime") == _runtime_revision()
+    return {"state": "ready" if ready else "not_prepared", "revision": skill.get("revision", ""),
+            "path": str(root) if ready else skill["path"]}
+
+
+def prepare_skill(skill: dict[str, Any], args: dict[str, Any], execute: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any]:
+    with PREPARATION_LOCK:
+        root = DATA_ROOT / "skill-deps" / skill["id"]
+        if root.exists():
+            shutil.rmtree(root)
+        shutil.copytree(skill["path"], root)
+        result = execute({"command": args.get("command"), "cwd": str(root), "env": args.get("env"),
+                          "timeout_ms": args.get("timeout_ms", 120_000)})
+        if result.get("exit_code") == 0 and not result.get("timed_out"):
+            (root / ".ochi-ready.json").write_text(json.dumps({
+                "revision": skill["revision"], "runtime": _runtime_revision(), "prepared_at": time.time(),
+            }))
+        return {**result, "readiness": skill_readiness(skill)}
 
 def _skill_content(path: Path) -> tuple[dict[str, Any], str, str]:
     import yaml
@@ -37,7 +85,7 @@ def _skill_content(path: Path) -> tuple[dict[str, Any], str, str]:
 
 
 def _skill_public(skill: dict[str, Any]) -> dict[str, Any]:
-    value = {key: skill.get(key) for key in ("id", "name", "description", "version", "source", "path", "ref", "subdir", "enabled", "installed_at", "updated_at", "compatibility")}
+    value = {key: skill.get(key) for key in ("id", "name", "description", "version", "revision", "source", "path", "ref", "subdir", "enabled", "installed_at", "updated_at", "compatibility")}
     root = Path(skill.get("path", "")) if skill.get("path") else None
     files = []
     if root and root.is_dir():
@@ -168,6 +216,7 @@ def install_skill(args: dict[str, Any]) -> dict[str, Any]:
             now = time.time()
             extra_metadata = metadata.get("metadata") if isinstance(metadata.get("metadata"), dict) else {}
             skill = {"id": skill_id, "name": metadata["name"], "description": metadata["description"], "version": extra_metadata.get("version") or version, "source": source, "path": str(destination), "ref": args.get("ref", ""), "subdir": args.get("subdir", ""), "enabled": bool(args.get("enabled", existing.get("enabled", True))), "installed_at": existing.get("installed_at", now), "updated_at": now, "compatibility": metadata.get("compatibility", "")}
+            skill["revision"] = _skill_revision(destination)
             data["skills"][skill_id] = skill
             _save_extensions(data)
         return _skill_public(skill)
@@ -188,8 +237,25 @@ def skills_index() -> dict[str, Any]:
     return {"skills": values, "total": len(enabled), "truncated": len(values) < len(enabled)}
 
 
-def tool_skills_list(_: dict[str, Any]) -> dict[str, Any]:
-    return skills_index()
+def tool_skills_list(args: dict[str, Any]) -> dict[str, Any]:
+    query = str(args.get("query", "")).strip().casefold()
+    matches = []
+    for key, skill in sorted(_load_extensions()["skills"].items()):
+        if not skill.get("enabled", True) or not extension_allowed("skills", key):
+            continue
+        item = {"id": key, "name": str(skill.get("name", key))[:64], "description": str(skill.get("description", ""))[:240]}
+        if query and query not in (key + " " + item["name"] + " " + item["description"]).casefold():
+            continue
+        matches.append(item)
+    offset, limit = max(0, int(args.get("offset", 0))), min(32, max(1, int(args.get("limit", 16))))
+    values = []
+    for item in matches[offset:offset + limit]:
+        if len(json.dumps(values + [item], ensure_ascii=True).encode()) > 7 * 1024:
+            break
+        values.append(item)
+    more = offset + len(values) < len(matches)
+    return {"skills": values, "total": len(matches), "truncated": more,
+            "next_offset": offset + len(values) if more else None}
 
 
 def tool_skills_read(args: dict[str, Any]) -> dict[str, Any]:
@@ -197,7 +263,8 @@ def tool_skills_read(args: dict[str, Any]) -> dict[str, Any]:
     skill = _load_extensions()["skills"].get(skill_id)
     if not skill or not skill.get("enabled", True) or not extension_allowed("skills", skill_id):
         raise ValueError("skill is unavailable or disabled")
-    _, content, instructions = _skill_content(Path(skill["path"]))
-    return {**_skill_public(skill), "content": content, "instructions": instructions}
+    readiness = skill_readiness(skill)
+    _, content, instructions = _skill_content(Path(readiness["path"]))
+    return {**_skill_public(skill), "path": readiness["path"], "readiness": readiness, "content": content, "instructions": instructions}
 
 

@@ -72,9 +72,11 @@ service recovers it through Docker inspection, never through an unauthenticated
 workspace endpoint. Calls, uploads and management require that token. Only health
 and secret-free catalog reads are public inside the private Docker network.
 `GET /tools` returns intrinsic definitions only. `tool_search` ranks tested,
-enabled MCP metadata by the current query, validates at most 32 candidates, and
-returns at most six relevant schemas (16 KB each, 64 KB total). A scoped run may
-retain at most 16 discovered tools. `GET /tools?names=...` rechecks only those
+enabled MCP metadata by the current query and returns up to six schemas (16 KB
+each, 64 KB total). Query and offset pagination make the whole catalog reachable,
+including rejected-schema diagnostics. A scoped run retains the 16 most recently
+discovered tools; new searches replace older entries instead of exhausting a
+lifetime quota. `GET /tools?names=...` rechecks only those
 selected extensions; search/index paths do not connect MCP clients or provision
 a workspace.
 `POST /tools/{name}` takes JSON arguments and returns:
@@ -85,10 +87,14 @@ a workspace.
 
 Tool errors use `ok:false`; transport/unknown-route errors use HTTP status codes.
 Invalid tool contracts include `error_detail` with `invalid_arguments`,
-`invalid_schema` or `unsupported_schema`. Go preflight and the bridge share
+`invalid_schema` or `unsupported_schema`. Intrinsic Go preflight and the bridge share
 strict fixtures: required/type/unknown properties, exact decimal bounds,
-local definitions and combinators. Unknown assertions and regex predicates fail
-closed; `default` and `format` are annotations, not automatic values/assertions.
+local definitions and combinators. MCP schemas are a separate external contract:
+Go checks JSON shape, preserves the original schema on provider transport, and
+the bridge uses jsonschema with the declared standard dialect to validate calls.
+Patterns, local references, conditionals and tuple schemas are supported without
+silently deleting predicates. References never fetch network or local resources.
+`default` and `format` remain annotations, not automatic values/assertions.
 Execution attributes are scheduler-only: trusted file/skill metadata reads can
 parallelize; shell, desktop/browser and untrusted MCP remain conservative. The
 attributes never enter model-facing tool JSON and do not authorize retries.
@@ -129,7 +135,12 @@ the current RPC's HTTP failure status. HTTP observation never reads response
 bodies or headers and does not change SDK protocol negotiation or retries.
 No OAuth or public bridge access is included.
 `GET /skills/index` is metadata only, bounded to 32 skills/8 KB. Instruction
-bodies are read only with `skills_read`. Computer-off bridges deny Skills/MCP
+bodies are read only with `skills_read`; `skills_list` searches and pages through
+the complete permitted catalog. Dependency preparation targets an explicit user
+workspace and records the Skill content revision and current container runtime.
+Only a successful command marks it ready. `skills_read` returns the prepared path
+so package-local build outputs are used; a Skill update or runtime rebuild makes
+that preparation stale. Readiness is not a global installation claim. Computer-off bridges deny Skills/MCP
 while retaining isolated shell/files/public HTTP computation. Verified private
 methods live in the user's PostgreSQL namespace, separate from shared extensions;
 promotion requires a completed task and genuine current-run check evidence.
@@ -137,6 +148,7 @@ promotion requires a completed task and genuine current-run check evidence.
 Fixture contracts can be checked without a running browser, MCP or shell:
 
 ```sh
+python3 -m pip install -r workspace/requirements-test.txt
 python3 -B -m unittest discover -s workspace/tests -v
 cd server && go test ./internal/workspace ./internal/agent -run 'Test(Catalog|Registry|InvalidToolArgs|ToolSchema)'
 ```

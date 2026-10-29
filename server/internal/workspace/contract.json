@@ -1,6 +1,16 @@
 {
   "protocol": 1,
-  "revision": 1,
-  "capabilities": ["plugin-control", "public-catalog"],
-  "modes": ["control", "workspace", "compute"]
+  "revision": 2,
+  "capabilities": [
+    "plugin-control",
+    "public-catalog",
+    "paginated-catalog",
+    "external-json-schema",
+    "skill-readiness"
+  ],
+  "modes": [
+    "control",
+    "workspace",
+    "compute"
+  ]
 }
