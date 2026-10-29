@@ -17,7 +17,9 @@ See [startup](../README.md), [architecture](../docs/architecture.md), and
   on claim/start, never while a message is still queued.
 - Project-directory mutation and desktop resources use separate process-local
   leases, not an account-wide run lock. Explicit scope reaches every tool.
-- Stopping cancels that run's exec process group. It does not reverse side effects.
+- Exec returns an owned task/service Job with bounded waiting. Stopping a run
+  cancels its process groups; successful completion retains only explicit
+  services. Cleanup does not reverse side effects.
 - On restart, already-started runs become interrupted; unstarted inputs remain.
 - Canonical tool-call/result IDs and native metadata are stored separately from
   visible replies. Model switching strips incompatible private reasoning replay.
@@ -25,7 +27,8 @@ See [startup](../README.md), [architecture](../docs/architecture.md), and
   is not itself a failed run.
 - The stable memory profile is cached per session; related recall runs per accepted
   turn. Edits, deletion, settings, and expiry invalidate retrieved context.
-  Automatic extraction keeps user-quote provenance and revision checks.
+  Automatic extraction keeps user-quote provenance and revision checks; an
+  independent semantic gate admits durable facts and standing preferences.
 - Schedule definitions and executions are separate; Go embeds IANA timezone data.
 
 ## API Areas
@@ -37,7 +40,7 @@ session cookie. All nonpublic routes recheck the account. Roles are admin/user.
 | --- | --- |
 | Authentication | `/api/auth/login`, `/api/auth/me`, `/api/auth/logout` |
 | Published models | `/api/models` |
-| Sessions | `/api/sessions`, `/api/sessions/{id}`, `/messages`, `/runs` |
+| Sessions | `/api/sessions`, `/api/sessions/{id}`, `/head`, `/messages`, `/runs` |
 | Pending inputs | `/api/sessions/{id}/queue`, `/queue/{runId}`; edit/cancel |
 | Runs | `/api/runs/{id}`, `/events`, `/cancel`, `/resume` |
 | Projects | `/api/projects`, `/api/projects/{id}` |
@@ -73,8 +76,9 @@ go test ./...
 go vet ./...
 ```
 
-Focused tests cover provider tool replay, compaction, reasoning mappings, resource
-wait/cancel, desktop socket release, calendar timing, SSE and run lifecycle.
+Focused tests cover bounded public item deltas, interrupted reply continuity,
+provider replay, scoped TaskState, memory admission, actual-usage calibration,
+resource wait/cancel, Job lifetime, calendar timing and run subscriptions.
 Actual-model evidence and UI/device acceptance are distinct from passing tests.
 This is a single-server design, not a crash-replay or distributed execution system.
 

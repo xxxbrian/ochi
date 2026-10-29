@@ -1,9 +1,9 @@
 # Ochi Native Client
 
-Expo SDK 57 and React Native 0.86, built locally for iOS and Android. The client
-shares domain types and design tokens with `../web`, not its DOM or CSS. Chat,
-Markdown, math, navigation and interactions are native; isolated HTML artifacts,
-Computer and administrator pages use WebView.
+Expo SDK 57 and React Native 0.86, built locally for iOS and Android. Domain types
+and conversation behavior live in `../shared`; design tokens come from Web's
+token JSON. Chat, Markdown, math, navigation and interactions are native;
+isolated HTML artifacts, Computer and administrator pages use WebView.
 
 ## Development
 

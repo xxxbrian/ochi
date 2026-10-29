@@ -36,7 +36,8 @@ Use the checkout corresponding to the bundle; its production template comes
 from that checkout. See [setup and recovery](../docs/deployment.md).
 
 `release.py` also uses only the standard library. `metadata` reads the current
-product version/schema and emits UTC build metadata. `package` validates a
+product version, schema and workspace-contract hashes and emits UTC build
+metadata. `package` validates a
 Linux amd64/arm64 ELF binary and creates an immutable run-specific archive with
 exactly one `ochi-server` executable. `manifest` requires both architectures,
 validates their payloads, and writes HTTPS asset URLs, sizes and SHA-256 values

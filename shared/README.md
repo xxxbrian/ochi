@@ -1,4 +1,22 @@
-# Shared Language Runtime
+# Shared Client Contracts
+
+`contracts.ts` defines the public API and run-item types for Web and native.
+`conversation/` owns platform-independent conversation behavior:
+
+- `controller.ts`: authenticated conversation ownership, commands, revisions
+  and idle reconciliation through lightweight session heads.
+- `events.ts`, `runStream.ts`: sequenced item reduction, batched streaming and
+  snapshot recovery after gaps or reconnects.
+- `projection.ts`: ordered public text, reasoning, tool outcomes and compact
+  process groups.
+- `instructions.ts`: accepted follow-up input state.
+- `runDetail.ts`: on-demand historical process detail and terminal handoff.
+
+Each client supplies transport, platform lifecycle and React adapters, then
+renders its own UI. Do not add another platform-specific event reducer or
+conversation state owner.
+
+## Language Runtime
 
 `i18n/index.ts` is a small platform-independent runtime used by Web and native
 clients. It owns the supported locales, BCP 47 system-language resolution,

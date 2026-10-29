@@ -12,6 +12,8 @@ embeds the Vite output in the Go executable; no separate Web container is needed
 ```sh
 (cd web && pnpm install --frozen-lockfile)
 (cd mobile && pnpm install --frozen-lockfile)
+python3 -m venv .venv
+.venv/bin/python -m pip install -r workspace/requirements-test.txt
 (cd web && VITE_DEV_API_TARGET=http://127.0.0.1:8090 pnpm dev)
 ```
 
@@ -43,20 +45,29 @@ before invoking pnpm so Corepack reads that client's `packageManager`:
 
 ```sh
 (cd server && go test ./... && go vet ./...)
-python3 -B -m unittest discover -s scripts/tests -v
-python3 -B -m unittest discover -s workspace/tests -v
+.venv/bin/python -B -m unittest discover -s scripts/tests -v
+.venv/bin/python -B -m unittest discover -s workspace/tests -v
 (cd web && pnpm build && pnpm test)
 (cd mobile && pnpm typecheck && pnpm test)
 (cd mobile && pnpm exec expo install --check)
 ```
 
-Workspace fixture tests run with the Python standard library and mock external
-browser/MCP/desktop dependencies. Actual workspace dependencies are pinned in
-`workspace/Dockerfile`; a fixture pass is not a full Linux runtime test.
-Test scripts under the client `scripts/` directories are repeatable contract
-regressions, not private one-off smoke runs. Their READMEs describe ownership.
+Workspace fixtures use the test requirements above, including the same JSON
+Schema implementation as the runtime, and mock browser/MCP/desktop dependencies.
+Actual workspace dependencies are pinned in `workspace/Dockerfile`; a fixture
+pass is not a full Linux runtime test. Process tests launch real local process
+groups; the Linux image additionally exercises credentials and SDK processes.
+Client tests exercise the shared controller/reducer and actual React renderers:
+React DOM for Web and React Test Renderer for native hooks. They cover ownership
+changes, stream updates, terminal handoff, retained input identity and idle
+reconciliation. These maintained tests do not replace browser or device checks.
 For a native dependency change also verify a real native build. JavaScript
 export, type checking and fixture tests do not certify interaction or visuals.
+The native bootstrap supplies Hermes' missing `Intl.Locale` and
+`Intl.PluralRules` before loading the router, with English and Chinese plural
+data. Node's Intl capabilities are not a substitute for Hermes checks: retain
+the missing-capability bootstrap test and exercise counted process/tool status
+on both built platforms.
 
 CI runs the same Web and native checks on pull requests and client changes.
 Container publication calls the shared checks workflow and waits for every

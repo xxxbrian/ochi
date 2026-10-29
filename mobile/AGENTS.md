@@ -4,7 +4,8 @@
 - Version `ios/` and `android/` source. The Xcode scheme is `Ochi`; both app IDs
   remain `co.bojin.ochi`. Do not clean-prebuild over native changes.
 - Build locally. Never store signing keys or credentials in the checkout.
-- Reuse Web domain types and token JSON, not DOM/CSS or a speculative UI package.
+- Reuse `shared/contracts.ts` and `shared/conversation` for domain behavior and
+  Web token JSON for design values, not DOM/CSS or a speculative UI package.
 - iOS uses supported native Liquid Glass/context menus. Android keeps the same
   visual language with RN/Expo Blur, not Material; preserve accessibility and
   older-OS/reduced-transparency fallbacks.

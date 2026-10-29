@@ -17,6 +17,7 @@ describe local contracts; `docs/design.md` covers presentation.
 | `server/internal/i18n` | Public error identities, translations and HTTP language negotiation |
 | `web/src` | Browser routing, state and rendering |
 | `mobile/app`, `mobile/src` | Native routing, state and rendering |
+| `shared/contracts.ts`, `shared/conversation` | Public run contracts, conversation commands, stream reduction and presentation projections |
 | `shared/i18n` | Client locale resolution, interpolation and process messages |
 | `workspace/` | Scoped Linux shell/files, browser, desktop and extensions |
 
@@ -92,6 +93,41 @@ from the final answer alone. Provider-specific reasoning replay is normalized
 when switching models. Titles, memory extraction and context compaction use
 separate auxiliary requests and do not masquerade as user conversation turns.
 
+The runtime owns one ordered collection of public `items`: text, reasoning and
+tool occurrences. Items have stable occurrence IDs and explicit model-round,
+source, phase and lifecycle metadata. A provider may reuse an ID in another
+round; that does not identify the same occurrence. `item_started` introduces an
+empty text item, `item_delta` carries at most 4,096 UTF-8 bytes, and
+`item_updated` carries metadata or a completed tool result. Neither token deltas
+nor terminal status events resend accumulated prose. Subscribers recover a
+sequence gap with a snapshot. There are no separately mutable public
+output/reasoning/steps/timeline collections to reconcile.
+
+Canonical provider history, these public items and durable checkpoints serve
+different purposes. The provider transcript retains replay semantics; public
+items retain what the user actually saw; checkpoints preserve current run
+state. Successful completion projects final-phase text when present. An
+interrupted run preserves its public text even if no final phase was reached.
+Visible text that never committed to provider history is available to the next
+turn as an explicitly incomplete observation. Private reasoning is not inserted
+as that observation, and missing tool results remain unknown rather than being
+invented or replayed.
+
+Web and native clients use one conversation controller and stream reducer from
+`shared/conversation`. Transport and platform lifecycle are adapters; UI hooks
+do not independently merge command results, history and active runs. Ownership
+includes backend origin, account and conversation/draft identity. Changing that
+identity invalidates stale requests. Within one owner, serialized commands and
+revision checks prevent older reads from replacing newer accepted state.
+
+Periodic reconciliation uses `GET /api/sessions/{id}/head`: session metadata,
+latest run identity/sequence/status and history/queue revisions. It does not
+read or clone process bodies. Clients fetch changed history, queue or run detail
+only when those identities/revisions require it; historical process detail is
+loaded on expansion. Active runs continue through SSE, including recovery after
+reconnect. New-chat creation adopts the accepted conversation in the same
+controller instead of creating a second live state owner.
+
 Ordinary chat and tool-loop requests omit output-token caps; the provider owns
 the single-generation allowance. Model output metadata describes capability,
 not an application quota, even when an administrator edits it. Input compaction
@@ -103,10 +139,68 @@ limit. Titles, memory extraction and summaries keep explicit task-sized output
 budgets. Real upstream truncation retains visible partial output and usage,
 never executes incomplete tools, and does not automatically replay the request.
 
+Within a run, the last successful provider request's actual prompt usage
+calibrates the unchanged input prefix. Only appended growth uses the heuristic,
+with additional headroom. Hashes of model, protocol, tools, history prefix and
+semantic dynamic context determine whether the measurement still applies.
+Rewriting/compacting the prefix invalidates it; a changing clock alone does not.
+The anchor holds hashes and counts, not another copy of the conversation.
+Billable usage across retries remains separate from this individual-request
+measurement. Diagnostics expose both heuristic and calibrated input estimates.
+
 Process events preserve thinking, interim replies and tool calls in occurrence
 order. The clients derive compact grouped views without reordering the canonical
 events. Finished message DTOs expose `attachments`; live run snapshots expose
 `artifacts`. These are different contracts, not alternate names for one field.
+
+## Task Continuity And Memory
+
+Context compaction summarizes historical evidence; it does not discover
+permanent rules by matching words such as "must" or "only". Continuity quotes
+retain at most four recent accepted user messages within a 1,200-token estimate.
+Original resource paths/links have a separate bounded allowance. Older
+summaries cannot repopulate this protected user-evidence set. The current user
+request remains verbatim, tool-call groups stay complete, and canonical
+provider records are not shortened.
+
+The active TaskState owns a complex task's objective, constraints, remaining
+work and acceptance checks. Each new or changed constraint cites an exact
+accepted user excerpt and source run. Updates replace the current set, so
+superseded constraints disappear. `new_task` starts a new scope instead of
+carrying old constraints into a different objective; completed task records are
+not injected into later turns. Editing a source turn invalidates derived task
+state in the same transaction. Source attribution is deterministic, while
+recognizing a task switch and interpreting its requirements remain model work.
+
+Task verification observes real artifact bytes, scoped files and recorded
+execution outcomes. A deferred `exec` is joined to later `job` observations by
+job identity within that run. Execution order, not completion order, determines
+the latest check. Running services and cancelled/timed-out jobs do not count as
+successful checks. Both the execution and result occurrence remain identifiable;
+the initial tool result is never rewritten into a fictitious synchronous
+success. Verification is evidence of the declared checks, not a claim that
+semantic or visual quality was automatically proved.
+
+Memory has two independent questions: whether a source is attributable to the
+user, and whether its meaning should persist beyond the current task.
+Automatic extraction and `memory_save` share a separate bounded semantic
+assessment of the full accepted user statement. It distinguishes lasting
+personal facts/standing preferences from task-local instructions, quoted text,
+uncertain inference and sensitive content. Project-only applicability cannot
+be broadened to account scope. A one-time "in English" instruction is not a
+standing language preference. Failed or malformed assessment does not admit a
+fact; this is a model judgment with explicit failure behavior, not a guarantee
+of perfect classification.
+
+Records carry `admission`: explicit user edits are `curated`, admitted
+automatic/agent facts are `durable`, and summaries/methods are `episodic`.
+Only admitted facts/preferences enter stable profiles and fact recall.
+Unadmitted historical facts remain manageable by the user without influencing
+profile, lexical or vector retrieval. Extraction retains the existing durable
+job/lease mechanism and caches successful admission decisions for worker retry;
+it does not introduce a second queue. Provenance, correction/supersession,
+tombstones and revision guards remain authoritative. Recall is scoped and
+bounded; ephemeral task directions stay in conversation/TaskState.
 
 ## Storage And Permission
 
@@ -136,6 +230,21 @@ an isolated per-session compute container for ordinary code and public HTTP;
 it never mounts the persistent workspace or exposes its Skills/MCP tools.
 Resource leases serialize shared-directory mutations and desktop access without
 locking every conversation for an account.
+
+`exec` starts an owned Job and returns its result or identity after a short
+bounded wait. Tasks have finite deadlines and are cleaned up when their run
+finishes; explicit services can survive successful completion for later turns
+in the same conversation. Cancellation, failure or permission revocation clears
+the corresponding work. Python owns the process groups, durable logs and state;
+Go queries that authority instead of maintaining a second Job registry.
+Tool metadata declares resource claims. Live Jobs keep those resources occupied
+after a run releases its leases, including across a Go restart.
+
+Provisioning and maintenance coordinate per container. A borrowed bridge
+reference covers attachment through the complete request. Idle compute
+containers stop only when neither requests nor Jobs remain, preserving their
+named data volumes. See the [workspace contracts](../workspace/README.md) for
+Job observation, cancellation and task/service limits.
 
 Every tool receives explicit user/session/run/project/cwd scope. Browser and
 desktop operations revalidate ownership, cancellation and permissions. Ordinary
@@ -169,10 +278,15 @@ cannot be disabled by users; optional plugins have per-user switches. Discovery
 and dispatch both enforce the current policy. There is no third-party catalog
 or user plugin publication flow.
 
-Memory recall is selective, provenance-aware and scoped to the request. Durable
-preferences require durable evidence; a one-turn language instruction must not
-be treated as a permanent account preference. See the implementation contracts
-and tests in `server/internal/agent` and `server/internal/storage`.
+The control runtime owns private plugin configuration and injects scoped MCP
+credentials at transport/process startup. Ordinary user exec receives only
+public catalog and Skill assets, never the global configuration volume.
+The complete Skill catalog supports search and pagination; selected MCP slots
+are replaceable rather than a permanent discovery limit. External MCP JSON
+Schema remains separate from intrinsic tool validation and provider adaptation.
+Skill readiness is keyed to the target user's runtime and content identity,
+including the compiled resources actually executed there. Details belong to
+the [workspace contracts](../workspace/README.md).
 
 ## Trust Boundaries
 
