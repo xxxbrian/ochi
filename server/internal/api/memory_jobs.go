@@ -349,32 +349,18 @@ func boundedMemoryExtraction(result memoryExtraction, prompt, projectID string, 
 
 func verifiedMemorySteps(steps []runtime.Step) map[string]bool {
 	verified := map[string]bool{}
-	for _, step := range steps {
-		if step.Name != "exec" || step.Status != "completed" {
+	for _, execution := range executionObservations(steps) {
+		if !execution.Successful {
 			continue
 		}
-		var args struct {
-			Command string `json:"command"`
-		}
-		var result struct {
-			ExitCode *int   `json:"exit_code"`
-			TimedOut bool   `json:"timed_out"`
-			IsError  bool   `json:"isError"`
-			Error    string `json:"error"`
-			Stdout   string `json:"stdout"`
-			Stderr   string `json:"stderr"`
-		}
-		if json.Unmarshal(step.Arguments, &args) != nil || json.Unmarshal([]byte(step.Output), &result) != nil || result.ExitCode == nil || *result.ExitCode != 0 || result.TimedOut || result.IsError || result.Error != "" {
-			continue
-		}
-		command := strings.TrimSpace(strings.ToLower(args.Command))
+		command := strings.TrimSpace(strings.ToLower(execution.Command))
 		if strings.ContainsAny(command, ";&|`\n") || strings.Contains(command, "$(") {
 			// A trailing successful command can hide a failed check's exit code.
 			// Conservative automatic methods accept a single check, not shell flow.
 			continue
 		}
 		informational := false
-		for _, argument := range strings.Fields(args.Command) {
+		for _, argument := range strings.Fields(execution.Command) {
 			switch strings.SplitN(strings.Trim(argument, "\"'"), "=", 2)[0] {
 			case "-h", "-V", "--help", "-help", "--version", "-version", "--list", "--list-tests", "--listTests", "--listTestFiles", "--collect-only", "--collectonly", "--co", "--dry-run", "--no-run", "-list", "-n":
 				informational = true
@@ -383,15 +369,19 @@ func verifiedMemorySteps(steps []runtime.Step) map[string]bool {
 		if informational {
 			continue
 		}
-		output := strings.ToLower(result.Stdout + "\n" + result.Stderr)
-		if strings.Contains(output, "no tests to run") || strings.Contains(output, "no test files") || strings.Contains(output, "collected 0 items") || strings.Contains(output, "running 0 tests") {
+		noChecks := false
+		for _, log := range execution.Logs {
+			output := strings.ToLower(log)
+			noChecks = noChecks || strings.Contains(output, "no tests to run") || strings.Contains(output, "no test files") || strings.Contains(output, "collected 0 items") || strings.Contains(output, "running 0 tests")
+		}
+		if noChecks {
 			continue
 		}
 		// This records evidence of a check, not proof that an arbitrary claim is
 		// true. A model-proposed method remains scoped to these source steps.
 		check := memoryCheckCommand.MatchString(command)
-		if check && (result.Stdout != "" || result.Stderr != "") {
-			verified[step.ID] = true
+		if check && len(execution.Logs) > 0 {
+			verified[execution.StepID] = true
 		}
 	}
 	return verified

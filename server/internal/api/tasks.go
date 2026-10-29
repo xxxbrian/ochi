@@ -61,24 +61,15 @@ func (s *Server) taskTool(ctx context.Context, userID, name string, raw json.Raw
 
 func commandEvidence(criterion storage.TaskCriterion, snapshot runtime.Snapshot) storage.TaskEvidence {
 	v := storage.TaskEvidence{ID: criterion.ID, Source: "recorded_exec", RunID: snapshot.RunID, CheckedAt: time.Now().UTC(), Detail: "No matching command was observed in this run."}
-	for _, step := range snapshot.Steps() {
-		var args struct {
-			Command string `json:"command"`
-		}
-		var output struct {
-			ExitCode *int   `json:"exit_code"`
-			TimedOut bool   `json:"timed_out"`
-			IsError  bool   `json:"isError"`
-			Error    string `json:"error"`
-		}
-		if step.Name != "exec" || json.Unmarshal(step.Arguments, &args) != nil || args.Command != criterion.Target {
+	for _, execution := range executionObservations(snapshot.Steps()) {
+		if execution.Command != criterion.Target {
 			continue
 		}
-		// Steps retain dispatch order. A later failed or unfinished recheck must
-		// invalidate earlier success rather than certify outdated work.
-		v.Passed, v.Detail = false, "Latest matching tool call "+step.ID+" has no recorded successful exit."
-		if json.Unmarshal([]byte(step.Output), &output) == nil && step.Status == "completed" && output.ExitCode != nil && *output.ExitCode == 0 && !output.TimedOut && !output.IsError && output.Error == "" {
-			v.Passed, v.Detail = true, "Latest matching tool call "+step.ID+" exited successfully."
+		// Dispatch order belongs to exec, even if an earlier job finishes after
+		// a later recheck started. An unfinished recheck supersedes old success.
+		v.Passed, v.Detail = false, "Latest matching tool call "+execution.StepID+" has no recorded successful exit."
+		if execution.Successful {
+			v.Passed, v.Detail = true, "Latest matching tool call "+execution.StepID+" exited successfully; observed in "+execution.ResultStepID+"."
 		}
 	}
 	return v
