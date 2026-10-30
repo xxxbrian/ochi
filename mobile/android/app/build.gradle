@@ -92,7 +92,7 @@ android {
         applicationId 'co.bojin.ochi'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 11
+        versionCode 12
         versionName "0.1.0"
         resourceConfigurations += ["b+en", "b+zh+Hans", "b+zh+Hant"]
 
