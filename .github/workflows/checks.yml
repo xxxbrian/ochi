@@ -45,7 +45,7 @@ jobs:
             --publish 127.0.0.1:5432:5432 \
             --env POSTGRES_USER=ochi --env POSTGRES_PASSWORD=fixture-only \
             --env POSTGRES_DB=ochi_process_qa \
-            --health-cmd 'pg_isready -U ochi -d ochi_process_qa' \
+            --health-cmd 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U ochi -d ochi_process_qa -Atqc "SELECT 1"' \
             --health-interval 1s --health-timeout 3s --health-retries 30 \
             ochi-postgres:check
           for attempt in {1..40}; do
