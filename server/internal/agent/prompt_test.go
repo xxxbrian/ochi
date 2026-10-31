@@ -144,10 +144,15 @@ func TestComputerGuidanceMatchesLiveAuthorizationAndVision(t *testing.T) {
 			if strings.Contains(live, "browser_resume") != test.allowed || strings.Contains(live, "computer_observe") != (test.allowed && test.vision) {
 				t.Fatalf("guidance does not match available environment: %s", live)
 			}
+			for _, capability := range []string{"environment=compute", "files_copy", "computer_queue", "computer_release"} {
+				if strings.Contains(live, capability) != test.allowed {
+					t.Fatalf("execution guidance %q does not match authorization: %s", capability, live)
+				}
+			}
 			if test.allowed && !strings.Contains(live, "request_user_input") {
 				t.Fatal("manual handoff missing")
 			}
-			if len(history) != 2 || history[0].Content != input[0].Content || strings.Contains(history[0].Content.(string), "browser_resume") {
+			if len(history) != 2 || history[0].Content != input[0].Content || strings.Contains(history[0].Content.(string), "browser_resume") || strings.Contains(history[0].Content.(string), "computer_queue") {
 				t.Fatal("live guidance changed the canonical transcript or stable prefix")
 			}
 		})

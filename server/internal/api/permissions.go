@@ -55,7 +55,7 @@ func (s *Server) releaseDrainedComputerResourcesLocked(runID string) {
 		return !active
 	})
 	if !active {
-		s.resources.releaseRun(runID)
+		s.resources.releaseRunLeases(runID)
 	}
 }
 
@@ -125,7 +125,17 @@ func (s *Server) effectiveScope(ctx context.Context, scope agent.RunScope) (agen
 	if err != nil {
 		return scope, err
 	}
-	scope.ComputeOnly = !allowed
+	switch scope.ExecutionEnvironment {
+	case "compute":
+		scope.ComputeOnly = true
+	case "desktop":
+		if !allowed {
+			return scope, errComputerPermission
+		}
+		scope.ComputeOnly = false
+	default:
+		scope.ComputeOnly = !allowed
+	}
 	return scope, nil
 }
 
@@ -169,37 +179,7 @@ func (s *Server) prepareToolScope(ctx context.Context, scope agent.RunScope, bri
 		key = scope.RunID + ":compute"
 	}
 	if _, prepared := s.preparedScopes.Load(key); prepared {
-		if mode, ok := s.preparedScopes.Load(scope.RunID + ":last-mode"); ok && mode == scope.ComputeOnly {
-			return nil, nil
-		}
-	}
-	// A conversation may cross the permission boundary mid-turn. Copy only its
-	// scratch directory, never a persistent Project/profile into computation.
-	if !scope.ComputeOnly {
-		_, used := s.preparedScopes.Load(scope.RunID + ":compute")
-		if !used {
-			if source, ok := bridge.(interface {
-				ComputeExists(context.Context, string, string) (bool, error)
-			}); ok {
-				var err error
-				used, err = source.ComputeExists(ctx, scope.UserID, scope.SessionID)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-		if used {
-			from := scope
-			from.ComputeOnly = true
-			status, _, bundle, err := bridge.Bridge(agent.WithRunScope(ctx, from), scope.UserID, http.MethodGet, "/workspace/export", nil)
-			if err != nil || status >= 400 {
-				return nil, bridgeError(status, bundle, err)
-			}
-			status, _, body, err := bridge.Bridge(agent.WithRunScope(ctx, scope), scope.UserID, http.MethodPost, "/workspace/import", bundle)
-			if err != nil || status >= 400 {
-				return nil, bridgeError(status, body, err)
-			}
-		}
+		return nil, nil
 	}
 	items, err := s.store.SessionArtifacts(ctx, scope.UserID, scope.SessionID)
 	if err != nil {
@@ -251,7 +231,6 @@ func (s *Server) prepareToolScope(ctx context.Context, scope agent.RunScope, bri
 		}
 	}
 	s.preparedScopes.Store(key, true)
-	s.preparedScopes.Store(scope.RunID+":last-mode", scope.ComputeOnly)
 	return updates, nil
 }
 

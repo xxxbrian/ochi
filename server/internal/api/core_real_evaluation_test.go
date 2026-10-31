@@ -383,7 +383,7 @@ func (e coreEvalRunner) run(id, boundary, prompt string, session storage.Session
 	defer func() {
 		e.server.resources.releaseRun(runID)
 		e.server.scopePreparations.Delete(runID)
-		for _, mode := range []string{":computer", ":compute", ":last-mode"} {
+		for _, mode := range []string{":computer", ":compute"} {
 			e.server.preparedScopes.Delete(runID + mode)
 		}
 	}()

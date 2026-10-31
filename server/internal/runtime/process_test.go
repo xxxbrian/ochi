@@ -99,6 +99,33 @@ func TestItemEventsExactlyReconstructSnapshot(t *testing.T) {
 		t.Fatal("final phase projection wrong")
 	}
 }
+
+func TestToolProgressUpdatesOnlyCurrentRunningOccurrence(t *testing.T) {
+	r := processRun(t)
+	if err := r.UpdateStep("old-round", Step{ID: "reused", Name: "browser_click", Status: "completed", Output: "old result"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.UpdateStep("new-round", Step{ID: "reused", Name: "browser_click", Status: "running"}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, events, stop := r.Subscribe()
+	defer stop()
+	if err := r.UpdateToolProgress("reused", `{"status":"waiting","waiting_ahead":2}`); err != nil {
+		t.Fatal(err)
+	}
+	applyItemEvent(t, &snapshot, <-events)
+	actual := r.Snapshot()
+	if len(actual.Items) != 2 || actual.Items[0].Step.Output != "old result" || actual.Items[1].Step.Status != "running" ||
+		!reflect.DeepEqual(snapshot.Items, actual.Items) {
+		t.Fatal("progress changed occurrence identity or lost event reconstruction")
+	}
+	if err := r.UpdateStep("new-round", Step{ID: "reused", Name: "browser_click", Status: "completed", Outcome: "not_executed", Output: "paused"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.UpdateToolProgress("reused", "late progress"); err == nil {
+		t.Fatal("late progress modified a completed result")
+	}
+}
 func TestItemSnapshotsAndSubscribersAreIsolated(t *testing.T) {
 	r := processRun(t)
 	_, a, stopA := r.Subscribe()

@@ -51,6 +51,10 @@ type ToolResult struct {
 	Output     string
 	Screenshot string
 	Usage      *Usage
+	// Replan marks a successful admission result that did not execute the action.
+	// The remaining calls from the same model response must not use stale state.
+	Replan      bool
+	NotExecuted bool
 }
 type ToolSource interface {
 	Definitions(context.Context, string) ([]ToolDefinition, error)

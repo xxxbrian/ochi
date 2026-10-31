@@ -24,7 +24,7 @@ func readInterruptScope(r *http.Request) (agent.RunScope, error) {
 
 func TestCancelledDesktopTransportInterruptsScopedOperationAndDrains(t *testing.T) {
 	for _, tool := range []struct{ name, arguments string }{
-		{"exec", `{"command":"echo fixture"}`},
+		{"exec", `{"command":"echo fixture","environment":"desktop"}`},
 		{"browser_action", `{"action":"wait","timeout_ms":20000}`},
 		{"computer_type", `{"text":"fixture","delay_ms":100}`},
 		{"computer_drag", `{"x":1,"y":2,"to_x":3,"to_y":4}`},
@@ -68,6 +68,9 @@ func TestCancelledDesktopTransportInterruptsScopedOperationAndDrains(t *testing.
 			d.urls["fixture-user"] = bridge.URL
 			d.bridge = &http.Client{Timeout: 5 * time.Second}
 			scope := agent.RunScope{UserID: "fixture-user", SessionID: "fixture-session", RunID: "fixture-run", ProjectID: "fixture-project", CWD: "/data/projects/fixture-project", OperationID: "upstream-call-id"}
+			if tool.name == "exec" {
+				scope.ExecutionEnvironment = "desktop"
+			}
 			ctx, cancel := context.WithCancel(agent.WithRunScope(context.Background(), scope))
 			defer cancel()
 			// The caller releases its lease only after Call has drained, even when

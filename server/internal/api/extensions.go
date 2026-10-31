@@ -146,15 +146,16 @@ func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
 			UserID: userID, SessionID: "skill-install-" + segments[1], RunID: runID,
 		}
 		owner := resourceOwner{UserID: userID, SessionID: scope.SessionID, RunID: runID}
-		if err := s.resources.acquire(r.Context(), "desktop:"+userID, owner, nil); err != nil {
+		if _, err := s.resources.wait(r.Context(), resourceRequest{
+			Owner: owner, Keys: []string{"desktop:" + userID}, NoCheckpoint: true,
+			Available: func(ctx context.Context) (bool, error) {
+				return s.jobClaimsAvailable(ctx, scope, []string{"desktop"}, false)
+			},
+		}, nil); err != nil {
 			writeError(w, http.StatusConflict, err)
 			return
 		}
 		defer s.resources.releaseRun(runID)
-		if err := s.waitForJobClaims(r.Context(), scope, []string{"desktop"}, false, nil); err != nil {
-			writeError(w, http.StatusConflict, err)
-			return
-		}
 		defer s.finishWorkspaceRun(scope, runtime.StatusCompleted)
 		r = r.WithContext(agent.WithRunScope(r.Context(), scope))
 	}

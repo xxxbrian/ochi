@@ -20,6 +20,18 @@ and [deployment](../docs/deployment.md).
 - Top-level directory ownership is prepared on image creation/first attach;
   existing files are not recursively re-owned or relocated.
 
+Ordinary `exec`, `job`, file and `web_fetch` calls default to
+`environment:"compute"`, even when Computer access is enabled. Each conversation
+has a separate computation container and named data volume without desktop,
+browser profiles, Project files or plugin credentials. Use
+`environment:"desktop"` explicitly for the persistent Computer filesystem or a
+GUI-capable command; Computer permission is checked before dispatch. Results
+identify their environment, and `job` uses the same environment as its `exec`.
+The same absolute path in the two environments refers to different bytes.
+`files_copy` transfers one explicitly selected file between environments without
+publishing it. Toggling Computer access never imports an entire scratch directory
+or copies persistent Computer data into computation.
+
 Desktop applications include Thunar, Xfce Terminal, Mousepad, Ristretto, Evince,
 Xarchiver and LibreOffice Writer/Calc/Impress. The application menu, browser,
 files and terminal launchers are available to both the agent and manual control.
@@ -112,15 +124,17 @@ session cannot inspect or cancel it.
 Tasks have a finite deadline (20 seconds by default, at most ten minutes) and
 end when their run ends. Persistent foreground servers explicitly use
 `kind:"service"` and a finite deadline (one hour by default, at most 24 hours).
-They survive successful run completion, not explicit cancellation or Computer
-revocation. The shell exiting also terminates its remaining process group;
+They survive successful run completion, not explicit cancellation. Computer
+revocation ends desktop jobs while isolated computation continues. The shell
+exiting also terminates its remaining process group;
 backgrounding with `&` is not a substitute for a service. Completed state/logs
 remain readable after a container restart; live processes are not restored.
 
 The job registry owns process lifetime, live resource claims and bridge activity.
-Full workspace commands retain desktop/project claims for their entire lifetime;
+Explicit desktop commands retain desktop/project claims for their entire lifetime;
 observation/cancellation remains available without acquiring those claims.
-Computer-off jobs have no desktop/project claims. `/runs/finish` ends a run's
+Compute jobs have no desktop/project claims regardless of Computer permission.
+`/runs/finish` ends a run's
 tasks (and services on failure), `/runs/cancel` cancels that run, and
 `/jobs/cancel-session` closes all existing jobs for the specified user/session.
 Authenticated `/jobs/active` reports jobs, active requests and monotonic idle

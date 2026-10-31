@@ -53,26 +53,6 @@ class ToolContracts(unittest.TestCase):
             finally:
                 workspace_runtime.RUN_SCOPE.reset(token)
 
-    def test_scratch_transfer_still_copies_working_files_without_publication(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="ochi-scratch-transfer-") as tmp:
-            data = Path(tmp)
-            files = data / "files"
-            files.mkdir()
-            first, second = data / "work" / "one", data / "work" / "two"
-            token = workspace_runtime.RUN_SCOPE.set({"run_id": "fixture-run", "session_id": "session", "cwd": str(first)})
-            try:
-                with patch.object(workspace_runtime, "DATA_ROOT", data), patch.object(workspace_runtime, "FILES_ROOT", files):
-                    bridge.tool_files_write({"path": "notes/reference.txt", "content": "private working bytes"})
-                    bundle = workspace_runtime._export_scratch()
-                    workspace_runtime.RUN_SCOPE.set({"run_id": "fixture-run", "session_id": "session", "cwd": str(second)})
-                    result = workspace_runtime._import_scratch(bundle)
-                    self.assertEqual(len(result["files"]), 1)
-                    self.assertEqual((second / "notes" / "reference.txt").read_text(), "private working bytes")
-                    self.assertFalse((data / "published").exists())
-                    self.assertFalse((data / "runs").exists())
-            finally:
-                workspace_runtime.RUN_SCOPE.reset(token)
-
     def test_file_reads_use_current_scope_and_explicit_upload_paths(self) -> None:
         with tempfile.TemporaryDirectory(prefix="ochi-file-scope-") as tmp:
             data = Path(tmp)

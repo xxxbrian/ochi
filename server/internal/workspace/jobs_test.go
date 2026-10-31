@@ -129,6 +129,50 @@ func TestJobActivityRequiresEveryLivenessField(t *testing.T) {
 	}
 }
 
+func TestSessionCleanupCancelsBothTargetsWithoutStartingContainers(t *testing.T) {
+	d := NewDocker(Config{})
+	desktop := userContainer("owner")
+	compute := computeContainer("owner", "session")
+	var targets []string
+	d.engine.Transport = catalogRoundTripper(func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodGet || (r.URL.Path != "/v1.44/containers/"+desktop+"/json" &&
+			r.URL.Path != "/v1.44/containers/"+compute+"/json") {
+			t.Fatalf("cleanup provisioned a container: %s %s", r.Method, r.URL.Path)
+		}
+		return workspaceResponse(http.StatusOK, fixtureContainer(`{"State":{"Running":true}}`)), nil
+	})
+	d.bridge.Transport = catalogRoundTripper(func(r *http.Request) (*http.Response, error) {
+		var scope agent.RunScope
+		if err := json.Unmarshal([]byte(r.Header.Get("X-Run-Scope")), &scope); err != nil {
+			t.Fatal(err)
+		}
+		wantEnv := "desktop"
+		if r.URL.Host == compute+":8080" {
+			wantEnv = "compute"
+		}
+		if r.URL.Path != "/jobs/cancel-session" || scope.ExecutionEnvironment != wantEnv ||
+			scope.ComputeOnly != (wantEnv == "compute") || scope.SessionID != "session" ||
+			r.Header.Get("Authorization") != "Bearer "+fixtureToken {
+			t.Fatalf("cleanup lost target or ownership: %s %+v", r.URL, scope)
+		}
+		targets = append(targets, wantEnv)
+		return workspaceResponse(http.StatusOK, `{"ok":true,"result":{}}`), nil
+	})
+	if err := d.CancelSessionJobs(context.Background(), "owner", "session"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(targets, ",") != "desktop,compute" {
+		t.Fatal(targets)
+	}
+	targets = nil
+	if err := d.CancelComputerJobs(context.Background(), "owner", "session"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(targets, ",") != "desktop" {
+		t.Fatalf("Computer revocation cancelled isolated computation: %v", targets)
+	}
+}
+
 func TestWorkspaceMaintenanceDoesNotInterruptBorrowedRequests(t *testing.T) {
 	d := NewDocker(Config{})
 	d.active = map[string]int{"__admin__": 1}

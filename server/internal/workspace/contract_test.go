@@ -34,6 +34,15 @@ func TestBridgeContractRejectsIncompatibleOrWrongModeImage(t *testing.T) {
 		{"different protocol", func(v map[string]any) { v["protocol"] = 999 }},
 		{"different revision", func(v map[string]any) { v["revision"] = 999 }},
 		{"missing capabilities", func(v map[string]any) { v["capabilities"] = []string{} }},
+		{"missing execution target semantics", func(v map[string]any) {
+			capabilities := []any{}
+			for _, capability := range v["capabilities"].([]any) {
+				if capability != "explicit-execution-targets" {
+					capabilities = append(capabilities, capability)
+				}
+			}
+			v["capabilities"] = capabilities
+		}},
 		{"wrong execution mode", func(v map[string]any) { v["mode"] = "control" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

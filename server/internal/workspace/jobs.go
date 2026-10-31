@@ -138,8 +138,10 @@ func (d *Docker) FinishRun(ctx context.Context, scope agent.RunScope, cancelServ
 	for _, compute := range []bool{false, true} {
 		current := scope
 		current.ComputeOnly = compute
+		current.ExecutionEnvironment = "desktop"
 		key, name := scope.UserID, userContainer(scope.UserID)
 		if compute {
+			current.ExecutionEnvironment = "compute"
 			key = computeContainer(scope.UserID, scope.SessionID)
 			name = key
 		}
@@ -155,12 +157,33 @@ func (d *Docker) FinishRun(ctx context.Context, scope agent.RunScope, cancelServ
 }
 
 func (d *Docker) CancelSessionJobs(ctx context.Context, userID, sessionID string) error {
-	address, running, err := d.existingBridge(ctx, userContainer(userID), userID)
+	var errs []error
+	for _, compute := range []bool{false, true} {
+		if err := d.cancelTargetJobs(ctx, userID, sessionID, compute); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// Computer revocation does not terminate the conversation's isolated compute.
+func (d *Docker) CancelComputerJobs(ctx context.Context, userID, sessionID string) error {
+	return d.cancelTargetJobs(ctx, userID, sessionID, false)
+}
+
+func (d *Docker) cancelTargetJobs(ctx context.Context, userID, sessionID string, compute bool) error {
+	scope := agent.RunScope{UserID: userID, SessionID: sessionID, ExecutionEnvironment: "desktop"}
+	key, name := userID, userContainer(userID)
+	if compute {
+		scope.ComputeOnly, scope.ExecutionEnvironment = true, "compute"
+		key = computeContainer(userID, sessionID)
+		name = key
+	}
+	address, running, err := d.existingBridge(ctx, name, key)
 	if err != nil || !running {
 		return err
 	}
-	scope := agent.RunScope{UserID: userID, SessionID: sessionID}
-	return d.lifecycleRequest(agent.WithRunScope(ctx, scope), userID, address, "/jobs/cancel-session", map[string]any{}, nil)
+	return d.lifecycleRequest(agent.WithRunScope(ctx, scope), key, address, "/jobs/cancel-session", map[string]any{}, nil)
 }
 
 const computeIdleTimeout = 10 * time.Minute

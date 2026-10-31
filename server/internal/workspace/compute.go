@@ -140,11 +140,3 @@ func (d *Docker) RemoveCompute(ctx context.Context, userID, sessionID string) er
 	}
 	return err
 }
-
-func (d *Docker) ComputeExists(ctx context.Context, userID, sessionID string) (bool, error) {
-	status, err := d.request(ctx, http.MethodGet, "/containers/"+computeContainer(userID, sessionID)+"/json", nil, nil)
-	if status == http.StatusNotFound {
-		return false, nil
-	}
-	return err == nil, err
-}

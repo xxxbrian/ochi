@@ -24,7 +24,7 @@ func TestResourceWaitCancellationAndRunRelease(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	waited := false
-	if err := resources.acquire(ctx, key, second, func(waiting bool) { waited = waiting }); !errors.Is(err, context.DeadlineExceeded) || !waited {
+	if err := resources.acquire(ctx, key, second, func(waiting bool) { waited = waited || waiting }); !errors.Is(err, context.DeadlineExceeded) || !waited {
 		t.Fatalf("waiting cancellation: %v %v", err, waited)
 	}
 	if err := resources.acquire(context.Background(), "project:/data/projects/other", second, nil); err != nil {
@@ -52,10 +52,11 @@ func TestResourceWaitCancellationAndRunRelease(t *testing.T) {
 }
 
 type jobFixtureTools struct {
-	jobs           []workspace.Job
-	finished       []agent.RunScope
-	cancelServices []bool
-	cancelled      []agent.RunScope
+	jobs              []workspace.Job
+	finished          []agent.RunScope
+	cancelServices    []bool
+	cancelled         []agent.RunScope
+	cancelledComputer []agent.RunScope
 }
 
 func (*jobFixtureTools) Definitions(context.Context, string) ([]agent.ToolDefinition, error) {
@@ -82,6 +83,13 @@ func (f *jobFixtureTools) CancelSessionJobs(ctx context.Context, userID, session
 	f.cancelled = append(f.cancelled, agent.RunScope{UserID: userID, SessionID: sessionID})
 	return nil
 }
+func (f *jobFixtureTools) CancelComputerJobs(ctx context.Context, userID, sessionID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	f.cancelledComputer = append(f.cancelledComputer, agent.RunScope{UserID: userID, SessionID: sessionID})
+	return nil
+}
 
 func TestRunJobCleanupPreservesOnlyExplicitCompletedServices(t *testing.T) {
 	tools := &jobFixtureTools{}
@@ -104,15 +112,15 @@ func TestJobRoutesRevokeAndDeleteClearPersistentSessionServices(t *testing.T) {
 	f.server.SetTools(tools)
 	path := "/api/sessions/" + f.session.ID
 	f.request(t, f.foreign, http.MethodPatch, path, `{"computer_enabled":false}`, http.StatusNotFound)
-	if len(tools.cancelled) != 0 {
+	if len(tools.cancelled) != 0 || len(tools.cancelledComputer) != 0 {
 		t.Fatal("foreign account cancelled workspace services")
 	}
 	f.request(t, f.token, http.MethodPatch, path, `{"computer_enabled":false,"remember_computer_default":false}`, http.StatusOK)
-	if len(tools.cancelled) != 1 || tools.cancelled[0].UserID != f.owner || tools.cancelled[0].SessionID != f.session.ID {
-		t.Fatal("permission revoke left prior-turn services running")
+	if len(tools.cancelled) != 0 || len(tools.cancelledComputer) != 1 || tools.cancelledComputer[0].UserID != f.owner || tools.cancelledComputer[0].SessionID != f.session.ID {
+		t.Fatal("permission revoke left computer services running or cancelled isolated computation")
 	}
 	f.request(t, f.token, http.MethodDelete, path, "", http.StatusConflict)
-	if len(tools.cancelled) != 1 {
+	if len(tools.cancelled) != 0 || len(tools.cancelledComputer) != 1 {
 		t.Fatal("rejected active-session deletion mutated jobs")
 	}
 	f.run.Status = runtime.StatusCompleted
@@ -120,7 +128,7 @@ func TestJobRoutesRevokeAndDeleteClearPersistentSessionServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.request(t, f.token, http.MethodDelete, path, "", http.StatusNoContent)
-	if len(tools.cancelled) != 2 || tools.cancelled[1] != tools.cancelled[0] {
+	if len(tools.cancelled) != 1 || tools.cancelled[0] != tools.cancelledComputer[0] {
 		t.Fatal("conversation deletion did not clear its service scope")
 	}
 }
@@ -135,7 +143,9 @@ func TestJobClaimsOutliveRunAndRespectScope(t *testing.T) {
 		want   bool
 	}{
 		{"other conversation desktop", agent.RunScope{UserID: "owner", SessionID: "other"}, []string{"desktop"}, false, true},
-		{"new turn in owner conversation", agent.RunScope{UserID: "owner", SessionID: "origin", RunID: "new"}, []string{"desktop"}, false, false},
+		{"new turn in owner conversation desktop", agent.RunScope{UserID: "owner", SessionID: "origin", RunID: "new"}, []string{"desktop"}, false, true},
+		{"same run desktop process", agent.RunScope{UserID: "owner", SessionID: "origin", RunID: "completed-run"}, []string{"desktop"}, false, true},
+		{"new turn in owner project service", agent.RunScope{UserID: "owner", SessionID: "origin", RunID: "new", CWD: "/data/projects/shared"}, []string{"project"}, false, false},
 		{"manual takeover still conflicts", agent.RunScope{UserID: "owner", SessionID: "origin"}, []string{"desktop"}, true, true},
 		{"same project", agent.RunScope{UserID: "owner", SessionID: "other", CWD: "/data/projects/shared"}, []string{"project"}, false, true},
 		{"project child directory", agent.RunScope{UserID: "owner", SessionID: "other", CWD: "/data/projects/shared/src/nested"}, []string{"project"}, false, true},

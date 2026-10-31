@@ -52,7 +52,6 @@ func artifactPolicyFixture(t *testing.T) (coreHTTPFixture, *artifactPolicyFiles,
 	f.server.SetTools(source)
 	scope := agent.RunScope{UserID: f.owner, SessionID: f.session.ID, RunID: f.run.RunID, CWD: f.session.WorkspacePath, ComputeOnly: true}
 	f.server.preparedScopes.Store(scope.RunID+":compute", true)
-	f.server.preparedScopes.Store(scope.RunID+":last-mode", true)
 	req := agent.Request{UserID: f.owner, SessionID: scope.SessionID, RunID: scope.RunID, Scope: scope, Config: &agent.Config{}}
 	run, _ := f.server.runtime.Get(scope.RunID)
 	return f, source, req, run

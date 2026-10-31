@@ -79,6 +79,13 @@ const coreFlowPolicy = `## 上下文来源与长任务
 - 一轮内不更换选定的聊天模型。恢复、压缩或工具失败的诊断说明实际限制；不能通过重复副作用来假装恢复成功。
 - 用户稳定资料只由其明确陈述提炼。旧事件和项目决策保留日期、范围与原始证据；当前纠正优先。需要原文时查询 history_search/history_read，不能把摘要当成原文或重复访问旧工具。`
 
+const computerExecutionPolicy = `计算环境与桌面排队：
+- 普通 exec/job/files_list/files_read/files_write/web_fetch 默认使用 environment=compute 的本对话独立计算环境，即使电脑已授权也不占共享桌面。需要持久电脑、项目已有文件或其中的程序时才明确选择 environment=desktop；不能把同名路径当成相同文件。用 files_copy 显式传递两个环境之间需要处理的文件，后续读取、运行、检查 Job 或发布文件时保持正确的 environment。
+- 桌面与共享浏览器按正在等待的请求顺序分配。工具等待在前台阻塞，不是在后台继续操作；等待时不需要循环查询、运行 sleep 或让用户反复决定。队列检查点返回 status=paused、executed=false 表示原操作尚未执行，当前请求已暂停参与分配，只保留原始优先级。
+- 检查点之后可以先研究、计算或询问必要问题，没有需要自行续期的倒计时。继续使用桌面时调用 computer_queue 的 wait，携带 request_id；这次调用仍在前台阻塞。取得桌面后依据新观察继续，旧操作不会自动重放，不能沿用排队前的 ref 或坐标。决定采用其他方法时取消请求；任务结束也会清理尚未执行的请求。
+- 用户明确要求桌面流程时通常继续等待；有可靠且等价的非桌面方法时自行选择并取消暂停请求。只有替代方法会改变用户明确要求或重要结果时才询问，不因等待时间本身就把选择交给用户。
+- 一段连续的桌面操作允许必要的观察与判断。完成这段操作、转去无关的研究或计算前调用 computer_release；之后再次使用桌面需要重新排队。仍在运行的桌面 Job 必须先停止并确认结束，不能释放后让旧操作继续影响桌面。请求用户输入也会释放桌面占用。`
+
 const browserEnvironmentPolicy = `浏览器与人工接管：
 - 网页优先使用 browser_observe 的 DOM 定位和对应浏览器工具；浏览器是实际的有界面 Chromium，browser_status 可检查当前身份、标签页和暂停状态。登录保存在当前身份中，不为每轮重新登录，也不读取或复制 Cookie 文件；只操作本会话拥有的标签页，不接管用户手动打开的页面。
 - 浏览器返回 needs_user/human_verification 时停止自动操作，用 request_user_input 请用户在「电脑」接管并完成验证或登录。等待回复会释放桌面占用；用户确认后调用 browser_resume 检查页面是否真的恢复。仍需验证就保持等待，不循环点击、刷新或尝试绕过。`
@@ -129,6 +136,7 @@ func (g *OpenAI) runMessages(ctx context.Context, req Request, messages []wireMe
 		if allowed {
 			mode = "电脑授权：允许。当前工具可访问用户的持久电脑以及本会话/项目工作目录。"
 			if g.config.Tools != nil {
+				mode += "\n\n" + computerExecutionPolicy
 				mode += "\n\n" + browserEnvironmentPolicy
 				if g.config.ModelID == "" || g.config.SupportsVision {
 					mode += "\n\n" + desktopEnvironmentPolicy

@@ -224,21 +224,48 @@ days, with startup/hourly cleanup, and are limited to 256 per run and 2,048
 globally, evicting the oldest. Bounded asynchronous writes do not block token
 delivery; saturation/storage failures are reported in server logs.
 
-Computer ON grants the session access to a persistent per-user workspace,
-project directories, browser/desktop and approved extensions. Computer OFF uses
-an isolated per-session compute container for ordinary code and public HTTP;
-it never mounts the persistent workspace or exposes its Skills/MCP tools.
-Resource leases serialize shared-directory mutations and desktop access without
-locking every conversation for an account.
+Computer ON authorizes access to the persistent per-user workspace, project
+directories, browser/desktop and approved extensions. Ordinary commands, Jobs,
+files and public HTTP still default to isolated per-session compute. Selecting
+`environment: desktop` explicitly uses persistent files and GUI-capable commands
+and requires Computer permission. Compute never mounts the persistent workspace
+or exposes its Skills/MCP tools. Results identify their environment; subsequent
+Job/file/publication calls must select the same one. The two filesystems remain
+separate even at identically spelled paths. `files_copy` transfers one selected
+file explicitly without publishing it or copying an entire workspace.
+
+Shared resource admission is atomic across a tool's complete resource set.
+Ready requests with overlapping keys follow FIFO, including manual desktop
+control. A continuous GUI segment retains its lease between observations and
+actions. Expanding a resource set ends the previous segment and queues the whole
+set; it never holds one resource while waiting to acquire another. Tools claiming
+shared resources are dispatch barriers. Independent computation/research,
+`computer_release` and user decisions release the run's Go leases. Actual live
+desktop Jobs remain occupied until the process authority confirms they drained.
+
+A resource wait is a foreground blocking tool call. Its reporting checkpoint
+defaults to 2 minutes, then 4, 8 and at most 15 minutes on explicit continuations;
+this is separate from command execution deadlines. At a checkpoint the call
+returns one successful `executed: false` result, parks without a lease and retains
+its original FIFO sequence. Parked requests have no decision expiry, never run
+in the background and do not block ready requests. `computer_queue` either
+cancels the request or starts a new blocking wait with the same priority. The
+first grant consumes that priority. Desktop admission provides fresh state and
+never replays the original action or later stale calls from the same model
+response. Project-only admission does not inspect the desktop. Run termination
+or permission revocation removes pending requests; client disconnects do not.
 
 `exec` starts an owned Job and returns its result or identity after a short
 bounded wait. Tasks have finite deadlines and are cleaned up when their run
 finishes; explicit services can survive successful completion for later turns
-in the same conversation. Cancellation, failure or permission revocation clears
-the corresponding work. Python owns the process groups, durable logs and state;
+in the same conversation. Cancellation and failure clear the corresponding
+work; revoking Computer clears desktop Jobs while independent compute continues.
+Python owns the process groups, durable logs and state;
 Go queries that authority instead of maintaining a second Job registry.
 Tool metadata declares resource claims. Live Jobs keep those resources occupied
-after a run releases its leases, including across a Go restart.
+after a run releases its leases, including across a Go restart. Even the owning
+conversation must drain a desktop Job before starting another GUI operation;
+claim-free Job observation/cancellation remains available.
 
 Provisioning and maintenance coordinate per container. A borrowed bridge
 reference covers attachment through the complete request. Idle compute

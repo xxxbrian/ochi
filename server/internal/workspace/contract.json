@@ -1,6 +1,6 @@
 {
   "protocol": 1,
-  "revision": 3,
+  "revision": 4,
   "capabilities": [
     "plugin-control",
     "public-catalog",
@@ -8,7 +8,8 @@
     "external-json-schema",
     "skill-readiness",
     "owned-jobs",
-    "activity-lifecycle"
+    "activity-lifecycle",
+    "explicit-execution-targets"
   ],
   "modes": [
     "control",

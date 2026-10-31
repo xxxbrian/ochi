@@ -17,7 +17,7 @@ from typing import Any
 
 from workspace_runtime import (DATA_ROOT, COMPUTE_ONLY, RUN_SCOPE, PROCESS_LOCK,
                                CANCELLED_RUNS, INTERRUPTED_OPERATIONS,
-                               _clamp_int, _safe_cwd, _workspace_env)
+                               _clamp_int, _execution_environment, _safe_cwd, _workspace_env)
 
 MAX_ACTIVE_JOBS = 32
 MAX_LOG_CHUNK = 32 * 1024
@@ -93,7 +93,7 @@ class JobRegistry:
                     del self.desktop_calls[owner]
 
     def _persist(self, job: dict[str, Any]) -> None:
-        fields = ("job_id", "user_id", "session_id", "run_id", "kind", "cwd", "resource_claims",
+        fields = ("job_id", "user_id", "session_id", "run_id", "kind", "environment", "cwd", "resource_claims",
                   "status", "exit_code", "created_at", "finished_at", "duration_ms", "stdout_path", "stderr_path")
         root = self.root / job["job_id"]
         temp = root / "state.tmp"
@@ -102,6 +102,7 @@ class JobRegistry:
 
     def start(self, args: dict[str, Any], scope: dict[str, Any], *, compute: bool = COMPUTE_ONLY) -> dict[str, Any]:
         owner = _owner(scope)
+        environment = _execution_environment(args, compute=compute)
         command = args.get("command")
         if not isinstance(command, str) or not command.strip():
             raise ValueError("command is required")
@@ -135,7 +136,8 @@ class JobRegistry:
                                            stdin=subprocess.DEVNULL, stdout=out, stderr=err, start_new_session=True)
             job = {"job_id": job_id, "user_id": owner[0], "session_id": owner[1],
                    "run_id": scope.get("run_id", ""), "operation_id": scope.get("operation_id", ""),
-                   "kind": kind, "cwd": str(cwd), "resource_claims": [] if compute else ["desktop", "project"],
+                   "kind": kind, "environment": environment, "cwd": str(cwd),
+                   "resource_claims": [] if compute else ["desktop", "project"],
                    "status": "running", "exit_code": None, "created_at": time.time(), "duration_ms": 0,
                    "stdout_path": str(stdout), "stderr_path": str(stderr),
                    "process": process, "done": threading.Event(), "started": now, "stop_reason": ""}
@@ -211,7 +213,7 @@ class JobRegistry:
         return text, offset + consumed, offset + consumed < size
 
     def snapshot(self, job: dict[str, Any], args: dict[str, Any]) -> dict[str, Any]:
-        fields = ("job_id", "kind", "status", "exit_code", "cwd", "resource_claims", "duration_ms", "stdout_path", "stderr_path")
+        fields = ("job_id", "kind", "environment", "status", "exit_code", "cwd", "resource_claims", "duration_ms", "stdout_path", "stderr_path")
         with self.lock:
             result = {key: job.get(key) for key in fields}
             if job["status"] == "running":
@@ -230,6 +232,7 @@ class JobRegistry:
         return self.snapshot(job, {})
 
     def call(self, args: dict[str, Any]) -> dict[str, Any]:
+        _execution_environment(args)
         job = self._owned(args.get("job_id"), RUN_SCOPE.get())
         action = args.get("action", "status")
         if action == "cancel":

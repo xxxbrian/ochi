@@ -40,10 +40,9 @@ from typing import Any, Callable
 
 from workspace_runtime import (COMPUTE_ONLY, DATA_ROOT, FILES_ROOT, SCREENSHOT_ROOT,
     DISPLAY_SIZE, MAX_BODY_BYTES, MAX_FILE_BYTES, MAX_OUTPUT_CHARS, MAX_TEXT_CHARS,
-    RUN_SCOPE, _clamp_int, _truncate, _json_error, _scope_cwd,
+    RUN_SCOPE, _clamp_int, _truncate, _json_error, _execution_environment, _scope_cwd,
     _safe_relative, _safe_cwd, _file_metadata,
-    _publish_file, _export_scratch,
-    _import_scratch, _cancel_run, _interrupt_operation, _workspace_env,
+    _publish_file, _cancel_run, _interrupt_operation, _workspace_env,
     _run_command, _image_result)
 from workspace_extensions import EXTENSIONS_ROOT, EXTENSIONS_LOCK, _extension_id, _load_extensions, _save_extensions
 from workspace_control import CONTROL_ONLY, authorize_control
@@ -433,14 +432,6 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if self._extensions(route, "GET"):
                 return
-            if route == "/workspace/export":
-                raw = _export_scratch()
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "application/zip")
-                self.send_header("Content-Length", str(len(raw)))
-                self.end_headers()
-                self.wfile.write(raw)
-                return
             if route == "/files":
                 self._write(tool_files_list({"path": query.get("path"), "recursive": query.get("recursive") == "true", "max_entries": query.get("limit", "200")}))
                 return
@@ -477,9 +468,6 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if route == "/jobs/active":
                 self._write({"ok": True, "result": JOBS.active()})
-                return
-            if route == "/workspace/import":
-                self._write(_import_scratch(self._read_body(MAX_FILE_BYTES)))
                 return
             args = self._read_json()
             if route == "/runs/finish":
@@ -539,10 +527,15 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if tool_name in DISPATCH:
                 validate_arguments(definition, strict_json(self._last_json_bytes))
+            environment = None
+            if tool_name in {"exec", "job", "files_list", "files_read", "files_write", "web_fetch"}:
+                environment = _execution_environment({**args, "environment": args.get("environment", "compute")})
             resources = (definition.get("execution") or {}).get("resources", [])
             desktop = JOBS.desktop(RUN_SCOPE.get()) if not COMPUTE_ONLY and "desktop" in resources else contextlib.nullcontext()
             with desktop:
                 result = DISPATCH[tool_name](args) if tool_name in DISPATCH else MCP.call(tool_name, args)
+            if environment is not None:
+                result = {**result, "environment": environment}
             self._write({"ok": True, "result": result})
         except ToolArgumentError as exc:
             self._write({**_json_error(str(exc)), "error_detail": exc.detail}, HTTPStatus.OK)
@@ -564,21 +557,24 @@ class Handler(BaseHTTPRequestHandler):
             raw = self._read_body(MAX_FILE_BYTES)
             path = _safe_relative(query.get("path"))
             path.parent.mkdir(parents=True, exist_ok=True)
+            written = False
             if query.get("if_digest") is not None:
                 expected = set(query["if_digest"].split(","))
                 latest = hashlib.sha256(raw).hexdigest()[:20]
                 current = hashlib.sha256(path.read_bytes()).hexdigest()[:20] if path.exists() else ""
                 if current and current != latest and current not in expected:
-                    self._write({**_file_metadata(path), "source_conflict": True}, HTTPStatus.OK)
+                    self._write({**_file_metadata(path), "source_conflict": True, "written": False}, HTTPStatus.OK)
                     return
                 if current != latest:
                     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as temp:
                         temp.write(raw)
                         temporary = Path(temp.name)
                     os.replace(temporary, path)
+                    written = True
             elif query.get("if_missing") != "1" or not path.exists():
                 path.write_bytes(raw)
-            self._write({**_file_metadata(path), "source_conflict": False}, HTTPStatus.CREATED)
+                written = True
+            self._write({**_file_metadata(path), "source_conflict": False, "written": written}, HTTPStatus.CREATED)
         except Exception as exc:
             self._write(_json_error(str(exc)), HTTPStatus.BAD_REQUEST)
 

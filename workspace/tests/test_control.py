@@ -47,7 +47,7 @@ class ControlBoundary(unittest.TestCase):
                     with self.assertRaises(PermissionError):
                         control.authorize_control("POST", route, token)
                 control.authorize_control("POST", route, "Bearer control-fixture")
-            for route in ("/tools/exec", "/file", "/files", "/workspace/export", "/workspace/init", "/runs/cancel"):
+            for route in ("/tools/exec", "/file", "/files", "/publish", "/workspace/init", "/runs/cancel"):
                 with self.assertRaises(PermissionError):
                     control.authorize_control("POST", route, "Bearer control-fixture")
             for route in ("/health", "/tools", "/skills/index"):

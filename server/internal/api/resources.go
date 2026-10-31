@@ -7,7 +7,6 @@ import (
 	"log"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	"ochi/server/internal/agent"
@@ -23,72 +22,31 @@ type resourceOwner struct {
 	Manual    bool   `json:"control"`
 }
 
-type resourceManager struct {
-	mu      sync.Mutex
-	owners  map[string]resourceOwner
-	changed chan struct{}
-}
-
-func newResourceManager() *resourceManager {
-	return &resourceManager{owners: map[string]resourceOwner{}, changed: make(chan struct{})}
-}
-func (r *resourceManager) notify() { close(r.changed); r.changed = make(chan struct{}) }
-
 var errComputerModeChanged = errors.New("computer permission changed while waiting")
 
-func (r *resourceManager) wake() { r.mu.Lock(); r.notify(); r.mu.Unlock() }
-
-func (r *resourceManager) acquire(ctx context.Context, key string, owner resourceOwner, onWait func(bool), guards ...func() error) error {
-	waiting := false
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
+func (r *resourceManager) releaseRun(runID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	changed := false
+	for _, ticket := range r.tickets {
+		if !ticket.owner.Manual && ticket.owner.RunID == runID {
+			delete(r.tickets, ticket.id)
+			ticket.ready = false
+			changed = true
 		}
-		if len(guards) > 0 {
-			if err := guards[0](); err != nil {
-				if waiting && onWait != nil {
-					onWait(false)
-				}
-				return err
-			}
+	}
+	for key, owner := range r.owners {
+		if !owner.Manual && owner.RunID == runID {
+			delete(r.owners, key)
+			changed = true
 		}
-		r.mu.Lock()
-		current, busy := r.owners[key]
-		if !busy || (!owner.Manual && !current.Manual && current.RunID == owner.RunID) {
-			r.owners[key] = owner
-			r.mu.Unlock()
-			if waiting && onWait != nil {
-				onWait(false)
-			}
-			return nil
-		}
-		if current.Manual && owner.Manual && current.ControlID == owner.ControlID {
-			r.mu.Unlock()
-			return nil
-		}
-		changed := r.changed
-		r.mu.Unlock()
-		if len(guards) > 0 {
-			if err := guards[0](); err != nil {
-				if waiting && onWait != nil {
-					onWait(false)
-				}
-				return err
-			}
-		}
-		if !waiting && onWait != nil {
-			onWait(true)
-		}
-		waiting = true
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-changed:
-		}
+	}
+	if changed {
+		r.notify()
 	}
 }
 
-func (r *resourceManager) releaseRun(runID string) {
+func (r *resourceManager) releaseRunLeases(runID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	changed := false
@@ -163,15 +121,15 @@ func (s *Server) DesktopState(userID string) map[string]any {
 	return state
 }
 func (s *Server) AcquireDesktopControl(ctx context.Context, userID, sessionID string) error {
-	if err := s.resources.AcquireDesktopControl(ctx, userID, sessionID); err != nil {
-		return err
-	}
 	scope := agent.RunScope{UserID: userID, SessionID: sessionID}
-	if err := s.waitForJobClaims(ctx, scope, []string{"desktop"}, true, nil); err != nil {
-		s.resources.ReleaseDesktopControl(userID, sessionID)
-		return err
-	}
-	return nil
+	_, err := s.resources.wait(ctx, resourceRequest{
+		Owner: resourceOwner{UserID: userID, SessionID: sessionID, ControlID: desktopControlID(sessionID), Manual: true},
+		Keys:  []string{"desktop:" + userID}, NoCheckpoint: true,
+		Available: func(ctx context.Context) (bool, error) {
+			return s.jobClaimsAvailable(ctx, scope, []string{"desktop"}, true)
+		},
+	}, nil)
+	return err
 }
 func (s *Server) ReleaseDesktopControl(userID, sessionID string) {
 	s.resources.ReleaseDesktopControl(userID, sessionID)
@@ -213,16 +171,18 @@ func (s *Server) toolClaims(name string) []string {
 }
 
 func jobConflicts(job workspace.Job, scope agent.RunScope, claims []string, manual bool) bool {
-	// Services remain owned by their conversation; a later turn can inspect,
-	// cancel or work alongside its own service. Other conversations and manual
-	// desktop takeover must wait for the actual process, not just its old run.
+	// An active process can still mutate the desktop, including within its own
+	// conversation. Job observation and cancellation do not claim the desktop.
+	if hasClaim(claims, "desktop") && hasClaim(job.ResourceClaims, "desktop") {
+		return true
+	}
+	// Project services remain usable by later turns in their own conversation.
 	if !manual && job.SessionID == scope.SessionID && job.UserID == scope.UserID {
 		return false
 	}
 	project := projectResource(scope.CWD)
-	return hasClaim(claims, "desktop") && hasClaim(job.ResourceClaims, "desktop") ||
-		hasClaim(claims, "project") && project != "" &&
-			projectResource(job.CWD) == project && hasClaim(job.ResourceClaims, "project")
+	return hasClaim(claims, "project") && project != "" &&
+		projectResource(job.CWD) == project && hasClaim(job.ResourceClaims, "project")
 }
 
 func projectResource(cwd string) string {
@@ -253,66 +213,66 @@ func (s *Server) cancelSessionJobs(ctx context.Context, userID, sessionID string
 	return nil
 }
 
-func (s *Server) waitForJobClaims(ctx context.Context, scope agent.RunScope, claims []string, manual bool, onWait func(bool)) error {
-	source := s.workspaceJobs()
-	if source == nil || len(claims) == 0 || scope.ComputeOnly {
+func (s *Server) cancelComputerJobs(ctx context.Context, userID, sessionID string) error {
+	source, ok := s.workspaceJobs().(interface {
+		CancelComputerJobs(context.Context, string, string) error
+	})
+	if !ok {
 		return nil
 	}
-	waiting := false
-	defer func() {
-		if waiting && onWait != nil {
-			onWait(false)
-		}
-	}()
-	for {
-		query, cancel := context.WithTimeout(ctx, 2*time.Second)
-		jobs, err := source.ActiveJobs(query, scope.UserID)
-		cancel()
-		if err != nil {
-			return err
-		}
-		busy := false
-		for _, job := range jobs {
-			busy = busy || jobConflicts(job, scope, claims, manual)
-		}
-		if !busy {
-			return nil
-		}
-		if !waiting && onWait != nil {
-			onWait(true)
-		}
-		waiting = true
-		timer := time.NewTimer(500 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		case <-timer.C:
-		}
-	}
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	return source.CancelComputerJobs(cleanup, userID, sessionID)
 }
 
-func (s *Server) acquireToolResources(ctx context.Context, scope agent.RunScope, name string, args json.RawMessage) error {
-	owner := resourceOwner{UserID: scope.UserID, SessionID: scope.SessionID, RunID: scope.RunID}
-	wait := func(key string) func(bool) {
-		return func(waiting bool) {
-			if run, ok := s.runtime.Get(scope.RunID); ok {
-				if waiting {
-					run.SetResource(key)
-				} else {
-					run.SetResource("")
-				}
-				save, cancel := context.WithTimeout(context.Background(), checkpointTimeout)
-				defer cancel()
-				_ = s.store.Checkpoint(save, run.Snapshot())
-			}
+func (s *Server) jobClaimsAvailable(ctx context.Context, scope agent.RunScope, claims []string, manual bool) (bool, error) {
+	source := s.workspaceJobs()
+	if source == nil || len(claims) == 0 || scope.ComputeOnly {
+		return true, nil
+	}
+	query, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	jobs, err := source.ActiveJobs(query, scope.UserID)
+	if err != nil {
+		return false, err
+	}
+	for _, job := range jobs {
+		if jobConflicts(job, scope, claims, manual) {
+			return false, nil
 		}
 	}
+	return true, nil
+}
+
+func (s *Server) acquireToolResources(ctx context.Context, scope agent.RunScope, name string, args json.RawMessage) (resourceAdmission, error) {
 	claims := s.toolClaims(name)
 	if scope.ComputeOnly {
-		return nil
+		return resourceAdmission{}, nil
 	}
-	headed := hasClaim(claims, "desktop")
+	keys := []string{}
+	if project := projectResource(scope.CWD); project != "" && hasClaim(claims, "project") {
+		keys = append(keys, "project:"+project)
+	}
+	if hasClaim(claims, "desktop") {
+		keys = append(keys, "desktop:"+scope.UserID)
+	}
+	if len(keys) == 0 {
+		return resourceAdmission{}, nil
+	}
+	return s.waitToolResources(ctx, scope, resourceRequest{Keys: keys})
+}
+
+func (s *Server) continueToolResources(ctx context.Context, scope agent.RunScope, requestID string, waitDuration time.Duration) (resourceAdmission, error) {
+	owner := resourceOwner{UserID: scope.UserID, SessionID: scope.SessionID, RunID: scope.RunID}
+	keys, err := s.resources.requestKeys(owner, requestID)
+	if err != nil {
+		return resourceAdmission{}, err
+	}
+	return s.waitToolResources(ctx, scope, resourceRequest{Keys: keys, RequestID: requestID, CheckpointDuration: waitDuration})
+}
+
+func (s *Server) waitToolResources(ctx context.Context, scope agent.RunScope, request resourceRequest) (resourceAdmission, error) {
+	request.Owner = resourceOwner{UserID: scope.UserID, SessionID: scope.SessionID, RunID: scope.RunID}
 	guard := func() error {
 		allowed, err := s.computerAllowed(ctx, scope)
 		if err != nil {
@@ -323,27 +283,32 @@ func (s *Server) acquireToolResources(ctx context.Context, scope agent.RunScope,
 		}
 		return nil
 	}
-	if project := projectResource(scope.CWD); project != "" && hasClaim(claims, "project") {
-		key := "project:" + project
-		if err := s.resources.acquire(ctx, key, owner, wait(key), guard); err != nil {
-			return err
+	claims := []string{}
+	for _, key := range request.Keys {
+		if strings.HasPrefix(key, "desktop:") {
+			claims = append(claims, "desktop")
+		} else if strings.HasPrefix(key, "project:") {
+			claims = append(claims, "project")
 		}
 	}
-	activate := false
-	if headed {
-		key := "desktop:" + scope.UserID
-		state := s.resources.DesktopState(scope.UserID)
-		wasOwned := state["run_id"] == scope.RunID && !state["manual"].(bool)
-		if err := s.resources.acquire(ctx, key, owner, wait(key), guard); err != nil {
-			return err
+	request.Guard = guard
+	request.Available = func(ctx context.Context) (bool, error) {
+		return s.jobClaimsAvailable(ctx, scope, claims, false)
+	}
+	request.OnState = func(state resourceQueueCheckpoint) { s.resourceQueueProgress(scope, state) }
+	wait := func(waiting bool) {
+		if run, ok := s.runtime.Get(scope.RunID); ok {
+			if waiting {
+				run.SetResource(strings.Join(request.Keys, ","))
+			} else {
+				run.SetResource("")
+			}
+			save, cancel := context.WithTimeout(context.Background(), checkpointTimeout)
+			defer cancel()
+			_ = s.store.Checkpoint(save, run.Snapshot())
 		}
-		activate = !wasOwned && strings.HasPrefix(name, "computer_")
 	}
-	if err := s.waitForJobClaims(ctx, scope, claims, false, wait("workspace_job")); err != nil {
-		return err
-	}
-	if activate {
-		return s.activateDesktop(ctx, scope)
-	}
-	return nil
+	admission, err := s.resources.wait(ctx, request, wait)
+	admission.Fresh = hasClaim(admission.Acquired, "desktop:"+scope.UserID)
+	return admission, err
 }

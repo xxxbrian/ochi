@@ -1,7 +1,7 @@
 [
   {
     "name": "exec",
-    "description": "Start an owned shell/Python/Node task in the private Linux container. Returns completed output or a running job_id after a short wait; use job with returned log offsets to follow or cancel it. Task jobs end with the model run, and background child processes are cleaned up. Choose kind=service explicitly for a foreground server that should survive successful run completion (finite deadline still applies). Stop/revocation cancels owned jobs. Working files are not published automatically. The session/project cwd and persistent pip/npm environment are provided.",
+    "description": "Start an owned shell/Python/Node task in the selected private Linux environment. environment defaults to compute, an isolated per-session calculation environment even when Computer is allowed. Choose desktop only when the command needs the persistent computer or GUI; it requires authorization and waits for shared desktop access. Paths and installed dependencies are separate between environments; use files_copy for an explicit file transfer. Returns completed output or a running job_id after a short wait; use job with the same environment and returned log offsets to follow or cancel it. Task jobs end with the model run, and background child processes are cleaned up. Choose kind=service explicitly for a foreground server that should survive successful run completion (finite deadline still applies). Stop/revocation cancels owned jobs. Working files are not published automatically.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -10,7 +10,7 @@
         },
         "cwd": {
           "type": "string",
-          "description": "Existing directory in this container, absolute or relative to the session/project working directory. Defaults to that directory."
+          "description": "Existing directory in the selected environment, absolute or relative to its session/project working directory. Defaults to that directory. A path from another environment must be transferred explicitly."
         },
         "timeout_ms": {
           "type": "integer",
@@ -36,6 +36,15 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 10000
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "compute",
+            "desktop"
+          ],
+          "default": "compute",
+          "description": "Execution and filesystem environment. compute is isolated per session and does not use the shared desktop. desktop is the authorized persistent computer. Defaults to compute; identical paths do not imply shared files."
         }
       },
       "required": [
@@ -57,7 +66,7 @@
   },
   {
     "name": "job",
-    "description": "Observe, wait briefly for, or cancel a previously started job owned by this user and conversation. Jobs remain addressable in later turns. Send returned stdout_offset/stderr_offset to read only new log bytes. Cancelling a service releases its desktop/project resource claims. This tool never starts a process.",
+    "description": "Observe, wait briefly for, or cancel a previously started job owned by this user and conversation. Use the environment returned by the original exec; choosing another environment does not move or restart the job. Jobs remain addressable in later turns. Send returned stdout_offset/stderr_offset to read only new log bytes. Cancelling a desktop service releases its desktop/project resource claims. This tool never starts a process.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -84,6 +93,15 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 10000
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "compute",
+            "desktop"
+          ],
+          "default": "compute",
+          "description": "Execution and filesystem environment. compute is isolated per session and does not use the shared desktop. desktop is the authorized persistent computer. Defaults to compute; identical paths do not imply shared files."
         }
       },
       "required": [
@@ -103,7 +121,7 @@
   },
   {
     "name": "files_list",
-    "description": "List files below the persistent session/project directory, including MIME type, sizes and modification times. Relative paths use the session/project working directory. Staged uploads are accessible at their absolute /data/files/uploads paths.",
+    "description": "List files in the selected environment, including MIME type, sizes and modification times. environment defaults to isolated compute; choose desktop explicitly for authorized persistent computer/project files. The environments have separate files even when path strings match. Relative paths use the selected session/project working directory. Staged uploads are accessible at their absolute /data/files/uploads paths.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -118,6 +136,15 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 500
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "compute",
+            "desktop"
+          ],
+          "default": "compute",
+          "description": "Execution and filesystem environment. compute is isolated per session and does not use the shared desktop. desktop is the authorized persistent computer. Defaults to compute; identical paths do not imply shared files."
         }
       },
       "additionalProperties": false
@@ -133,7 +160,7 @@
   },
   {
     "name": "files_read",
-    "description": "Read workspace UTF-8 text, images, textual PDFs or basic Office document text. Images return image content for visual inspection. For precise tables/layout or scientific analysis use Python via exec. Relative paths use the session/project working directory. Use explicit absolute paths for staged uploads under /data/files/uploads.",
+    "description": "Read UTF-8 text, images, textual PDFs or basic Office document text in the selected environment. environment defaults to isolated compute; choose desktop explicitly for authorized persistent computer/project files. Images return image content for visual inspection. For precise tables/layout or scientific analysis use Python via exec in the same environment. Relative paths use that environment's session/project working directory. Use explicit absolute paths for staged uploads under /data/files/uploads. Use files_copy to transfer a file between environments.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -154,6 +181,15 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 200000
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "compute",
+            "desktop"
+          ],
+          "default": "compute",
+          "description": "Execution and filesystem environment. compute is isolated per session and does not use the shared desktop. desktop is the authorized persistent computer. Defaults to compute; identical paths do not imply shared files."
         }
       },
       "required": [
@@ -172,7 +208,7 @@
   },
   {
     "name": "files_write",
-    "description": "Write UTF-8 text or source code in persistent session/project directory, creating parent directories. Paths can be relative or absolute inside the session/project working directory. Use exec for binary/generated outputs. Writing a file does not publish it; use publish_file separately only for requested final files.",
+    "description": "Write UTF-8 text or source code in the selected environment, creating parent directories. environment defaults to isolated compute; choose desktop explicitly to modify authorized persistent computer/project files. Paths can be relative or absolute inside the selected session/project working directory. Use exec in the same environment for binary/generated outputs. Writing a file does not publish it; use publish_file with the same environment separately only for requested final files.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -184,6 +220,15 @@
         },
         "append": {
           "type": "boolean"
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "compute",
+            "desktop"
+          ],
+          "default": "compute",
+          "description": "Execution and filesystem environment. compute is isolated per session and does not use the shared desktop. desktop is the authorized persistent computer. Defaults to compute; identical paths do not imply shared files."
         }
       },
       "required": [
@@ -765,7 +810,7 @@
   },
   {
     "name": "web_fetch",
-    "description": "Fetch a public HTTP(S) URL quickly without browser. Returns readable HTML text with links, plain text/JSON, or a downloaded file. Include path to save a response. For search use web_search when available; for signed-in or interactive pages use browser tools.",
+    "description": "Fetch a public HTTP(S) URL quickly without a browser. Returns readable HTML text with links, plain text/JSON, or a downloaded file. Include path to save a response in the selected environment (isolated compute by default; desktop requires authorization). Paths are separate between environments; use files_copy for transfers. For search use web_search when available; for signed-in or interactive pages use browser tools.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -779,6 +824,15 @@
           "type": "integer",
           "minimum": 1000,
           "maximum": 100000
+        },
+        "environment": {
+          "type": "string",
+          "enum": [
+            "compute",
+            "desktop"
+          ],
+          "default": "compute",
+          "description": "Execution and filesystem environment. compute is isolated per session and does not use the shared desktop. desktop is the authorized persistent computer. Defaults to compute; identical paths do not imply shared files."
         }
       },
       "additionalProperties": false,

@@ -174,16 +174,17 @@ func (g *OpenAI) generate(ctx context.Context, req Request, emit func(Update) er
 			outcomes[index] = prepareToolCall(call, definitions)
 		}
 		loopReason := ""
+		replan := false
 		for index := 0; index < len(outcomes); {
 			end := index + 1
-			if loopReason != "" {
+			if loopReason != "" || replan {
 				end = len(outcomes)
 			} else if parallelTool(outcomes[index]) {
 				for end < len(outcomes) && end-index < 4 && parallelTool(outcomes[end]) {
 					end++
 				}
 			}
-			dispatched := loopReason == ""
+			dispatched := loopReason == "" && !replan
 			if dispatched {
 				for current := index; current < end; current++ {
 					if err := emit(Update{Step: &outcomes[current].step}); err != nil {
@@ -193,12 +194,20 @@ func (g *OpenAI) generate(ctx context.Context, req Request, emit func(Update) er
 				g.executeToolBatch(ctx, req, outcomes[index:end], &permissionDenied)
 			} else {
 				for current := index; current < end; current++ {
-					skipToolCall(&outcomes[current], loopReason)
+					if replan {
+						skipToolForReplan(&outcomes[current])
+					} else {
+						skipToolCall(&outcomes[current], loopReason)
+					}
 				}
 			}
 			for current := index; current < end; current++ {
 				outcome := &outcomes[current]
-				if dispatched && loopReason == "" {
+				if dispatched && outcome.result.Replan && outcome.err == nil {
+					replan, loopReason = true, ""
+					detector.recent = nil
+				}
+				if dispatched && loopReason == "" && !replan && !outcome.result.NotExecuted {
 					// Drain an already-started read batch, but never let a later
 					// success clear the cutoff and start another batch.
 					loopReason = detector.observe(outcome.call, outcome.step, outcome.execution)
@@ -289,7 +298,9 @@ func (g *OpenAI) availableTools(ctx context.Context, req Request) ([]wireTool, e
 	sort.Slice(definitions, func(i, j int) bool { return definitions[i].Name < definitions[j].Name })
 	tools := []wireTool{}
 	for _, d := range definitions {
-		if g.config.ModelID != "" && !g.config.SupportsVision && (strings.HasPrefix(d.Name, "computer_") || d.Name == "browser_screenshot") {
+		visualTool := d.Name == "browser_screenshot" ||
+			strings.HasPrefix(d.Name, "computer_") && d.Name != "computer_queue" && d.Name != "computer_release"
+		if g.config.ModelID != "" && !g.config.SupportsVision && visualTool {
 			continue
 		}
 		tools = append(tools, wireTool{Type: "function", Function: d})

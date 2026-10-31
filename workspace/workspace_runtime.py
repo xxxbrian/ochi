@@ -8,13 +8,11 @@ import hashlib
 import io
 import mimetypes
 import os
-import shutil
 import signal
 import struct
 import subprocess
 import threading
 import time
-import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +48,13 @@ def _truncate(value: str, limit: int = MAX_OUTPUT_CHARS) -> tuple[str, bool]:
 
 def _json_error(message: str) -> dict[str, Any]:
     return {"ok": False, "error": message}
+
+
+def _execution_environment(args: dict[str, Any], *, compute: bool = COMPUTE_ONLY) -> str:
+    environment = "compute" if compute else "desktop"
+    if args.get("environment", environment) != environment:
+        raise ValueError("execution environment does not match this container")
+    return environment
 
 
 def _scope_cwd() -> Path:
@@ -96,26 +101,6 @@ def _file_metadata(path: Path) -> dict[str, Any]:
             "modified_at": stat.st_mtime}
 
 
-def _directory_state(root: Path) -> dict[str, tuple[int, int]]:
-    ignored = {".git", ".venv", "venv", "node_modules", "__pycache__", ".cache", "screenshots", "logs"}
-    state = {}
-    for directory, dirs, names in os.walk(root):
-        dirs[:] = [name for name in dirs if not name.startswith(".") and name not in ignored]
-        for name in names:
-            if name.startswith("."):
-                continue
-            path = Path(directory) / name
-            try:
-                if path.is_symlink() or not path.is_file():
-                    continue
-                stat = path.stat()
-                if stat.st_size <= MAX_FILE_BYTES:
-                    state[str(path)] = (stat.st_mtime_ns, stat.st_size)
-            except OSError:
-                continue
-    return state
-
-
 def _publish_file(path: Any) -> dict[str, Any]:
     scope = RUN_SCOPE.get()
     if not scope.get("run_id"):
@@ -134,44 +119,6 @@ def _publish_file(path: Any) -> dict[str, Any]:
         temp.write_bytes(raw)
         os.replace(temp, target)
     return {**_file_metadata(target), "source_path": str(source)}
-
-
-def _export_scratch() -> bytes:
-    root = _scope_cwd()
-    buffer = io.BytesIO()
-    total = 0
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for value in _directory_state(root):
-            path = Path(value)
-            total += path.stat().st_size
-            if total > MAX_FILE_BYTES:
-                raise ValueError("scratch transfer exceeds 32 MB; publish selected files first")
-            archive.write(path, str(path.relative_to(root)))
-    return buffer.getvalue()
-
-
-def _import_scratch(raw: bytes) -> dict[str, Any]:
-    root = _scope_cwd()
-    imported = []
-    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-        total = 0
-        for item in archive.infolist():
-            if item.is_dir():
-                continue
-            total += item.file_size
-            if total > MAX_FILE_BYTES:
-                raise ValueError("scratch transfer exceeds 32 MB")
-            target = (root / item.filename).resolve()
-            target.relative_to(root)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            data = archive.read(item)
-            if target.exists() and target.read_bytes() != data:
-                # Preserve pre-existing Project files when granting access.
-                target = root / "scratch-imports" / str(RUN_SCOPE.get().get("run_id", "import")) / item.filename
-                target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
-            imported.append(str(target))
-    return {"files": imported}
 
 
 def _cancel_run() -> dict[str, Any]:

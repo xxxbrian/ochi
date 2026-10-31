@@ -50,8 +50,13 @@ class JobHTTP(unittest.TestCase):
                     self.assertEqual(state["jobs"], [])
                     self.assertEqual(state["active_calls"], 0)
                     self.assertGreaterEqual(state["idle_seconds"], 0)
-                    result = request("/tools/exec", {"command": "sleep 5", "wait_ms": 0})[1]["result"]
+                    denied = request("/tools/exec", {"command": "true", "environment": "compute"})[1]
+                    self.assertFalse(denied["ok"])
+                    self.assertIn("does not match this container", denied["error"])
+                    result = request("/tools/exec", {"command": "sleep 5", "wait_ms": 0,
+                                                     "environment": "desktop"})[1]["result"]
                     self.assertEqual(result["status"], "running")
+                    self.assertEqual(result["environment"], "desktop")
                     active = request("/jobs/active", {})[1]["result"]["jobs"]
                     self.assertEqual(active[0]["job_id"], result["job_id"])
                     self.assertEqual(active[0]["user_id"], "fixture")
@@ -61,7 +66,8 @@ class JobHTTP(unittest.TestCase):
                     scope["run_id"] = "next-turn"
                     # DISPATCH's callable is replaced for this isolated registry.
                     with patch.dict(bridge.DISPATCH, {"job": jobs.call}):
-                        status = request("/tools/job", {"action": "status", "job_id": result["job_id"]})[1]["result"]
+                        status = request("/tools/job", {"action": "status", "job_id": result["job_id"],
+                                                        "environment": "desktop"})[1]["result"]
                     self.assertEqual(status["status"], "cancelled")
                     self.assertEqual(request("/jobs/active", {})[1]["result"]["jobs"], [])
                 finally:

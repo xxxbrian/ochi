@@ -384,8 +384,9 @@ func (s *Server) updateSession(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err == nil && !*req.ComputerEnabled {
+			s.resources.cancelSessionRequests(currentUser(r).ID, current.ID)
 			if active := s.interruptComputerCalls(current.ID); !active && current.ActiveRunID != "" {
-				s.resources.releaseRun(current.ActiveRunID)
+				s.resources.releaseRunLeases(current.ActiveRunID)
 			}
 			s.resources.wake()
 		}
@@ -395,7 +396,7 @@ func (s *Server) updateSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !*req.ComputerEnabled {
-			if err := s.cancelSessionJobs(r.Context(), currentUser(r).ID, current.ID); err != nil {
+			if err := s.cancelComputerJobs(r.Context(), currentUser(r).ID, current.ID); err != nil {
 				writeStoreError(w, err)
 				return
 			}
@@ -617,13 +618,12 @@ func (s *Server) execute(run *runtime.Run, request agent.Request) {
 		s.scopePreparations.Delete(request.RunID)
 		s.preparedScopes.Delete(request.RunID + ":compute")
 		s.preparedScopes.Delete(request.RunID + ":computer")
-		s.preparedScopes.Delete(request.RunID + ":last-mode")
 		s.resources.releaseRun(request.RunID)
 		s.launchQueued(request.SessionID)
 	}()
 	runContext := agent.WithRunScope(run.Context(), request.Scope)
 	request.AskUser = func(ctx context.Context, input agent.WaitingInput) (string, error) {
-		s.resources.releaseDesktopRun(request.UserID, request.RunID)
+		s.resources.releaseRunLeases(request.RunID)
 		return run.WaitForInput(ctx, input, func(snapshot runtime.Snapshot) error {
 			save, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()

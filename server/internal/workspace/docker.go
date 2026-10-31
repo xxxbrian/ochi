@@ -421,6 +421,10 @@ func (d *Docker) Call(ctx context.Context, userID, name string, args json.RawMes
 	if err := agent.ValidateToolArguments(*definition, args); err != nil {
 		return agent.ToolResult{}, err
 	}
+	ctx, err = executionContext(ctx, name, args)
+	if err != nil {
+		return agent.ToolResult{}, err
+	}
 	targetID := userID
 	if name == "tool_search" || strings.HasPrefix(name, "mcp_") {
 		targetID = "__admin__"

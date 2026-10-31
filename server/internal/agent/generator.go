@@ -40,15 +40,16 @@ type ImageGeneration struct {
 // RunScope is the explicit ownership and working-directory boundary passed to
 // every workspace call. It must never be inferred from a user's active run.
 type RunScope struct {
-	UserID              string `json:"user_id"`
-	SessionID           string `json:"session_id"`
-	RunID               string `json:"run_id"`
-	ProjectID           string `json:"project_id,omitempty"`
-	WorkspaceID         string `json:"workspace_id"`
-	CWD                 string `json:"cwd"`
-	ProjectInstructions string `json:"project_instructions,omitempty"`
-	ComputeOnly         bool   `json:"compute_only,omitempty"`
-	OperationID         string `json:"operation_id,omitempty"`
+	UserID               string `json:"user_id"`
+	SessionID            string `json:"session_id"`
+	RunID                string `json:"run_id"`
+	ProjectID            string `json:"project_id,omitempty"`
+	WorkspaceID          string `json:"workspace_id"`
+	CWD                  string `json:"cwd"`
+	ProjectInstructions  string `json:"project_instructions,omitempty"`
+	ComputeOnly          bool   `json:"compute_only,omitempty"`
+	ExecutionEnvironment string `json:"execution_environment,omitempty"`
+	OperationID          string `json:"operation_id,omitempty"`
 }
 
 type scopeKey struct{}

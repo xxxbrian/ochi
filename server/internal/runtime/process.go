@@ -228,6 +228,31 @@ func (r *Run) UpdateStep(roundID string, step Step) error {
 	return nil
 }
 
+// UpdateToolProgress updates only the live occurrence. Provider call IDs can be
+// reused in later rounds, so completed occurrences are never matched.
+func (r *Run) UpdateToolProgress(sourceID, output string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if IsTerminal(r.snapshot.Status) || r.ctx.Err() != nil {
+		return context.Canceled
+	}
+	if sourceID == "" {
+		return errors.New("tool progress requires source identity")
+	}
+	for i := len(r.snapshot.Items) - 1; i >= 0; i-- {
+		item := &r.snapshot.Items[i]
+		if item.Kind != "tool" || item.SourceID != sourceID || item.Step == nil || item.Step.Status != "running" {
+			continue
+		}
+		step := cloneStep(*item.Step)
+		step.Output = output
+		item.Step = &step
+		r.emitItemLocked(Event{Type: "item_updated", Patches: []ItemPatch{{ItemID: item.ID, Step: &step}}})
+		return nil
+	}
+	return errors.New("tool has no running occurrence")
+}
+
 func cloneItem(item Item) Item {
 	if item.text != nil {
 		item.Text = item.text.String()

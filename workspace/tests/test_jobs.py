@@ -140,6 +140,32 @@ class OwnedJobs(unittest.TestCase):
         self.assertEqual(compute["resource_claims"], [])
         compute["done"].wait(2)
 
+    def test_jobs_keep_their_physical_environment_and_claims(self):
+        for compute, environment, claims in (
+            (True, "compute", []), (False, "desktop", ["desktop", "project"])
+        ):
+            with self.subTest(environment=environment):
+                job = self.registry.start({"command": "true", "environment": environment},
+                                          self.scope, compute=compute)
+                self.assertTrue(job["done"].wait(2))
+                result = self.registry.snapshot(job, {})
+                self.assertEqual(result["environment"], environment)
+                self.assertEqual(result["resource_claims"], claims)
+                state = json.loads((self.registry.root / job["job_id"] / "state.json").read_text())
+                self.assertEqual(state["environment"], environment)
+        with patch.object(jobs.subprocess, "Popen", side_effect=AssertionError("wrong target spawned")):
+            for compute, environment in ((True, "desktop"), (False, "compute")):
+                with self.assertRaisesRegex(ValueError, "does not match this container"):
+                    self.registry.start({"command": "true", "environment": environment},
+                                        self.scope, compute=compute)
+
+    def test_job_queries_reject_a_different_environment_before_observing_logs(self):
+        result = self.registry.execute({"command": "printf fixture", "environment": "desktop"})
+        self.assertEqual(result["environment"], "desktop")
+        for action in ("status", "wait", "cancel"):
+            with self.assertRaisesRegex(ValueError, "does not match this container"):
+                self.registry.call({"job_id": result["job_id"], "action": action, "environment": "compute"})
+
     def test_active_pool_is_bounded_and_prearrival_cancellation_prevents_spawn(self):
         with patch.object(jobs, "MAX_ACTIVE_JOBS", 1):
             self.registry.execute({"command": python("import time; time.sleep(5)"), "wait_ms": 0})
