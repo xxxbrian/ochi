@@ -33,6 +33,31 @@ func TestProcessTimelineEncodingAlwaysUsesArray(t *testing.T) {
 	}
 }
 
+func TestStepCountIncludesOnlyCompletedExecutedActions(t *testing.T) {
+	s := processTestStore(t)
+	items := []runtime.Item{}
+	for i, step := range []runtime.Step{
+		{Status: "completed", Outcome: "success"},
+		{Status: "completed"},
+		{Status: "running"},
+		{Status: "failed", Outcome: "failure"},
+		{Status: "completed", Outcome: "needs_user"},
+		{Status: "completed", Outcome: "not_executed"},
+	} {
+		step.ID = fmt.Sprintf("step-%d", i)
+		items = append(items, runtime.Item{Kind: "tool", Step: &step})
+	}
+	items = append(items, runtime.Item{Kind: "reasoning", Text: "Waiting does not execute another action."})
+	raw, _ := json.Marshal(items)
+	var count int
+	if err := s.db.QueryRow(context.Background(), `SELECT `+itemStepCountSQL+` FROM (SELECT $1::jsonb AS items) r`, raw).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("history/admin count includes unexecuted or unfinished actions: %d", count)
+	}
+}
+
 func TestRunArtifactStateDoesNotReadBackFromMessageProjection(t *testing.T) {
 	s := processTestStore(t)
 	ctx := context.Background()

@@ -1,4 +1,6 @@
 import { orderedProcessEntries, projectRun, transcriptRows, toolGroupFamily as toolFamily } from "../../../shared/conversation/projection";
+import { computerQueueProgress, isExecutedStep } from "../../../shared/conversation/computerQueue";
+import { computerQueueLabel } from "../../../shared/i18n/process";
 export { toolGroupFamily as toolFamily } from "../../../shared/conversation/projection";
 import { t } from "./i18n";
 import type { ProcessEntry, Snapshot, Step } from './types';
@@ -41,7 +43,7 @@ export { publicReply, formatReasoningText } from '../../../shared/conversation/p
 export function detailLabel(entries: ProcessEntry[]): string {
   let searches = 0, pages = 0, tools = 0;
   for (const entry of entries) {
-    if (!entry.step) continue;
+    if (!entry.step || !isExecutedStep(entry.step)) continue;
     if (entry.step.name === 'web_search') searches++;
     else if (entry.step.name === 'web_fetch') pages++;
     else tools++;
@@ -50,7 +52,10 @@ export function detailLabel(entries: ProcessEntry[]): string {
   if (searches) parts.push(t("process.searchCount", { count: searches }));
   if (pages) parts.push(t("process.pageCount", { count: pages }));
   if (tools) parts.push(t("process.toolCount", { count: tools }));
-  return parts.join(' · ') || t("process.reasoningHistory");
+  if (parts.length) return parts.join(' · ');
+  const lastQueue = entries.findLast((entry) => entry.step && computerQueueProgress(entry.step));
+  const queue = lastQueue?.step && computerQueueProgress(lastQueue.step);
+  return queue ? computerQueueLabel(queue) : t("process.reasoningHistory");
 }
 
 export function latestProgress(snapshot: Snapshot): string {

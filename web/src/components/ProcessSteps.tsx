@@ -18,6 +18,9 @@ import { browserNeedsUser, isToolFailure, parseSearchOutput, textArgument as tex
 import { FileCards } from "./FileCards";
 import { Modal } from "./Modal";
 import { SearchResults, SearchSiteIcons } from "./SearchSources";
+import { computerQueueProgress } from "../../../shared/conversation/computerQueue";
+import { computerQueueLabel } from "../../../shared/i18n/process";
+import { ComputerQueueDetails } from "./ComputerQueueDetails";
 import "./execution.css";
 
 const MarkdownContent = lazy(() => import("./MarkdownContent"));
@@ -291,6 +294,8 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
   const [technicalOpen, setTechnicalOpen] = useState(false);
   const [imageOpen, setImageOpen] = useState(false);
   const info = toolInfo(step.name);
+  const queue = computerQueueProgress(step);
+  const label = queue ? computerQueueLabel(queue) : info.label;
   const needsUser = browserNeedsUser(step);
   const search = useMemo(() => parseSearchOutput(step), [step.name, step.arguments, step.output]);
   const args = step.arguments;
@@ -335,10 +340,10 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
     ? result.artifact as Artifact
     : null;
   return (
-    <article className={`process-step process-step-${info.kind}`}>
+    <article className={`process-step process-step-${info.kind}${queue ? " process-step-queue" : ""}`}>
       <span
         className={`step-indicator ${failed ? "failed" : step.status}`}
-        aria-label={needsUser ? t("process.awaitingVerification") : step.status === "running" ? t("status.inProgress") : failed ? t("status.failed") : t("status.completed")}
+        aria-label={queue ? label : needsUser ? t("process.awaitingVerification") : step.status === "running" ? t("status.inProgress") : failed ? t("status.failed") : t("status.completed")}
       >
         {step.status === "running" ? (
           <LoaderCircle size={14} className="spin" />
@@ -355,8 +360,9 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
           onClick={() => { setOpen(!open); onExpandedChange?.(step.id, !open); }}
         >
           <span className="step-summary-text">
-            <span className="step-name" title={info.label}>{info.label}</span>
-            {target && (
+            <span className="step-name" title={label}>{label}</span>
+            {queue && <ComputerQueueDetails progress={queue} live={step.status === "running"} />}
+            {!queue && target && (
               <span className="step-target" title={target}>
                 {target}
               </span>
@@ -411,7 +417,7 @@ export const StepCard = memo(function StepCard({ step, expanded, onExpandedChang
             {published && <FileCards files={[published]} />}
             {generated && <FileCards files={[generated]} />}
             {search && <SearchResults results={search.results} />}
-            {info.kind !== "terminal" && output && !published && !generated && !search && (
+            {info.kind !== "terminal" && output && !published && !generated && !search && (!queue || queue.status === "acquired") && (
               <div className="step-output">
                 {result ? (
                   <StructuredOutput

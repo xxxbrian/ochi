@@ -35,6 +35,7 @@ function setup(run = async () => { throw new Error('unexpected run load'); }) {
     '@shopify/flash-list': { FlashList }, 'expo-clipboard': { setStringAsync: async (value) => calls.copy.push(value) },
     [path.join(root, 'mobile/src/lib/api.ts')]: api,
     [path.join(root, 'mobile/src/lib/i18n.ts')]: testI18n.native,
+    [path.join(root, 'shared/i18n/process.ts')]: testI18n.load('../shared/i18n/process.ts'),
     [path.join(root, 'mobile/src/lib/errors.ts')]: testI18n.load('src/lib/errors.ts'),
     [path.join(root, 'mobile/src/providers/AppProvider.tsx')]: { useTheme: () => ({ colors, fonts: { mono: 'monospace' } }) },
     [path.join(root, 'mobile/src/components/ScreenChrome.tsx')]: { AppText: host('AppText'), ActionIcon: host('ActionIcon'), Button: host('Button'), ErrorNotice: host('ErrorNotice') },
@@ -107,6 +108,37 @@ test('native needs-user tool remains a separate labelled row and is not counted 
     const scrolls = tree.root.findAllByType('ScrollView'); assert.ok(scrolls.length > 0);
     assert.ok(scrolls.every((node) => flatten(node.props.style).maxHeight <= 200));
     assert.ok(scrolls.every((node) => node.props.keyboardShouldPersistTaps === 'always' && node.props.keyboardDismissMode === 'none'));
+  } finally { await act(async () => tree.unmount()); }
+});
+
+test('native queue rows show real waiting information and paused/admitted calls never count as executed work', async () => {
+  const { Activity } = setup();
+  const queueItem = (status = 'waiting', stepStatus = 'running', resource = 'desktop') => ({
+    ...tool('queue'), step: { id: 'queue', name: 'computer_queue', status: stepStatus,
+      outcome: stepStatus === 'completed' ? 'not_executed' : undefined,
+      output: JSON.stringify({ status, resource, executed: false, request_id: 'queue-fixture', active_wait_ms: 61_000, elapsed_ms: 241_000, waiting_ahead: 2 }) },
+  });
+  const waiting = { ...snapshot([tool('one'), queueItem()], 'waiting_resource'), resource: 'desktop:fixture' };
+  const tree = await mount(Activity, { snapshot: waiting, defaultExpanded: true, availableHeight: 200 });
+  const labels = () => tree.root.findAllByType('AppText').map((node) => node.props.children).filter((value) => typeof value === 'string');
+  try {
+    assert.ok(labels().some((value) => value === '前方 2 项 · 已等待 1 分 1 秒'));
+    assert.ok(labels().includes('等待电脑'));
+    const paused = queueItem('paused', 'completed');
+    await act(async () => tree.update(React.createElement(Activity, { snapshot: snapshot([tool('one'), paused]), defaultExpanded: true, availableHeight: 200 })));
+    assert.ok(labels().includes('已暂停等待电脑'));
+    assert.ok(labels().includes('· 已完成 1 步'));
+    const acquired = { ...queueItem('acquired', 'completed'), id: 'admitted', step: { ...queueItem('acquired', 'completed').step, id: 'admitted' } };
+    await act(async () => tree.update(React.createElement(Activity, { snapshot: snapshot([tool('one'), paused, acquired], 'completed'), defaultExpanded: true, availableHeight: 200 })));
+    assert.ok(labels().includes('1 步'));
+    assert.ok(labels().includes('电脑已就绪'));
+    assert.ok(!labels().includes('3 步'));
+    const projectWaiting = { ...snapshot([tool('one'), queueItem('waiting', 'running', 'project')], 'waiting_resource'), resource: 'project:fixture' };
+    await act(async () => tree.update(React.createElement(Activity, { snapshot: projectWaiting, defaultExpanded: true, availableHeight: 200 })));
+    assert.ok(labels().includes('等待工作空间'));
+    assert.ok(!labels().includes('等待电脑'));
+    await act(async () => tree.update(React.createElement(Activity, { snapshot: snapshot([queueItem('acquired', 'completed', 'project')]), defaultExpanded: true, availableHeight: 200 })));
+    assert.ok(labels().includes('工作空间已就绪'));
   } finally { await act(async () => tree.unmount()); }
 });
 

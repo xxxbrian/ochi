@@ -1,5 +1,6 @@
 import type { Message, ProcessEntry, RunItem, RunStatus, Snapshot, Step } from "../contracts";
 import { isActiveStatus } from "./events";
+import { isExecutedStep } from "./computerQueue";
 
 const entryCache = new WeakMap<RunItem, ProcessEntry>();
 export function processEntry(item: RunItem): ProcessEntry {
@@ -111,7 +112,7 @@ export function messagePresentation(message: Message, snapshot: Snapshot | null)
 export function isToolFailure(step: Step) { return step.status === "failed" || step.outcome === "failure"; }
 export function toolNeedsUser(step: Step) { return step.outcome === "needs_user"; }
 export function toolGroupFamily(step: Step): "commands" | "files" | "browser" | "computer" | "integration" | null {
-  if (isToolFailure(step) || toolNeedsUser(step) || /(?:^|_)request|permission|waiting/.test(step.name)) return null;
+  if (!isExecutedStep(step) || isToolFailure(step) || toolNeedsUser(step) || /(?:^|_)request|permission|waiting/.test(step.name)) return null;
   if (step.name === "exec") return "commands";
   if (step.name.startsWith("files_") || step.name === "publish_file") return "files";
   if (step.name.startsWith("browser_")) return "browser";

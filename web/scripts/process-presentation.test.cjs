@@ -103,6 +103,7 @@ test("live process step counts exclude running and failed calls and preserve ter
       ProcessTimeline: ({ active, bounded }) => React.createElement("span", { "data-working": Boolean(active), "data-bounded": bounded }),
     },
     "./ProcessElapsed": { ProcessElapsed: () => React.createElement("span", null, "· 12 秒") },
+    "./ComputerQueueDetails": { ComputerQueueDetails: () => null },
     "./ProcessSteps": {}, "./execution.css": {},
   });
   const timeline = ["completed", "running", "failed"].map((status, seq) => ({ id: String(seq), seq, kind: "tool", step: { id: String(seq), name: "exec", status } }));

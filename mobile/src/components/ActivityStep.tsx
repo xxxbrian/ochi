@@ -1,4 +1,6 @@
 import { isToolFailure, toolNeedsUser } from "../../../shared/conversation/projection";
+import { computerQueueProgress } from "../../../shared/conversation/computerQueue";
+import { computerQueueLabel } from "../../../shared/i18n/process";
 import { t, useI18n, type MessageKey } from "../lib/i18n";
 import { memo, useMemo, useState } from "react";
 import { ActivityIndicator, Image, Linking, Pressable, StyleSheet, View } from "react-native";
@@ -10,12 +12,16 @@ import { useTheme } from "../providers/AppProvider";
 import { AppText } from "./ScreenChrome";
 import { Markdown } from "./Markdown";
 import { ArtifactCards } from "./Artifacts";
+import { ComputerQueueDetails } from "./ComputerQueueDetails";
 
 const names: Record<string, [MessageKey, LucideIcon]> = {
   exec: ["process.runCode", Terminal],
   files_read: ["process.readFile", FileText],
   files_write: ["process.writeFile", FileText],
   files_list: ["process.listFiles", FileText],
+  files_copy: ["process.transferFile", FileText],
+  computer_queue: ["process.computerQueue", Monitor],
+  computer_release: ["process.releaseComputer", Monitor],
   publish_file: ["process.publishFile", FileText],
   web_search: ["process.search", Globe],
   web_fetch: ["process.readPage", Globe],
@@ -71,7 +77,9 @@ export const StepRow = memo(function StepRow({ step, expansion, onExpansionChang
     if (!expansion) setLocalExpansion(next);
     onExpansionChange?.(step.id, next);
   }
-  const [label, Icon] = info(step);
+  const [toolLabel, Icon] = info(step);
+  const queue = computerQueueProgress(step);
+  const label = queue ? computerQueueLabel(queue) : toolLabel;
   const search = useMemo(() => searchResults(step), [step.name, step.output, step.arguments]);
   const target = search?.query || stepTarget(step);
   const result = useMemo<Record<string, unknown> | null>(() => {
@@ -140,7 +148,8 @@ export const StepRow = memo(function StepRow({ step, expansion, onExpansionChang
                 <AppText size={11} style={{ color: colors.error }}>{t("common.failed")}</AppText>
               )}
             </View>
-            {target && (
+            {queue && <ComputerQueueDetails progress={queue} live={step.status === "running"} />}
+            {!queue && target && (
               <AppText muted size={12} numberOfLines={1}>
                 {target}
               </AppText>
@@ -228,7 +237,7 @@ export const StepRow = memo(function StepRow({ step, expansion, onExpansionChang
                       </View>
                     );
                   })}
-                {stdout && (
+                {stdout && (!queue || queue.status === "acquired") && (
                   <AppText
                     selectable
                     size={12}

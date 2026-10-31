@@ -1,4 +1,5 @@
 import { createTranslator, type Messages } from "./index";
+import { computerQueueWaitMilliseconds, type ComputerQueueProgress } from "../conversation/computerQueue";
 
 const messages = {
   "instruction.title": {
@@ -85,7 +86,67 @@ const messages = {
     "en": "{hours}h {minutes}m",
     "zh-CN": "{hours} 小时 {minutes} 分",
     "zh-TW": "{hours} 小時 {minutes} 分"
+  },
+  "computer.waiting": {
+    "en": "Waiting for computer",
+    "zh-CN": "等待电脑",
+    "zh-TW": "等待電腦"
+  },
+  "computer.paused": {
+    "en": "Computer wait paused",
+    "zh-CN": "已暂停等待电脑",
+    "zh-TW": "已暫停等待電腦"
+  },
+  "computer.acquired": {
+    "en": "Computer ready",
+    "zh-CN": "电脑已就绪",
+    "zh-TW": "電腦已就緒"
+  },
+  "workspace.waiting": {
+    "en": "Waiting for workspace",
+    "zh-CN": "等待工作空间",
+    "zh-TW": "等待工作空間"
+  },
+  "workspace.paused": {
+    "en": "Workspace wait paused",
+    "zh-CN": "已暂停等待工作空间",
+    "zh-TW": "已暫停等待工作空間"
+  },
+  "workspace.acquired": {
+    "en": "Workspace ready",
+    "zh-CN": "工作空间已就绪",
+    "zh-TW": "工作空間已就緒"
+  },
+  "computer.ahead": {
+    "en": { "one": "{count} request ahead", "other": "{count} requests ahead" },
+    "zh-CN": "前方 {count} 项",
+    "zh-TW": "前方 {count} 項"
+  },
+  "computer.waited": {
+    "en": "Waited {duration}",
+    "zh-CN": "已等待 {duration}",
+    "zh-TW": "已等待 {duration}"
   }
 } as const satisfies Messages;
 
 export const processT = createTranslator(messages);
+
+export function formatProcessElapsed(milliseconds: number): string {
+  const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
+  if (seconds < 60) return processT("duration.seconds", { seconds });
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return processT("duration.minutesSeconds", { minutes, seconds: seconds % 60 });
+  return processT("duration.hoursMinutes", { hours: Math.floor(minutes / 60), minutes: minutes % 60 });
+}
+
+export function computerQueueLabel(progress: ComputerQueueProgress) {
+  return processT(`${progress.resource === "project" ? "workspace" : "computer"}.${progress.status}`);
+}
+
+export function computerQueueDetail(progress: ComputerQueueProgress, now?: number) {
+  if (progress.status === "acquired") return "";
+  return [
+    processT("computer.ahead", { count: progress.waitingAhead }),
+    processT("computer.waited", { duration: formatProcessElapsed(computerQueueWaitMilliseconds(progress, now)) }),
+  ].join(" · ");
+}

@@ -25,6 +25,7 @@
 .process-compact .process-toggle { padding-top: 0; }
 .process-title { display: inline-flex; align-items: center; gap: 4px; }
 .process-meta { font-size: 13px; color: var(--muted); }
+.process-queue-meta { min-width: 0; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .process-elapsed { flex-shrink: 0; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .process-chevron { transition: transform 160ms ease; }
 .process.is-open .process-chevron { transform: rotate(90deg); }
@@ -75,6 +76,8 @@
 }
 .step-summary:hover { background: var(--hover); }
 .step-summary-text { display: flex; align-items: baseline; flex: 1; min-width: 0; gap: 8px; font-size: 14px; line-height: 24px; }
+.process-step-queue .step-summary-text { flex-wrap: wrap; row-gap: 0; }
+.process-step-queue .step-name { max-width: 100%; }
 .step-name { flex: 0 1 auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 .step-summary:hover .step-name { color: var(--ink); }
 .step-exit { flex-shrink: 0; margin-left: auto; color: var(--muted); font-size: 13px; }

@@ -409,7 +409,7 @@ export type Step = {
   id: string;
   name: string;
   status: "running" | "completed" | "failed";
-  outcome?: "success" | "failure" | "needs_user";
+  outcome?: "success" | "failure" | "needs_user" | "not_executed";
   arguments?: Record<string, unknown> | null;
   output?: string;
   screenshot?: string;

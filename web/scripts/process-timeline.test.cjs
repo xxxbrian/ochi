@@ -15,7 +15,7 @@ function load(file, imports = {}, tail = "", globals = {}) {
   const module = { exports: {} };
   vm.runInNewContext(output + tail, {
     module, exports: module.exports, URL, ...globals,
-    require(name) { if (sharedModule(name)) return sharedModule(name); if (name in imports) return imports[name]; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
+    require(name) { if (sharedModule(name)) return sharedModule(name); if (name in imports) return imports[name]; if (name === "./ComputerQueueDetails") return { ComputerQueueDetails: () => null }; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
   }, { filename: file });
   return module.exports;
 }

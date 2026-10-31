@@ -1,4 +1,6 @@
 import { projectRun } from "../../../shared/conversation/projection";
+import { isCompletedStep, isExecutedStep, latestComputerQueue } from "../../../shared/conversation/computerQueue";
+import { computerQueueLabel } from "../../../shared/i18n/process";
 import { t, useI18n, type MessageKey } from "../lib/i18n";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -43,6 +45,7 @@ import { StepRow, type StepExpansion } from "./ActivityStep";
 import { ProcessElapsed } from "./ProcessElapsed";
 import { ArtifactMarkdown } from "./ArtifactMarkdown";
 import { ActivityDisclosure, ActivityStatusText, OchiActivityMark, useReducedMotion } from "./OchiActivityMark";
+import { ComputerQueueDetails } from "./ComputerQueueDetails";
 
 export { StepRow } from "./ActivityStep";
 
@@ -135,7 +138,10 @@ export const Activity = memo(function Activity({
     onReadingChange?.(reading, interaction);
   }, [onReadingChange]);
   const collapse = canFold && finishedLayout && hasHistory && !retainHistory;
-  const completedSteps = view.steps.filter((step) => step.status === "completed" && step.outcome !== "needs_user").length;
+  const executedSteps = view.steps.filter(isExecutedStep);
+  const completedSteps = view.steps.filter(isCompletedStep).length;
+  const queue = snapshot.status === "waiting_resource" ? latestComputerQueue(timeline) : null;
+  const label = queue ? computerQueueLabel(queue) : runLabel(snapshot);
   function toggleHistory() {
     const next = !open;
     setOpen(next);
@@ -160,15 +166,15 @@ export const Activity = memo(function Activity({
           onPress={toggleHistory}
           accessibilityRole={hasHistory && canFold ? "button" : undefined}
           accessibilityState={hasHistory && canFold ? { expanded: open || retainHistory } : undefined}
-          accessibilityLabel={runLabel(snapshot)}
+          accessibilityLabel={label}
           style={styles.activityHeader}
         >
           {active ? <OchiActivityMark working={working} /> : completed
             ? <Check size={16} color={colors.muted} /> : snapshot.status === "cancelled"
               ? <Square size={14} color={colors.muted} /> : <CircleAlert size={16} color={colors.error} />}
-          <ActivityStatusText working={working}>{runLabel(snapshot)}</ActivityStatusText>
-          {view.steps.length > 0 && <AppText muted size={12}>{completed ? t("process.steps", { count: view.steps.length }) : `· ${t("process.completedSteps", { count: completedSteps })}`}</AppText>}
-          <ProcessElapsed createdAt={snapshot.created_at} updatedAt={snapshot.updated_at} active={active} />
+          <ActivityStatusText working={working}>{label}</ActivityStatusText>
+          {queue ? <ComputerQueueDetails progress={queue} live={active} /> : executedSteps.length > 0 && <AppText muted size={12}>{completed ? t("process.steps", { count: completedSteps }) : `· ${t("process.completedSteps", { count: completedSteps })}`}</AppText>}
+          {!queue && <ProcessElapsed createdAt={snapshot.created_at} updatedAt={snapshot.updated_at} active={active} />}
           {hasHistory && canFold && !retainHistory && <ActivityDisclosure color={colors.subtle} open={open} />}
         </Pressable>
         {canFold && retainHistory && <Pressable accessibilityRole="button" accessibilityLabel={t("process.viewAnswer")} onPress={viewAnswer} style={styles.answerLink}>
@@ -300,7 +306,7 @@ const ToolGroup = memo(function ToolGroup({ row, stepExpansion, onStepExpansionC
   if (row.steps.length === 1 || !row.family) return <View collapsable={false} style={styles.group}>{stepRows}</View>;
   const [labelKey, Icon] = familyInfo[row.family];
   const label = t(labelKey);
-  const completed = row.steps.filter((step) => step.status === "completed" && step.outcome !== "needs_user").length;
+  const completed = row.steps.filter(isCompletedStep).length;
   const running = row.steps.findLast((step) => step.status === "running");
   return (
     <View collapsable={false} style={styles.group}>

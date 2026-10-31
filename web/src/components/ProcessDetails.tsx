@@ -6,6 +6,9 @@ import { lastMatching, orderedProcessEntries, processHasContent, toolInfo } from
 import { OchiActivityMark } from "./ThinkingDetails";
 import { ProcessTimeline } from "./ProcessTimeline";
 import { ProcessElapsed } from "./ProcessElapsed";
+import { isCompletedStep, isExecutedStep, latestComputerQueue } from "../../../shared/conversation/computerQueue";
+import { computerQueueLabel } from "../../../shared/i18n/process";
+import { ComputerQueueDetails } from "./ComputerQueueDetails";
 import "./execution.css";
 
 export { StepList } from "./ProcessSteps";
@@ -28,7 +31,9 @@ export const ProcessSummary = memo(function ProcessSummary({ active, status, wai
   useI18n();
   const entries = useMemo(() => orderedProcessEntries(timeline), [timeline]);
   const steps = entries.flatMap((entry) => entry.step ? [entry.step] : []);
-  const completed = steps.filter((step) => step.status === "completed" && step.outcome !== "needs_user").length;
+  const executedSteps = steps.filter(isExecutedStep);
+  const completed = steps.filter(isCompletedStep).length;
+  const queue = !compact && status === "waiting_resource" ? latestComputerQueue(entries) : null;
   const latest = lastMatching(entries, (entry) => Boolean(entry.step || entry.reasoning?.text.trim() || entry.text?.trim()));
   const tool = lastMatching(steps, (step) => step.status === "running");
   const working = active && status === "running";
@@ -37,7 +42,7 @@ export const ProcessSummary = memo(function ProcessSummary({ active, status, wai
   const thinking = working && latest?.kind === "reasoning" && !latest.reasoning?.done;
   const label = compact ? steps.length ? t("process.title") : entries.every((entry) => entry.reasoning?.kind === "summary") ? t("process.reasoningSummary") : t("process.reasoning")
     : failed ? t("status.failed") : stopped ? t("status.stopped") : status === "cancelling" ? t("status.stopping")
-      : status === "queued" ? t("status.queued") : status === "waiting_resource" ? resource?.includes("desktop") || resource?.includes("computer") ? t("process.waitComputer") : t("process.waitProject")
+      : status === "queued" ? t("status.queued") : status === "waiting_resource" ? queue ? computerQueueLabel(queue) : resource?.includes("desktop") || resource?.includes("computer") ? t("process.waitComputer") : t("process.waitProject")
         : status === "waiting_user" ? waitingKind === "computer_permission" ? t("status.awaitingPermission") : t("status.awaitingReply")
           : working && tool ? t("process.activeTool", { tool: toolInfo(tool.name).label }) : thinking ? t("process.thinking") : active ? hasOutput ? t("process.replying") : t("status.processing") : status === "completed" ? t("status.completed") : t("process.title");
   const contents = <>
@@ -45,8 +50,8 @@ export const ProcessSummary = memo(function ProcessSummary({ active, status, wai
       {!compact && (active ? <OchiActivityMark working={working} /> : failed ? <CircleAlert size={14} /> : stopped ? <Square size={13} /> : <Check size={14} />)}
       <span className={`ochi-status-label${working && !compact ? " is-working" : ""}`}>{label}</span>
     </span>
-    {steps.length ? <span className="process-meta">{status === "completed" ? t("process.steps", { count: steps.length }) : `· ${t("process.completedSteps", { count: completed })}`}</span> : null}
-    {!compact && <ProcessElapsed createdAt={createdAt} updatedAt={updatedAt} active={active} />}
+    {queue ? <ComputerQueueDetails progress={queue} live={active} /> : executedSteps.length ? <span className="process-meta">{status === "completed" ? t("process.steps", { count: completed }) : `· ${t("process.completedSteps", { count: completed })}`}</span> : null}
+    {!compact && !queue && <ProcessElapsed createdAt={createdAt} updatedAt={updatedAt} active={active} />}
     {onExpandedChange ? <ChevronRight size={16} className="process-chevron" /> : null}
   </>;
   return onExpandedChange

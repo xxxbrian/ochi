@@ -546,6 +546,21 @@ export const messages = {
     "zh-CN": "等待项目工作区",
     "zh-TW": "等待專案工作區"
   },
+  "tool.computerQueue": {
+    "en": "Computer queue",
+    "zh-CN": "电脑排队",
+    "zh-TW": "電腦排隊"
+  },
+  "tool.computerRelease": {
+    "en": "Release computer",
+    "zh-CN": "释放电脑",
+    "zh-TW": "釋放電腦"
+  },
+  "tool.filesCopy": {
+    "en": "Transfer file",
+    "zh-CN": "传输文件",
+    "zh-TW": "傳輸檔案"
+  },
   "process.thinking": {
     "en": "Thinking",
     "zh-CN": "思考中",
