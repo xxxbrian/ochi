@@ -27,6 +27,7 @@ func (s *Server) registerExtensionRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("GET /api/admin/workspaces", s.auth.admin(s.listWorkspaces))
 	mux.HandleFunc("POST /api/admin/workspaces/{id}/{action}", s.auth.admin(s.manageWorkspace))
+	mux.HandleFunc("DELETE /api/admin/workspaces/{id}", s.auth.admin(s.deleteWorkspace))
 }
 
 func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
@@ -142,6 +143,17 @@ func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
+		ctx, finishAccount, err := s.accounts.begin(r.Context(), userID)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		defer finishAccount()
+		r = r.WithContext(ctx)
+		if _, err := s.store.UserByID(ctx, userID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
 		scope := agent.RunScope{
 			UserID: userID, SessionID: "skill-install-" + segments[1], RunID: runID,
 		}
@@ -227,14 +239,20 @@ func (s *Server) listWorkspaces(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) manageWorkspace(w http.ResponseWriter, r *http.Request) {
-	userID, _ := url.PathUnescape(r.PathValue("id"))
+	userID := r.PathValue("id")
+	ctx, finishAccount, err := s.accounts.begin(r.Context(), userID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	defer finishAccount()
+	r = r.WithContext(ctx)
 	var active bool
-	var err error
 	if userID == "__admin__" {
 		// The shared plugin executor can serve any user's run.
 		active, err = s.store.AnyActiveRun(r.Context())
 	} else {
-		if _, err := s.store.GetUser(r.Context(), userID); err != nil {
+		if _, err := s.store.UserByID(r.Context(), userID); err != nil {
 			writeStoreError(w, err)
 			return
 		}

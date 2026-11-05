@@ -211,6 +211,30 @@ func (m *Manager) Get(runID string) (*Run, bool) {
 	return run, ok
 }
 
+// ForgetSessions removes the short-lived projections after account deletion.
+// The caller has already excluded active executions and new admissions.
+func (m *Manager) ForgetSessions(sessionIDs []string) {
+	sessions := make(map[string]bool, len(sessionIDs))
+	for _, id := range sessionIDs {
+		sessions[id] = true
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, run := range m.runs {
+		run.mu.Lock()
+		if sessions[run.snapshot.SessionID] {
+			run.cancel()
+			for key, subscriber := range run.subs {
+				delete(run.subs, key)
+				close(subscriber)
+			}
+			delete(m.runs, id)
+			delete(m.active, run.snapshot.SessionID)
+		}
+		run.mu.Unlock()
+	}
+}
+
 func (m *Manager) ApplySnapshot(snapshot Snapshot) *Run {
 	run := m.Restore(snapshot)
 	run.mu.Lock()

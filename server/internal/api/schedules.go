@@ -47,8 +47,12 @@ func (s *Server) newSchedule(ctx context.Context, userID string, item storage.Sc
 	return s.store.SaveSchedule(ctx, userID, item)
 }
 func (s *Server) launchSchedule(ctx context.Context, userID string, item storage.Schedule) (runtime.Snapshot, error) {
+	ctx, finishAccount, err := s.accounts.begin(ctx, userID)
+	if err != nil {
+		return runtime.Snapshot{}, err
+	}
+	defer finishAccount()
 	executionID, shouldRun := item.ExecutionID, !item.ExecutionSkipped
-	var err error
 	if executionID == "" {
 		executionID, shouldRun, err = s.store.BeginScheduleExecution(ctx, userID, item.ID)
 		if err != nil {
@@ -203,26 +207,50 @@ func (s *Server) StartScheduler(parent context.Context) {
 				return
 			case <-ticker.C:
 			}
-			poll, finish := context.WithTimeout(ctx, 10*time.Second)
-			items, err := s.store.ClaimDueSchedules(poll)
+			s.launchDueSchedules(ctx)
+		}
+	}()
+}
+
+func (s *Server) launchDueSchedules(ctx context.Context) {
+	poll, finish := context.WithTimeout(ctx, 10*time.Second)
+	users, err := s.store.DueScheduleUsers(poll)
+	finish()
+	if err != nil {
+		log.Printf("schedule poll: %v", err)
+		return
+	}
+	remaining := 20
+	for _, userID := range users {
+		if ctx.Err() != nil || remaining == 0 {
+			return
+		}
+		// Take account admission before consuming a once schedule or reserving
+		// an execution, and keep it through the model run's admission.
+		accountCtx, finishAccount, err := s.accounts.begin(ctx, userID)
+		if err != nil {
+			continue
+		}
+		func() {
+			defer finishAccount()
+			claim, finish := context.WithTimeout(accountCtx, 10*time.Second)
+			items, err := s.store.ClaimDueSchedules(claim, userID, remaining)
 			finish()
 			if err != nil {
-				log.Printf("schedule poll: %v", err)
-				continue
+				log.Printf("schedule claim: %v", err)
+				return
 			}
+			remaining -= len(items)
 			for _, item := range items {
-				if ctx.Err() != nil {
-					return
-				}
-				launch, done := context.WithTimeout(ctx, 30*time.Second)
+				launch, done := context.WithTimeout(accountCtx, 30*time.Second)
 				_, err := s.launchSchedule(launch, item.UserID, item)
 				done()
 				if err != nil {
 					log.Printf("schedule execution %s: %v", item.ID, err)
 				}
 			}
-		}
-	}()
+		}()
+	}
 }
 func (s *Server) scheduleTool(ctx context.Context, userID, name string, args json.RawMessage) (agent.ToolResult, error) {
 	var input struct {

@@ -48,6 +48,11 @@ func (s *Server) asyncTitle(request agent.Request) {
 	}
 	config := agent.AuxiliaryConfig(*request.Config)
 	s.launchBackground(func(parent context.Context) {
+		parent, finishAccount, err := s.accounts.begin(parent, request.UserID)
+		if err != nil {
+			return
+		}
+		defer finishAccount()
 		var previousInvalidTitle string
 		for attempt := 0; attempt < 2; attempt++ {
 			if parent.Err() != nil {

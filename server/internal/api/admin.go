@@ -533,6 +533,10 @@ func (s *Server) adminModels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodDelete {
+		s.deleteUser(w, r)
+		return
+	}
 	if r.Method == http.MethodGet {
 		items, err := s.store.ListUsers(r.Context())
 		if err != nil {
@@ -545,23 +549,12 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 	user := storage.User{Enabled: true, Role: "user"}
 	id := r.PathValue("id")
 	if id != "" {
-		items, err := s.store.ListUsers(r.Context())
+		item, err := s.store.UserByID(r.Context(), id)
 		if err != nil {
 			writeStoreError(w, err)
 			return
 		}
-		found := false
-		for _, item := range items {
-			if item.ID == id {
-				user = item
-				found = true
-				break
-			}
-		}
-		if !found {
-			writeError(w, http.StatusNotFound, i18n.New("user_not_found"))
-			return
-		}
+		user = item
 	}
 	var req struct {
 		ID          string `json:"id"`
@@ -572,9 +565,7 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 		Enabled     bool   `json:"enabled"`
 	}
 	req.Username, req.DisplayName, req.Role, req.Enabled = user.Username, user.DisplayName, user.Role, user.Enabled
-	if r.Method == http.MethodDelete {
-		req.Enabled = false
-	} else if !decodeRequest(w, r, &req) {
+	if !decodeRequest(w, r, &req) {
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
@@ -590,6 +581,22 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 	if id != "" && req.Username != user.Username {
 		writeError(w, http.StatusBadRequest, i18n.New("username_immutable"))
 		return
+	}
+	targetID := id
+	if targetID == "" {
+		targetID = req.Username
+	}
+	_, finishAccount, err := s.accounts.begin(r.Context(), targetID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	defer finishAccount()
+	if id != "" {
+		if _, err = s.store.UserByID(r.Context(), id); err != nil {
+			writeStoreError(w, err)
+			return
+		}
 	}
 	user.Username, user.DisplayName, user.Role, user.Enabled = req.Username, req.DisplayName, req.Role, req.Enabled
 	user.PasswordHash = ""
@@ -608,10 +615,6 @@ func (s *Server) adminUsers(w http.ResponseWriter, r *http.Request) {
 	item, err := s.store.SaveUser(r.Context(), user)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	if r.Method == http.MethodDelete {
-		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	writeJSON(w, http.StatusOK, item)

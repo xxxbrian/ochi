@@ -46,6 +46,28 @@ func (r *resourceManager) releaseRun(runID string) {
 	}
 }
 
+func (r *resourceManager) releaseUser(userID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	changed := false
+	for id, ticket := range r.tickets {
+		if ticket.owner.UserID == userID {
+			delete(r.tickets, id)
+			ticket.ready = false
+			changed = true
+		}
+	}
+	for key, owner := range r.owners {
+		if owner.UserID == userID {
+			delete(r.owners, key)
+			changed = true
+		}
+	}
+	if changed {
+		r.notify()
+	}
+}
+
 func (r *resourceManager) releaseRunLeases(runID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

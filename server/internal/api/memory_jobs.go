@@ -128,6 +128,11 @@ func (s *Server) asyncMemory(request agent.Request, snapshot runtime.Snapshot) {
 	// supports fixtures/other completion paths without detached lossy extraction.
 	ctx, cancel := context.WithTimeout(s.backgroundCtx, 5*time.Second)
 	defer cancel()
+	ctx, finishAccount, err := s.accounts.begin(ctx, request.UserID)
+	if err != nil {
+		return
+	}
+	defer finishAccount()
 	if err := s.store.EnqueueMemoryJob(ctx, snapshot.RunID); err != nil {
 		log.Printf("memory queue enqueue failed for run %s", snapshot.RunID)
 	}
@@ -138,6 +143,11 @@ func (s *Server) preserveMemoryBeforeCompaction(ctx context.Context, userID, run
 }
 
 func (s *Server) extractMemoryJob(ctx context.Context, job storage.MemoryJob) error {
+	ctx, finishAccount, err := s.accounts.begin(ctx, job.UserID)
+	if err != nil {
+		return err
+	}
+	defer finishAccount()
 	ctx = agent.WithProviderTracePurpose(agent.WithRunScope(ctx, agent.RunScope{UserID: job.UserID, SessionID: job.SessionID, RunID: job.RunID}), "memory")
 	pref, err := s.store.Preferences(ctx, job.UserID)
 	if err != nil {
@@ -246,6 +256,11 @@ func (s *Server) extractMemoryJob(ctx context.Context, job storage.MemoryJob) er
 }
 
 func (s *Server) indexMemoryBatch(ctx context.Context, job storage.MemoryIndexJob) error {
+	ctx, finishAccount, err := s.accounts.begin(ctx, job.UserID)
+	if err != nil {
+		return err
+	}
+	defer finishAccount()
 	items, err := s.store.PendingMemoryIndexBatch(ctx, job)
 	if err != nil {
 		return err

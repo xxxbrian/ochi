@@ -19,6 +19,11 @@ import (
 const checkpointTimeout = 5 * time.Second
 
 func (s *Server) startRun(parent context.Context, userID, sessionID, prompt, modelID, effort string, attachmentIDs []string, revision ...storage.Revision) (runtime.Snapshot, error) {
+	parent, finishAdmission, err := s.accounts.begin(parent, userID)
+	if err != nil {
+		return runtime.Snapshot{}, err
+	}
+	defer finishAdmission()
 	if s.agent == nil {
 		return runtime.Snapshot{}, i18n.New("runner_unconfigured")
 	}
@@ -131,6 +136,18 @@ func (s *Server) launchQueued(sessionID string) {
 	// canonical user turn is appended only after this pending input is claimed.
 	ctx, cancel := context.WithTimeout(s.backgroundCtx, 15*time.Second)
 	defer cancel()
+	userID, err := s.store.SessionOwner(ctx, sessionID)
+	if err != nil {
+		return
+	}
+	ctx, finishAccount, err := s.accounts.begin(ctx, userID)
+	if err != nil {
+		return
+	}
+	defer finishAccount()
+	if enabled, err := s.store.UserEnabled(ctx, userID); err != nil || !enabled {
+		return
+	}
 	v, err := s.store.ClaimQueuedRun(ctx, sessionID)
 	if errors.Is(err, storage.ErrActiveRun) || errors.Is(err, pgx.ErrNoRows) {
 		return

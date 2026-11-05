@@ -559,6 +559,31 @@
     "zh-CN": "请至少保留一位可用的管理员。",
     "zh-TW": "請至少保留一位可用的管理員。"
   },
+  "user_delete_self": {
+    "en": "You cannot delete the account you are currently using.",
+    "zh-CN": "不能删除当前正在使用的账号。",
+    "zh-TW": "無法刪除目前正在使用的帳號。"
+  },
+  "account_busy": {
+    "en": "This account has a request in progress, active or queued work, or an open computer connection. Wait for requests to finish, stop the work and close the connection before trying again.",
+    "zh-CN": "此账号有尚未结束的请求、正在进行或排队的任务，或尚未关闭的电脑连接。请等待请求结束、停止任务并关闭连接后重试。",
+    "zh-TW": "此帳號有尚未結束的請求、進行中或排隊的工作，或尚未關閉的電腦連線。請等候請求結束、停止工作並關閉連線後重試。"
+  },
+  "user_delete_failed": {
+    "en": "The account could not be fully deleted. It remains listed so you can retry the deletion.",
+    "zh-CN": "账号尚未完全删除，仍保留在列表中，可重试删除。",
+    "zh-TW": "帳號尚未完全刪除，仍保留在清單中，可重試刪除。"
+  },
+  "workspace_delete_failed": {
+    "en": "Workspace cleanup could not finish. The account and conversation records remain; retry the cleanup.",
+    "zh-CN": "工作区清理尚未完成，账号和会话记录仍保留，请重试清理。",
+    "zh-TW": "工作區清理尚未完成，帳號和對話紀錄仍保留，請重試清理。"
+  },
+  "workspace_control_protected": {
+    "en": "The shared plugin workspace cannot be deleted.",
+    "zh-CN": "不能删除共享插件工作区。",
+    "zh-TW": "無法刪除共用外掛工作區。"
+  },
   "tool_round_limit_invalid": {
     "en": "The tool round limit must be between 1 and 200.",
     "zh-CN": "操作上限应在 1 到 200 之间。",

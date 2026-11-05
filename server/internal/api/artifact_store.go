@@ -19,8 +19,7 @@ func artifactsRoot() string {
 }
 
 func storeArtifactBytes(userID, path string, data []byte) (string, error) {
-	hash := sha256.Sum256([]byte(userID))
-	key := hex.EncodeToString(hash[:12]) + "/" + strings.TrimPrefix(filepath.Clean(path), "/")
+	key := artifactUserKey(userID) + "/" + strings.TrimPrefix(filepath.Clean(path), "/")
 	if !strings.HasPrefix(path, "/data/") {
 		return "", errors.New("invalid artifact path")
 	}
@@ -44,6 +43,11 @@ func storeArtifactBytes(userID, path string, data []byte) (string, error) {
 		return "", err
 	}
 	return key, os.Rename(temp.Name(), destination)
+}
+
+func artifactUserKey(userID string) string {
+	hash := sha256.Sum256([]byte(userID))
+	return hex.EncodeToString(hash[:12])
 }
 
 func artifactBytes(item storage.Artifact) ([]byte, error) {

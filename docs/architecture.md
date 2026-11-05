@@ -34,6 +34,22 @@ update manifest but never triggers an installation update. PostgreSQL and
 Computer images remain independently managed. See [Deployment](deployment.md)
 for the writable-layer/recreation boundary and schema maintenance rules.
 
+Account maintenance uses the same per-user admission owner as authenticated
+requests, queued-run dispatch, schedules and auxiliary provider work. Permanent
+account deletion refuses active requests, queued/running turns and live Computer
+work instead of cancelling them. It removes private desktop/compute data,
+published files and owned database records; disabling an account is a separate
+operation. Workspace deletion resets only desktop/compute data and preserves
+the account, conversations and published files. Shared plugin control and assets
+remain outside either operation.
+
+Docker ownership and liveness are checked before cleanup, including retired
+containers that still reference the same data volume. Database ownership records
+remain until external cleanup succeeds, so a partial cleanup can be retried.
+Unknown volume consumers or compute without a retained session mapping require
+explicit maintenance rather than guessed deletion. Auxiliary memory claims
+blocked by maintenance release their lease without consuming a failure attempt.
+
 ## Interface Languages
 
 Web, native clients and public API errors support English (`en`), Simplified

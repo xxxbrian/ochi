@@ -245,6 +245,12 @@ func (s *Store) CompleteMemoryIndexBatch(ctx context.Context, job MemoryIndexJob
 }
 
 func (s *Store) FinishMemoryIndexJob(ctx context.Context, job MemoryIndexJob, indexErr error) error {
+	if errors.Is(indexErr, ErrAccountBusy) {
+		_, err := s.db.Exec(ctx, `UPDATE memory_index_jobs SET status='queued',attempts=GREATEST(attempts-1,0),
+ next_attempt_at=now()+interval '15 seconds',lease_until=NULL,lease_token=NULL,last_error='',updated_at=now()
+ WHERE user_id=$1 AND lease_token=$2::uuid AND generation=$3 AND status='leased'`, job.UserID, job.LeaseToken, job.Generation)
+		return err
+	}
 	status, category := "queued", "embedding_unavailable"
 	if errors.Is(indexErr, ErrMemoryChanged) {
 		status, category = "skipped", "source_or_settings_changed"

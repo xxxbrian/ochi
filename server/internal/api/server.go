@@ -57,6 +57,7 @@ type Server struct {
 	memoryWorkerOnce    sync.Once
 	extensionMu         sync.Mutex
 	updater             *selfupdate.Manager
+	accounts            accountOperations
 }
 
 func NewServer(store *storage.Store, generator agent.Generator, accounts []Account, secureCookies bool) (*Server, error) {
@@ -72,6 +73,7 @@ func NewServer(store *storage.Store, generator agent.Generator, accounts []Accou
 	}
 	backgroundCtx, backgroundCancel := context.WithCancel(context.Background())
 	s := &Server{store: store, runtime: runtime.NewManager(), agent: generator, auth: auth, resources: newResourceManager(), desktops: newDesktopHub(), backgroundCtx: backgroundCtx, backgroundCancel: backgroundCancel, providerDebugSlots: make(chan struct{}, 8)}
+	auth.operations = &s.accounts
 	s.debugMode.Store(settings.DebugMode)
 	s.startProviderDebugRetention()
 	return s, nil
@@ -465,6 +467,11 @@ func (s *Server) createRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, returnRun)
 }
 func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID, prompt, modelID, effort string, attachmentIDs []string, revision ...storage.Revision) (runtime.Snapshot, error) {
+	parent, finishAdmission, err := s.accounts.begin(parent, userID)
+	if err != nil {
+		return runtime.Snapshot{}, err
+	}
+	defer finishAdmission()
 	if s.agent == nil {
 		return runtime.Snapshot{}, i18n.New("runner_unconfigured")
 	}
@@ -584,8 +591,16 @@ func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID
 		_ = s.store.CompleteRun(ctx, snapshot)
 		return runtime.Snapshot{}, err
 	}
-	run, e := s.runtime.Start(snapshot, func(run *runtime.Run) { s.execute(run, req) })
+	_, finishExecution, e := s.accounts.begin(context.Background(), userID)
 	if e != nil {
+		return runtime.Snapshot{}, e
+	}
+	run, e := s.runtime.Start(snapshot, func(run *runtime.Run) {
+		defer finishExecution()
+		s.execute(run, req)
+	})
+	if e != nil {
+		finishExecution()
 		snapshot.Status, snapshot.Error, snapshot.ErrorCode = runtime.StatusInterrupted, i18n.New("run_interrupted").Error(), "run_interrupted"
 		snapshot.UpdatedAt = time.Now().UTC()
 		_ = s.store.CompleteRun(ctx, snapshot)
@@ -887,6 +902,10 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	}
 	if errors.Is(err, storage.ErrActiveRun) {
 		writeError(w, http.StatusConflict, storage.ErrActiveRun)
+		return
+	}
+	if errors.Is(err, storage.ErrAccountBusy) {
+		writeError(w, http.StatusConflict, storage.ErrAccountBusy)
 		return
 	}
 	if _, _, public := i18n.Details(err); public {

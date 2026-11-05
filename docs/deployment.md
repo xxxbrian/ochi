@@ -5,6 +5,9 @@
 Copy `.env.example` to a private `.env`. Set `POSTGRES_PASSWORD` and an initial
 administrator in `OCHI_USERS`, a JSON array with `username`, `display_name`,
 `password` and `role` (`admin` or `user`). Do not commit the configured file.
+`OCHI_USERS` initializes only an empty users table. Subsequent starts neither
+recreate deleted accounts nor change established credentials or roles; manage
+those accounts in Administration.
 
 `RUNNER=openai` selects real provider execution. The optional `MODEL_BASE_URL`,
 `MODEL_API_KEY` and `MODEL_NAME` bootstrap model configuration. Users, providers,

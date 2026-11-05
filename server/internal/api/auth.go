@@ -32,8 +32,9 @@ type Account struct {
 type User = storage.User
 
 type authentication struct {
-	store  *storage.Store
-	secure bool
+	store      *storage.Store
+	secure     bool
+	operations *accountOperations
 }
 
 type userContextKey struct{}
@@ -80,6 +81,15 @@ func ParseAccounts(raw string) ([]Account, error) {
 func newAuthentication(store *storage.Store, accounts []Account, secure bool) (*authentication, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	users, err := store.ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// OCHI_USERS seeds a new installation, never resurrects an account that an
+	// administrator has deliberately deleted from an established database.
+	if len(users) > 0 {
+		return &authentication{store: store, secure: secure}, nil
+	}
 	for _, account := range accounts {
 		if account.Username == "__admin__" {
 			return nil, errors.New("__admin__ is reserved for the extension workspace")
@@ -110,7 +120,7 @@ func newAuthentication(store *storage.Store, accounts []Account, secure bool) (*
 			return nil, err
 		}
 	}
-	users, err := store.ListUsers(ctx)
+	users, err = store.ListUsers(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +161,25 @@ func (a *authentication) require(next http.HandlerFunc) http.HandlerFunc {
 			writeError(w, http.StatusUnauthorized, i18n.New("unauthenticated"))
 			return
 		}
-		next(w, r.WithContext(context.WithValue(r.Context(), userContextKey{}, user)))
+		ctx := context.WithValue(r.Context(), userContextKey{}, user)
+		if a.operations != nil {
+			var release func()
+			ctx, release, err = a.operations.begin(ctx, user.ID)
+			if err != nil {
+				writeError(w, http.StatusConflict, err)
+				return
+			}
+			defer release()
+			// Authentication may have raced with maintenance before admission.
+			// Refresh inside the gate so a removed account cannot recreate data.
+			user, err = a.store.LoginUser(ctx, tokenHash(token))
+			if err != nil {
+				writeError(w, http.StatusUnauthorized, i18n.New("unauthenticated"))
+				return
+			}
+			ctx = context.WithValue(ctx, userContextKey{}, user)
+		}
+		next(w, r.WithContext(ctx))
 	}
 }
 func (a *authentication) admin(next http.HandlerFunc) http.HandlerFunc {
@@ -176,6 +204,16 @@ func (a *authentication) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, err := a.store.GetUser(r.Context(), strings.TrimSpace(req.Username))
+	if err == nil && a.operations != nil {
+		ctx, release, admissionErr := a.operations.begin(r.Context(), user.ID)
+		if admissionErr != nil {
+			writeError(w, http.StatusConflict, admissionErr)
+			return
+		}
+		defer release()
+		r = r.WithContext(ctx)
+		user, err = a.store.GetUser(ctx, strings.TrimSpace(req.Username))
+	}
 	if err != nil || !user.Enabled || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		writeError(w, http.StatusUnauthorized, i18n.New("invalid_credentials"))
 		return

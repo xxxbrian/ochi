@@ -228,13 +228,36 @@ func (s *Store) UserEnabled(ctx context.Context, userID string) (bool, error) {
 	err := s.db.QueryRow(ctx, `SELECT enabled FROM users WHERE id=$1`, userID).Scan(&enabled)
 	return enabled, err
 }
-func (s *Store) ClaimDueSchedules(ctx context.Context) ([]Schedule, error) {
+func (s *Store) DueScheduleUsers(ctx context.Context) ([]string, error) {
+	rows, err := s.db.Query(ctx, `SELECT user_id FROM (
+ SELECT user_id,next_run_at FROM schedules WHERE enabled AND next_run_at<=now()
+ AND EXISTS(SELECT 1 FROM users WHERE users.id=schedules.user_id AND users.enabled)
+ ORDER BY next_run_at LIMIT 20
+ ) due GROUP BY user_id ORDER BY min(next_run_at),user_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	users := []string{}
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		users = append(users, userID)
+	}
+	return users, rows.Err()
+}
+
+func (s *Store) ClaimDueSchedules(ctx context.Context, userID string, limit int) ([]Schedule, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback(context.Background())
-	rows, err := tx.Query(ctx, `SELECT `+scheduleColumns+` FROM schedules WHERE enabled AND next_run_at<=now() ORDER BY next_run_at LIMIT 20 FOR UPDATE SKIP LOCKED`)
+	rows, err := tx.Query(ctx, `SELECT `+scheduleColumns+` FROM schedules WHERE user_id=$1 AND enabled AND next_run_at<=now()
+ AND EXISTS(SELECT 1 FROM users WHERE users.id=schedules.user_id AND users.enabled)
+ ORDER BY next_run_at LIMIT $2 FOR UPDATE SKIP LOCKED`, userID, limit)
 	if err != nil {
 		return nil, err
 	}

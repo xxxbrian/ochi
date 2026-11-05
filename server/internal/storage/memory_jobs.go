@@ -95,6 +95,14 @@ func (s *Store) SaveMemoryExtraction(ctx context.Context, job MemoryJob, payload
 }
 
 func (s *Store) FinishMemoryJob(ctx context.Context, job MemoryJob, extractionErr error) error {
+	if errors.Is(extractionErr, ErrAccountBusy) {
+		// Account admission rejected this claim before work began. Keep the
+		// cached extraction and failure budget for a later admitted attempt.
+		_, err := s.db.Exec(ctx, `UPDATE memory_jobs SET status='queued',attempts=GREATEST(attempts-1,0),
+ next_attempt_at=now()+interval '15 seconds',lease_until=NULL,lease_token=NULL,last_error='',updated_at=now()
+ WHERE run_id=$1 AND lease_token=NULLIF($2,'')::uuid AND status='leased'`, job.RunID, job.LeaseToken)
+		return err
+	}
 	status, message := "completed", ""
 	delay := time.Duration(0)
 	if extractionErr != nil {
