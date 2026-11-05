@@ -1379,6 +1379,21 @@
     "zh-CN": "删除用户？",
     "zh-TW": "刪除使用者？"
   },
+  "deleteUserDescription": {
+    "en": "This permanently deletes the account, conversations, memories, files and workspaces. This cannot be undone.",
+    "zh-CN": "将永久删除这个账号及其对话、记忆、文件和工作区，无法恢复。",
+    "zh-TW": "將永久刪除此帳號及其對話、記憶、檔案和工作區，無法復原。"
+  },
+  "cannotDeleteCurrentUser": {
+    "en": "You cannot delete your current account",
+    "zh-CN": "无法删除当前登录的账号",
+    "zh-TW": "無法刪除目前登入的帳號"
+  },
+  "deletingEllipsis": {
+    "en": "Deleting…",
+    "zh-CN": "正在删除…",
+    "zh-TW": "正在刪除…"
+  },
   "debugEnabled": {
     "en": "Debug mode enabled",
     "zh-CN": "Debug 模式已开启",
@@ -1543,6 +1558,26 @@
     "en": "Rebuild workspace?",
     "zh-CN": "重建工作区？",
     "zh-TW": "重建工作區？"
+  },
+  "deleteWorkspace": {
+    "en": "Delete workspace",
+    "zh-CN": "删除工作区",
+    "zh-TW": "刪除工作區"
+  },
+  "deleteWorkspaceNamed": {
+    "en": "Delete workspace for {name}",
+    "zh-CN": "删除 {name} 的工作区",
+    "zh-TW": "刪除 {name} 的工作區"
+  },
+  "deleteWorkspaceQuestion": {
+    "en": "Delete workspace?",
+    "zh-CN": "删除工作区？",
+    "zh-TW": "刪除工作區？"
+  },
+  "deleteWorkspaceDescription": {
+    "en": "This permanently deletes the desktop, compute environments and their files. The account, conversations and published files are kept. An empty workspace will be created when needed.",
+    "zh-CN": "将永久删除桌面、计算环境及其中的文件，保留账号、对话和已发布文件。下次使用时会创建空工作区。",
+    "zh-TW": "將永久刪除桌面、計算環境及其中的檔案，保留帳號、對話和已發布檔案。下次使用時會建立空白工作區。"
   },
   "returnedData": {
     "en": "Returned data",

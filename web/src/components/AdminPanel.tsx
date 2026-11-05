@@ -88,7 +88,7 @@ export default function AdminPanel({
           ) : section === "plugins" || section === "skills" || section === "mcp" ? (
             <PluginsPage section={section} onNavigate={onNavigate} />
           ) : section === "users" ? (
-            <UsersPage />
+            <UsersPage currentUserID={currentUserID} />
           ) : section === "settings" ? (
             <SystemPage />
           ) : section === "workspaces" ? (

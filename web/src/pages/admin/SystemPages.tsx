@@ -27,7 +27,7 @@ import { UpdateCard } from "./UpdateCard";
 
 const MarkdownContent = lazy(() => import("../../components/MarkdownContent"));
 
-export function UsersPage() {
+export function UsersPage({ currentUserID }: { currentUserID: string }) {
   useAdminI18n();
   const [users, setUsers] = useState<User[]>([]);
   const [editor, setEditor] = useState<
@@ -37,6 +37,7 @@ export function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -67,6 +68,21 @@ export function UsersPage() {
       void refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t("saveFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function removeUser() {
+    if (!deleting || busy) return;
+    setBusy(true);
+    setError("");
+    setDeleteError("");
+    try {
+      await adminApi.remove("users", deleting.id);
+      setDeleting(null);
+      await refresh();
+    } catch (reason) {
+      setDeleteError(reason instanceof Error ? reason.message : t("operationFailed"));
     } finally {
       setBusy(false);
     }
@@ -116,7 +132,12 @@ export function UsersPage() {
                   <Pencil size={16} />
                 </button>
                 <button className="icon-button admin-delete-action" aria-label={t("deleteUserNamed", { name: user.display_name || user.username })}
-                  title={t("deleteUser")} onClick={() => setDeleting(user)}>
+                  title={user.id === currentUserID ? t("cannotDeleteCurrentUser") : t("deleteUser")}
+                  disabled={user.id === currentUserID}
+                  onClick={() => {
+                    setDeleteError("");
+                    setDeleting(user);
+                  }}>
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -204,34 +225,30 @@ export function UsersPage() {
           className="ochi-admin-modal"
           title={t("deleteUserQuestion")}
           onClose={() => setDeleting(null)}
+          dismissible={!busy}
           size="small"
           footer={
             <div className="modal-actions">
               <button
                 className="secondary-button"
+                disabled={busy}
                 onClick={() => setDeleting(null)}
               >
                 {t("cancel")}</button>
               <button
                 className="danger-button"
                 disabled={busy}
-                onClick={() => {
-                  setBusy(true);
-                  void adminApi
-                    .remove("users", deleting.id)
-                    .then(() => {
-                      setDeleting(null);
-                      return refresh();
-                    })
-                    .catch((reason: Error) => setError(reason.message))
-                    .finally(() => setBusy(false));
-                }}
+                aria-busy={busy}
+                onClick={() => void removeUser()}
               >
-                {t("delete")}</button>
+                {busy && <LoaderCircle className="spin" size={15} />}
+                {busy ? t("deletingEllipsis") : t("delete")}</button>
             </div>
           }
         >
           <p>{deleting.display_name || deleting.username}</p>
+          <p className="settings-note">{t("deleteUserDescription")}</p>
+          <ErrorNotice error={deleteError} />
         </Modal>
       )}
     </>
@@ -423,7 +440,11 @@ export function WorkspacesPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [confirm, setConfirm] = useState<Workspace | null>(null);
+  const [confirm, setConfirm] = useState<{
+    workspace: Workspace;
+    action: "rebuild" | "delete";
+  } | null>(null);
+  const [confirmError, setConfirmError] = useState("");
   const refresh = useCallback(async () => {
     try {
       const [values, accounts] = await Promise.all([
@@ -442,13 +463,22 @@ export function WorkspacesPage() {
     void refresh();
   }, [refresh]);
   async function action(item: Workspace, name: string) {
+    if (busy) return;
     setBusy(item.user_id);
+    setError("");
+    setConfirmError("");
     try {
-      await adminApi.workspace(item.user_id, name);
+      if (name === "delete") {
+        await adminApi.remove("workspaces", item.user_id);
+      } else {
+        await adminApi.workspace(item.user_id, name);
+      }
       setConfirm(null);
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("operationFailed"));
+      const message = reason instanceof Error ? reason.message : t("operationFailed");
+      if (name === "rebuild" || name === "delete") setConfirmError(message);
+      else setError(message);
     } finally {
       setBusy("");
     }
@@ -490,20 +520,34 @@ export function WorkspacesPage() {
                 {item.update_available && <small>{t("workspaceImageUpdateAvailable")}</small>}
               </div>
               <span className={`admin-state${item.running ? " is-enabled" : ""}`}>
-                <i />{item.running ? t("running") : item.state || t("notStarted")}
+                <i />{item.running ? t("running") : !item.state || item.state === "not_created" ? t("notStarted") : item.state}
               </span>
               <div className="workspace-row-actions">
                 <button
                   className="secondary-button"
-                  disabled={busy === item.user_id}
+                  disabled={Boolean(busy)}
                   onClick={() =>
                     void action(item, item.running ? "stop" : "start")
                   }
                 >
                   {item.running ? t("stop") : t("startAction")}
                 </button>
-                <button className="secondary-button" disabled={busy === item.user_id}
-                  onClick={() => setConfirm(item)}>{t("rebuild")}</button>
+                <button className="secondary-button" disabled={Boolean(busy)}
+                  onClick={() => {
+                    setConfirmError("");
+                    setConfirm({ workspace: item, action: "rebuild" });
+                  }}>{t("rebuild")}</button>
+                {item.kind !== "control" && (
+                  <button className="icon-button admin-delete-action"
+                    aria-label={t("deleteWorkspaceNamed", { name: workspaceName(item) })}
+                    title={t("deleteWorkspace")} disabled={Boolean(busy)}
+                    onClick={() => {
+                      setConfirmError("");
+                      setConfirm({ workspace: item, action: "delete" });
+                    }}>
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
             </article>
           ))}
@@ -513,28 +557,36 @@ export function WorkspacesPage() {
       {confirm && (
         <Modal
           className="ochi-admin-modal"
-          title={t("rebuildWorkspaceQuestion")}
+          title={confirm.action === "delete" ? t("deleteWorkspaceQuestion") : t("rebuildWorkspaceQuestion")}
           onClose={() => setConfirm(null)}
+          dismissible={!busy}
           size="small"
           footer={
             <div className="modal-actions">
               <button
                 className="secondary-button"
+                disabled={Boolean(busy)}
                 onClick={() => setConfirm(null)}
               >
                 {t("cancel")}</button>
               <button
-                className="primary-button"
-                disabled={busy === confirm.user_id}
-                onClick={() => void action(confirm, "rebuild")}
+                className={confirm.action === "delete" ? "danger-button" : "primary-button"}
+                disabled={Boolean(busy)}
+                aria-busy={Boolean(busy)}
+                onClick={() => void action(confirm.workspace, confirm.action)}
               >
-                {t("rebuild")}</button>
+                {busy && <LoaderCircle className="spin" size={15} />}
+                {confirm.action === "delete"
+                  ? busy ? t("deletingEllipsis") : t("delete")
+                  : t("rebuild")}</button>
             </div>
           }
         >
           <p>
-            {workspaceName(confirm)}
+            {workspaceName(confirm.workspace)}
           </p>
+          {confirm.action === "delete" && <p className="settings-note">{t("deleteWorkspaceDescription")}</p>}
+          <ErrorNotice error={confirmError} />
         </Modal>
       )}
     </>

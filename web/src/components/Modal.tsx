@@ -13,6 +13,7 @@ export function Modal({
   footer,
   bodyClassName = "",
   className = "",
+  dismissible = true,
 }: {
   title: string;
   children: ReactNode;
@@ -23,13 +24,14 @@ export function Modal({
   footer?: ReactNode;
   bodyClassName?: string;
   className?: string;
+  dismissible?: boolean;
 }) {
   useI18n();
   return (
     <Dialog.Root
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && dismissible) onClose();
       }}
     >
       <Dialog.Portal>
@@ -39,7 +41,7 @@ export function Modal({
         >
           <header className="modal-header">
             <Dialog.Title>{title}</Dialog.Title>
-            <Dialog.Close className="icon-button" aria-label={t("common.close")}>
+            <Dialog.Close className="icon-button" aria-label={t("common.close")} disabled={!dismissible}>
               <X size={18} />
             </Dialog.Close>
           </header>
