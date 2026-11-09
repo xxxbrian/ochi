@@ -40,7 +40,7 @@ export function SelectField({
       disabled={disabled}
     >
       <Select.Trigger
-        className={`choice-trigger${compact ? " choice-compact" : ""}${triggerClassName ? ` ${triggerClassName}` : ""}`}
+        className={`choice-trigger select-btn${compact ? " choice-compact" : ""}${triggerClassName ? ` ${triggerClassName}` : ""}`}
         aria-label={label}
         title={title}
       >
@@ -53,36 +53,34 @@ export function SelectField({
           }
         </Select.Value>
         <Select.Icon className="choice-chevron">
-          <ChevronDown size={14} />
+          <ChevronDown size={14} className="ic" />
         </Select.Icon>
       </Select.Trigger>
       <Select.Portal>
         <Select.Positioner
-          className="choice-positioner"
+          className="pop-positioner"
           sideOffset={7}
           collisionPadding={12}
           collisionAvoidance={{ side: "flip", align: "shift" }}
           alignItemWithTrigger={false}
         >
-          <Select.Popup className="choice-popup">
+          <Select.Popup className="pop pop-select">
             <Select.List>
               {options.map((option) => (
                 <Select.Item
-                  className="choice-item"
+                  className="menu-item rich choice-item"
                   key={option.value}
                   value={option.value}
                   disabled={option.disabled}
                 >
-                  <span className="choice-check">
-                    <Select.ItemIndicator>
-                      <Check size={15} />
-                    </Select.ItemIndicator>
-                  </span>
                   {option.icon}
-                  <Select.ItemText className="choice-item-text">
-                    <span>{option.label}</span>
+                  <span className="mi-text">
+                    <Select.ItemText className="choice-item-text">{option.label}</Select.ItemText>
                     {option.detail && <small>{option.detail}</small>}
-                  </Select.ItemText>
+                  </span>
+                  <Select.ItemIndicator className="choice-check">
+                    <Check size={14} />
+                  </Select.ItemIndicator>
                 </Select.Item>
               ))}
             </Select.List>

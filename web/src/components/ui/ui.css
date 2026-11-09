@@ -1,5 +1,3 @@
 /* Shared primitives: each stylesheet owns its rules, including breakpoints. */
-@import './base.css';
-@import './dropdown.css';
-@import './dialog.css';
+@import './primitives.css';
 @import './forms.css';

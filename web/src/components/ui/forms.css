@@ -92,7 +92,7 @@ input[role="switch"],
     width: 32px;
     min-width: 32px;
     height: 20px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     border: 0;
     background: var(--line-strong);
     padding: 0;
