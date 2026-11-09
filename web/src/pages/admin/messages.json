@@ -609,6 +609,11 @@
     "zh-CN": "更新元数据",
     "zh-TW": "更新中繼資料"
   },
+  "updatingMetadata": {
+    "en": "Updating…",
+    "zh-CN": "更新中…",
+    "zh-TW": "更新中…"
+  },
   "customModel": {
     "en": "Custom model",
     "zh-CN": "自定义模型",
@@ -2398,5 +2403,375 @@
     "en": "Preparation applies only to this user and this Skill revision. Other users prepare their own dependencies; rebuilding the runtime requires another check.",
     "zh-CN": "安装结果只属于所选用户和当前 Skill 版本。其他用户需独立安装依赖，重建运行环境后需重新检查。",
     "zh-TW": "安裝結果只屬於所選使用者和目前 Skill 版本。其他使用者需獨立安裝依賴，重建執行環境後需重新檢查。"
+  },
+  "loading": {
+    "en": "Loading",
+    "zh-CN": "加载中",
+    "zh-TW": "載入中"
+  },
+  "adminGroupModels": {
+    "en": "Models and tools",
+    "zh-CN": "模型与工具",
+    "zh-TW": "模型與工具"
+  },
+  "adminGroupOrganization": {
+    "en": "Organization",
+    "zh-CN": "组织",
+    "zh-TW": "組織"
+  },
+  "adminGroupOperations": {
+    "en": "Operations",
+    "zh-CN": "运维",
+    "zh-TW": "維運"
+  },
+  "typeToConfirm": {
+    "en": "Type {name} to confirm",
+    "zh-CN": "输入 {name} 以确认",
+    "zh-TW": "輸入 {name} 以確認"
+  },
+  "adminDesc.providers": {
+    "en": "Connect model services, manage keys and available models.",
+    "zh-CN": "接入模型服务、管理密钥与可用模型。",
+    "zh-TW": "接入模型服務、管理金鑰與可用模型。"
+  },
+  "adminDesc.search": {
+    "en": "Give conversations live web search.",
+    "zh-CN": "为对话提供实时网页检索能力。",
+    "zh-TW": "為對話提供即時網頁檢索能力。"
+  },
+  "adminDesc.plugins": {
+    "en": "Manage skills and MCP servers and control who can use them.",
+    "zh-CN": "管理技能与 MCP 服务器，控制谁可以使用。",
+    "zh-TW": "管理技能與 MCP 伺服器，控制誰可以使用。"
+  },
+  "adminDesc.users": {
+    "en": "Add members, assign roles and manage access.",
+    "zh-CN": "添加成员、分配角色并管理访问。",
+    "zh-TW": "新增成員、指派角色並管理存取。"
+  },
+  "adminDesc.workspaces": {
+    "en": "Docker workspace status and the Computer desktop queue.",
+    "zh-CN": "Docker 工作区的运行状态，以及 Computer 桌面排队。",
+    "zh-TW": "Docker 工作區的執行狀態，以及 Computer 桌面排隊。"
+  },
+  "adminDesc.runs": {
+    "en": "Review the steps, usage and errors of every conversation run.",
+    "zh-CN": "回看每一次对话运行的步骤、用量与错误。",
+    "zh-TW": "回看每一次對話執行的步驟、用量與錯誤。"
+  },
+  "adminDesc.debug": {
+    "en": "Inspect API requests and upstream provider responses.",
+    "zh-CN": "查看 API 请求与上游供应商响应。",
+    "zh-TW": "檢視 API 請求與上游供應商回應。"
+  },
+  "adminDesc.system": {
+    "en": "Updates, auxiliary models, agent defaults and diagnostics.",
+    "zh-CN": "版本更新、辅助模型、Agent 默认值与诊断。",
+    "zh-TW": "版本更新、輔助模型、Agent 預設值與診斷。"
+  },
+  "adminSearchUsers": {
+    "en": "Search name or account",
+    "zh-CN": "搜索名称或账号",
+    "zh-TW": "搜尋名稱或帳號"
+  },
+  "adminAllRoles": {
+    "en": "All",
+    "zh-CN": "全部",
+    "zh-TW": "全部"
+  },
+  "adminSelectAll": {
+    "en": "Select all users",
+    "zh-CN": "选择全部用户",
+    "zh-TW": "選取全部使用者"
+  },
+  "adminSelectUser": {
+    "en": "Select {name}",
+    "zh-CN": "选择 {name}",
+    "zh-TW": "選取 {name}"
+  },
+  "adminSelectedCount": {
+    "en": "{count} selected",
+    "zh-CN": "已选择 {count} 项",
+    "zh-TW": "已選取 {count} 項"
+  },
+  "adminBulkDisable": {
+    "en": "Disable",
+    "zh-CN": "停用",
+    "zh-TW": "停用"
+  },
+  "adminBulkEnable": {
+    "en": "Enable",
+    "zh-CN": "启用",
+    "zh-TW": "啟用"
+  },
+  "adminClearSelection": {
+    "en": "Clear selection",
+    "zh-CN": "清除选择",
+    "zh-TW": "清除選取"
+  },
+  "adminNoUsersMatch": {
+    "en": "No users match",
+    "zh-CN": "没有匹配的用户",
+    "zh-TW": "沒有符合的使用者"
+  },
+  "adminNoUsersMatchHint": {
+    "en": "Try another name or role filter.",
+    "zh-CN": "换一个名称或角色筛选试试。",
+    "zh-TW": "換一個名稱或角色篩選試試。"
+  },
+  "adminColUser": {
+    "en": "User",
+    "zh-CN": "用户",
+    "zh-TW": "使用者"
+  },
+  "adminColRole": {
+    "en": "Role",
+    "zh-CN": "角色",
+    "zh-TW": "角色"
+  },
+  "adminColStatus": {
+    "en": "Status",
+    "zh-CN": "状态",
+    "zh-TW": "狀態"
+  },
+  "adminUpdateAvailable": {
+    "en": "Update available",
+    "zh-CN": "有可用更新",
+    "zh-TW": "有可用更新"
+  },
+  "adminVersion": {
+    "en": "Version",
+    "zh-CN": "版本",
+    "zh-TW": "版本"
+  },
+  "close": {
+    "en": "Close",
+    "zh-CN": "关闭",
+    "zh-TW": "關閉"
+  },
+  "remove": {
+    "en": "Remove",
+    "zh-CN": "移除",
+    "zh-TW": "移除"
+  },
+  "adminSwitchSection": {
+    "en": "Switch section",
+    "zh-CN": "切换页面",
+    "zh-TW": "切換頁面"
+  },
+  "adminProduction": {
+    "en": "Production",
+    "zh-CN": "生产环境",
+    "zh-TW": "正式環境"
+  },
+  "models": {
+    "en": "Models",
+    "zh-CN": "模型",
+    "zh-TW": "模型"
+  },
+  "all": {
+    "en": "All",
+    "zh-CN": "全部",
+    "zh-TW": "全部"
+  },
+  "capabilities": {
+    "en": "Capabilities",
+    "zh-CN": "能力",
+    "zh-TW": "能力"
+  },
+  "copyText": {
+    "en": "Copy",
+    "zh-CN": "复制",
+    "zh-TW": "複製"
+  },
+  "searchProviderHint": {
+    "en": "Choose the backend used by chat web search.",
+    "zh-CN": "选择对话「联网搜索」使用的后端。",
+    "zh-TW": "選擇對話「聯網搜尋」使用的後端。"
+  },
+  "searchDescExa": {
+    "en": "Semantic search, good for research questions",
+    "zh-CN": "语义检索，适合研究类问题",
+    "zh-TW": "語意檢索，適合研究類問題"
+  },
+  "searchDescBrave": {
+    "en": "Independent index, privacy friendly",
+    "zh-CN": "独立索引，隐私友好",
+    "zh-TW": "獨立索引，注重隱私"
+  },
+  "searchDescSearxng": {
+    "en": "Self-hosted meta search, no key required",
+    "zh-CN": "自托管元搜索，无需密钥",
+    "zh-TW": "自行託管的元搜尋，無需金鑰"
+  },
+  "selfHosted": {
+    "en": "Self-hosted",
+    "zh-CN": "自托管",
+    "zh-TW": "自行託管"
+  },
+  "searchKeyHint": {
+    "en": "The key stays on the server and is never returned to the browser.",
+    "zh-CN": "密钥仅保存在服务端，不会返回到浏览器。",
+    "zh-TW": "金鑰僅保存在伺服器端，不會回傳到瀏覽器。"
+  },
+  "hideKey": {
+    "en": "Hide key",
+    "zh-CN": "隐藏密钥",
+    "zh-TW": "隱藏金鑰"
+  },
+  "showKey": {
+    "en": "Show key",
+    "zh-CN": "显示密钥",
+    "zh-TW": "顯示金鑰"
+  },
+  "maxResultsHint": {
+    "en": "More results use more context.",
+    "zh-CN": "较多结果会增加上下文消耗。",
+    "zh-TW": "較多結果會增加上下文消耗。"
+  },
+  "testSearchWith": {
+    "en": "Run a real search with {name}.",
+    "zh-CN": "使用 {name} 发起一次真实检索。",
+    "zh-TW": "使用 {name} 發起一次真實檢索。"
+  },
+  "searchNotTested": {
+    "en": "Not tested yet",
+    "zh-CN": "尚未测试",
+    "zh-TW": "尚未測試"
+  },
+  "searchNotTestedHint": {
+    "en": "Enter a question to see the pages it returns.",
+    "zh-CN": "输入一个问题，查看返回的网页结果。",
+    "zh-TW": "輸入一個問題，查看回傳的網頁結果。"
+  },
+  "skillsCardHint": {
+    "en": "{count} installed. Reusable procedures for the model.",
+    "zh-CN": "{count} 个已安装 · 为模型提供可复用的操作流程",
+    "zh-TW": "{count} 個已安裝 · 為模型提供可重複使用的操作流程"
+  },
+  "mcpCardHint": {
+    "en": "{count} configured. External tools through the Model Context Protocol.",
+    "zh-CN": "{count} 个已配置 · 通过 Model Context Protocol 接入外部工具",
+    "zh-TW": "{count} 個已設定 · 透過 Model Context Protocol 接入外部工具"
+  },
+  "pluginsCardHint": {
+    "en": "{count} bundles. Choose what users can switch on in chat.",
+    "zh-CN": "{count} 个插件包 · 决定用户可在对话中启用哪些能力",
+    "zh-TW": "{count} 個外掛套件 · 決定使用者可在對話中啟用哪些能力"
+  },
+  "ready": {
+    "en": "Ready",
+    "zh-CN": "就绪",
+    "zh-TW": "就緒"
+  },
+  "connected": {
+    "en": "Connected",
+    "zh-CN": "已连接",
+    "zh-TW": "已連線"
+  },
+  "errorsOnPage": {
+    "en": "Errors",
+    "zh-CN": "错误",
+    "zh-TW": "錯誤"
+  },
+  "onThisPage": {
+    "en": "{count} on this page",
+    "zh-CN": "本页 {count} 条",
+    "zh-TW": "本頁 {count} 筆"
+  },
+  "requestsRetentionShort": {
+    "en": "Kept for {days} days",
+    "zh-CN": "保留 {days} 天",
+    "zh-TW": "保留 {days} 天"
+  },
+  "runRequestsRetentionShort": {
+    "en": "Kept with the run",
+    "zh-CN": "随运行记录保留",
+    "zh-TW": "隨執行紀錄保留"
+  },
+  "sortBy": {
+    "en": "Sort",
+    "zh-CN": "排序",
+    "zh-TW": "排序"
+  },
+  "sortName": {
+    "en": "Name",
+    "zh-CN": "姓名",
+    "zh-TW": "姓名"
+  },
+  "clearFilters": {
+    "en": "Clear filters",
+    "zh-CN": "清除筛选",
+    "zh-TW": "清除篩選"
+  },
+  "workspaceContainers": {
+    "en": "Workspace containers",
+    "zh-CN": "工作区容器",
+    "zh-TW": "工作區容器"
+  },
+  "workspaceRebuildToApply": {
+    "en": "Rebuild to apply the new image",
+    "zh-CN": "重建后应用新镜像",
+    "zh-TW": "重建後套用新映像"
+  },
+  "working": {
+    "en": "Working",
+    "zh-CN": "处理中",
+    "zh-TW": "處理中"
+  },
+  "successRate": {
+    "en": "Success rate",
+    "zh-CN": "成功率",
+    "zh-TW": "成功率"
+  },
+  "tokenUsage": {
+    "en": "Token usage",
+    "zh-CN": "Token 用量",
+    "zh-TW": "Token 用量"
+  },
+  "runsEmptyHint": {
+    "en": "Adjust the filters or widen the time range.",
+    "zh-CN": "调整筛选条件，或扩大时间范围。",
+    "zh-TW": "調整篩選條件，或擴大時間範圍。"
+  },
+  "testingEllipsis": {
+    "en": "Testing…",
+    "zh-CN": "正在测试…",
+    "zh-TW": "正在測試…"
+  },
+  "syncingEllipsis": {
+    "en": "Syncing…",
+    "zh-CN": "正在同步…",
+    "zh-TW": "正在同步…"
+  },
+  "uploadingEllipsis": {
+    "en": "Uploading…",
+    "zh-CN": "正在上传…",
+    "zh-TW": "正在上傳…"
+  },
+  "installingEllipsis": {
+    "en": "Installing…",
+    "zh-CN": "正在安装…",
+    "zh-TW": "正在安裝…"
+  },
+  "clearingEllipsis": {
+    "en": "Clearing…",
+    "zh-CN": "正在清除…",
+    "zh-TW": "正在清除…"
+  },
+  "matchingEllipsis": {
+    "en": "Matching…",
+    "zh-CN": "正在匹配…",
+    "zh-TW": "正在比對…"
+  },
+  "runningEllipsis": {
+    "en": "Running…",
+    "zh-CN": "正在执行…",
+    "zh-TW": "正在執行…"
+  },
+  "rebuildingEllipsis": {
+    "en": "Rebuilding…",
+    "zh-CN": "正在重建…",
+    "zh-TW": "正在重建…"
   }
 }
