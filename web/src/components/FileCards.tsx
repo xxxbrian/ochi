@@ -1,274 +1,348 @@
-import { t, useI18n, getLocale, formatNumber } from "../lib/i18n";
-import { lazy, memo, Suspense, useEffect, useState } from "react";
-import {
-  Code2,
-  Download,
-  FileText,
-  Image,
-  LoaderCircle,
-  Maximize2,
-  Minimize2,
-  Play,
-} from "lucide-react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { ArrowUpRight, Download, Eye, Image as ImageIcon, LayoutDashboard, Maximize2 } from "lucide-react";
+import { formatNumber, t, useI18n } from "../lib/i18n";
+import { downloadUrl, fileKind, fileTypeLabel, isRasterImage, opensInDock, sizeText } from "../lib/files";
+import { hasDockHost, openArtifact, rememberArtifacts, themedDocument, useArtifactOwner, useResolvedTheme, useSvgUrl } from "../lib/artifactDock";
+import { useFileContent } from "../hooks/useFileContent";
 import type { Artifact } from "../lib/types";
-import { Modal } from "./Modal";
-import "./message-files.css";
-const MarkdownContent = lazy(() => import("./MarkdownContent"));
+import { FileTile } from "./FileTile";
+import { FilePreview } from "./FilePreview";
+import "./preview.css";
 
-export function sizeText(size: number) {
-  return size < 1024
-    ? `${formatNumber(size)} B`
-    : size < 1024 * 1024
-      ? `${formatNumber(size / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KB`
-      : `${formatNumber(size / 1024 / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
-}
-export function downloadUrl(file: Artifact) {
-  return `${file.url}${file.url.includes("?") ? "&" : "?"}download=1`;
-}
-const extensions: Record<string, string> = {
-  ts: "typescript",
-  tsx: "tsx",
-  js: "javascript",
-  jsx: "jsx",
-  py: "python",
-  go: "go",
-  rs: "rust",
-  sh: "bash",
-  css: "css",
-  json: "json",
-  html: "html",
-  svg: "xml",
-  yaml: "yaml",
-  yml: "yaml",
-  md: "markdown",
-};
-function previewType(file: Artifact) {
-  if (/\.svg$/i.test(file.name) || /image\/svg/.test(file.mime_type))
-    return "svg";
-  if (
-    /\.html?$/i.test(file.name) ||
-    /text\/html/.test(file.mime_type)
-  )
-    return "html";
-  if (/\.(md|markdown)$/i.test(file.name) || /markdown/.test(file.mime_type))
-    return "markdown";
-  if (/^image\//.test(file.mime_type)) return "image";
-  if (/pdf/.test(file.mime_type)) return "pdf";
-  if (
-    /^text\/|json|javascript|xml/.test(file.mime_type) ||
-    file.name.split(".").pop()! in extensions
-  )
-    return "code";
-  return "binary";
+const ImageViewer = lazy(() => import("./ImageViewer").then((module) => ({ default: module.ImageViewer })));
+
+export { downloadUrl, sizeText };
+
+const MAX_TILES = 4;
+const FRESH_MS = 8000;
+const clampRatio = (value: number) => Math.min(1.6, Math.max(0.75, value));
+const imageAlt = (file: Artifact) => file.generation?.prompt || file.name;
+
+/** A tile still being generated: progress ring, shimmer label. The viewer skips these. */
+export type PendingImage = { progress?: number };
+
+function Ring({ progress }: { progress: number }) {
+  return (
+    <span className="pv-ring">
+      <svg viewBox="0 0 44 44" aria-hidden="true">
+        <circle cx="22" cy="22" r="18" className="bg" />
+        <circle cx="22" cy="22" r="18" className="fg" pathLength="100" style={{ strokeDasharray: `${Math.round(progress * 100)} 100` }} />
+      </svg>
+      <b className="tnum">{Math.round(progress * 100)}</b>
+    </span>
+  );
 }
 
-export function ArtifactPreview({
-  file,
-  onClose,
-}: {
+/** One tile: blurs in once decoded, grows slightly on hover and is the FLIP origin of the viewer. */
+function Thumb({ file, index, extra, onOpen, register, onNatural }: {
   file: Artifact;
-  onClose: () => void;
+  index: number;
+  extra: number;
+  onOpen: (index: number) => void;
+  register: (index: number, element: HTMLElement | null) => void;
+  onNatural?: (ratio: number) => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const settle = useCallback((element: HTMLImageElement | null) => {
+    if (element?.complete && element.naturalWidth) {
+      setLoaded(true);
+      onNatural?.(element.naturalWidth / element.naturalHeight);
+    }
+  }, [onNatural]);
+  return (
+    <button
+      type="button"
+      className="pv-th"
+      style={{ "--i": index } as CSSProperties}
+      ref={(element) => register(index, element)}
+      onClick={() => onOpen(index)}
+      aria-label={t("file.viewImage", { name: file.name })}
+    >
+      <img
+        ref={settle}
+        src={file.url}
+        alt={imageAlt(file)}
+        data-l={loaded || undefined}
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        onLoad={(event) => {
+          setLoaded(true);
+          onNatural?.(event.currentTarget.naturalWidth / event.currentTarget.naturalHeight);
+        }}
+      />
+      {extra > 0 ? (
+        <span className="pv-more" aria-hidden="true">+{formatNumber(extra)}</span>
+      ) : (
+        <span className="pv-th-ex" aria-hidden="true"><Maximize2 className="ic" /></span>
+      )}
+    </button>
+  );
+}
+
+/** 1 / 2 / 3 / 4 tiles, then the fourth tile carries a "+N" count. Every finished tile opens the viewer. */
+export function ImageGrid({ images, pending = [], onOpen, register }: {
+  images: Artifact[];
+  pending?: PendingImage[];
+  onOpen: (index: number) => void;
+  register: (index: number, element: HTMLElement | null) => void;
 }) {
   useI18n();
-  const type = previewType(file);
-  const [source, setSource] = useState("");
-  const [loading, setLoading] = useState(
-    ["html", "svg", "markdown", "code"].includes(type),
-  );
-  const [error, setError] = useState("");
-  const [mode, setMode] = useState<"preview" | "source">("preview");
-  const [fullscreen, setFullscreen] = useState(false);
-  const [imageRatio, setImageRatio] = useState(
-    file.generation?.width && file.generation.height
-      ? file.generation.width / file.generation.height
-      : 1,
-  );
-  const imagePreview = (type === "image" || type === "svg") && mode === "preview";
-  useEffect(() => {
-    if (!["html", "svg", "markdown", "code"].includes(type)) return;
-    const controller = new AbortController();
-    setLoading(true);
-    void fetch(file.url, { credentials: "include", headers: { "Accept-Language": getLocale() }, signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(t("file.loadError"));
-        const bytes = await response.arrayBuffer();
-        return new TextDecoder("utf-8").decode(bytes);
-      })
-      .then(setSource)
-      .catch((reason: Error) => {
-        if (reason.name !== "AbortError") setError(reason.message);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [file.url, type]);
-  const language =
-    extensions[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "text";
-  const fence = "`".repeat(
-    (source.match(/`+/g) ?? []).reduce(
-      (length, match) => Math.max(length, match.length + 1),
-      3,
-    ),
-  );
+  const total = images.length + pending.length;
+  const shown = images.slice(0, MAX_TILES);
+  const room = Math.max(0, MAX_TILES - shown.length);
+  const placeholders = pending.slice(0, room);
+  const extra = total - shown.length - placeholders.length;
+  const [natural, setNatural] = useState<number>();
+  const generation = images[0]?.generation;
+  const single = total === 1;
+  const ratio = single ? clampRatio(generation?.width && generation.height ? generation.width / generation.height : natural ?? 4 / 3) : undefined;
   return (
-    <Modal title={file.name} onClose={onClose} size="preview" fullscreen={fullscreen} bodyClassName={`preview-body ${imagePreview ? "image-preview-body" : ""}`}>
-      <div className="preview-toolbar">
-        {["html", "svg", "markdown", "code"].includes(type) && <div className="segmented-control">
-          {["html", "svg", "markdown"].includes(type) && (
-            <button
-              className={mode === "preview" ? "selected" : ""}
-              onClick={() => setMode("preview")}
-            >
-              {type === "html" || type === "svg" ? <Play size={15} /> : <FileText size={15} />}
-              {t("file.preview")}
-            </button>
-          )}
-          {["html", "svg", "markdown", "code"].includes(type) && (
-            <button
-              className={mode === "source" || type === "code" ? "selected" : ""}
-              onClick={() => setMode("source")}
-            >
-              <Code2 size={15} />
-              {t("file.source")}
-            </button>
-          )}
-        </div>}
-        <div className="toolbar-actions">
-          {file.version && <span className="date-meta">v{file.version}</span>}
-          <button
-            className="icon-button"
-            onClick={() => setFullscreen((value) => !value)}
-            aria-label={fullscreen ? t("common.exitFullscreen") : t("common.fullscreen")}
-          >
-            {fullscreen ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
-          </button>
-          <a
-            className="icon-button"
-            href={downloadUrl(file)}
-            download={file.name}
-            aria-label={t("file.download")}
-          >
-            <Download size={17} />
-          </a>
+    <div className="pv-grid" data-n={Math.min(total, MAX_TILES)} style={ratio ? ({ "--ar": ratio } as CSSProperties) : undefined}>
+      {shown.map((file, index) => (
+        <Thumb
+          key={file.id}
+          file={file}
+          index={index}
+          extra={index === shown.length - 1 && !placeholders.length ? extra : 0}
+          onOpen={onOpen}
+          register={register}
+          onNatural={single ? setNatural : undefined}
+        />
+      ))}
+      {placeholders.map((item, offset) => (
+        <div className="pv-th gen" key={`gen-${offset}`} style={{ "--i": shown.length + offset } as CSSProperties} role="status">
+          <Ring progress={item.progress ?? 0.42} />
+          <span className="pv-gen-l shimmer">{t("file.generating")}</span>
         </div>
-      </div>
-      <div className={`artifact-preview artifact-${type}`} style={imagePreview && !fullscreen ? { aspectRatio: imageRatio } : undefined}>
-        {loading ? (
-          <div className="panel-loading">
-            <LoaderCircle className="spin" size={22} />
-          </div>
-        ) : error ? (
-          <div className="form-error">{error}</div>
-        ) : type === "html" && mode === "preview" ? (
-          <iframe
-            srcDoc={source}
-            title={file.name}
-            sandbox="allow-scripts allow-downloads"
-          />
-        ) : mode === "source" || type === "code" ? (
-          <Suspense fallback={<pre>{source}</pre>}>
-            <MarkdownContent
-              content={`${fence}${language}\n${source}\n${fence}`}
-              isStreaming={false}
-            />
-          </Suspense>
-        ) : type === "markdown" ? (
-          <Suspense fallback={<pre>{source}</pre>}>
-            <MarkdownContent content={source} isStreaming={false} />
-          </Suspense>
-        ) : type === "image" || type === "svg" ? (
-          <img
-            src={file.url}
-            alt={file.generation?.prompt || file.name}
-            onLoad={({ currentTarget }) => {
-              if (currentTarget.naturalWidth && currentTarget.naturalHeight)
-                setImageRatio(currentTarget.naturalWidth / currentTarget.naturalHeight);
-            }}
-          />
-        ) : type === "pdf" ? (
-          <iframe src={file.url} title={file.name} />
-        ) : (
-          <div className="file-preview-fallback">
-            <FileText size={38} />
-            <a
-              className="primary-button"
-              href={downloadUrl(file)}
-              download={file.name}
-            >
-              <Download size={16} />
-              {t("file.downloadFile")}
-            </a>
-          </div>
-        )}
-      </div>
-      {file.generation && (
-        <details className="generation-details">
-          <summary>{file.generation.model_name || t("file.imageDetails")}</summary>
-          <p>{file.generation.prompt}</p>
-          {file.generation.revised_prompt && file.generation.revised_prompt !== file.generation.prompt && <p>{file.generation.revised_prompt}</p>}
-          <span>{[file.generation.size, file.generation.quality, file.generation.output_format?.toUpperCase()].filter(Boolean).join(" · ")}</span>
-        </details>
-      )}
-    </Modal>
+      ))}
+    </div>
   );
 }
+
+/** Lazily loaded live thumbnail: SVG as an image, HTML in the same opaque-origin sandbox as the dock. */
+function Preview({ file }: { file: Artifact }) {
+  const svg = fileKind(file) === "svg";
+  const theme = useResolvedTheme();
+  const { content } = useFileContent(file, "text");
+  const text = content.status === "ready" ? content.text : null;
+  const url = useSvgUrl(svg ? text : null);
+  if (text === null) return <span className="pv-ac-load skeleton" aria-hidden="true" />;
+  return svg ? (
+    <img src={url} alt="" draggable={false} />
+  ) : (
+    <iframe sandbox="allow-scripts" tabIndex={-1} title="" srcDoc={themedDocument(text, theme)} />
+  );
+}
+
+const keyActivate = (action: () => void) => (event: KeyboardEvent) => {
+  if (event.target !== event.currentTarget) return;
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    action();
+  }
+};
+
+function ArtifactCard({ file, onOpen }: { file: Artifact; onOpen: () => void }) {
+  const svg = fileKind(file) === "svg";
+  const host = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const node = host.current;
+    if (!node || visible) return;
+    if (typeof IntersectionObserver === "undefined") return setVisible(true);
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "200px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [visible]);
+  const Icon = svg ? ImageIcon : LayoutDashboard;
+  // A card that appears right after the file was produced eases in with a glow; history stays still.
+  const [fresh] = useState(() => Date.now() - Date.parse(file.created_at) < FRESH_MS);
+  const meta = [t("artifact.kind", { type: fileTypeLabel(file) }), file.version ? `v${file.version}` : ""].filter(Boolean).join(" · ");
+  return (
+    <div
+      className={`pv-ac${fresh ? " pv-ac-done" : ""}`}
+      data-state="ready"
+      role="button"
+      tabIndex={0}
+      aria-label={t("artifact.openName", { name: file.name })}
+      onClick={onOpen}
+      onKeyDown={keyActivate(onOpen)}
+    >
+      <div className="pv-ac-thumb" ref={host} data-kind={svg ? "svg" : "html"}>
+        {visible ? <Preview file={file} /> : <span className="pv-ac-load skeleton" aria-hidden="true" />}
+        <span className="pv-ac-hint"><ArrowUpRight className="ic" />{t("artifact.openSide")}</span>
+      </div>
+      <div className="pv-ac-body">
+        <span className="pv-ac-ic"><Icon className="ic" /></span>
+        <div className="pv-ac-t">
+          <b>{file.name}</b>
+          <small>{meta}</small>
+        </div>
+        <span className="btn sm secondary" aria-hidden="true">{t("artifact.open")}</span>
+      </div>
+    </div>
+  );
+}
+
+/** Card shown while a file is being produced, or after the run was cancelled before it was saved. */
+export function ArtifactPlaceholder({ name, state, onCancel }: {
+  name?: string;
+  state: "building" | "cancelled";
+  onCancel?: () => void;
+}) {
+  useI18n();
+  const building = state === "building";
+  return (
+    <div className="pv-ac" data-state={state} role={building ? "status" : undefined}>
+      <div className="pv-ac-thumb">
+        <div className="pv-bl" aria-hidden="true">
+          {[46, 82, 64, 90, 38, 70, 54].map((width, index) => (
+            <i key={index} className="skeleton" style={{ width: `${width}%`, "--i": index } as CSSProperties} />
+          ))}
+        </div>
+      </div>
+      <div className="pv-ac-body">
+        <span className="pv-ac-ic"><LayoutDashboard className="ic" /></span>
+        <div className="pv-ac-t">
+          <b>{name || t("artifact.untitled")}</b>
+          <small className={building ? "shimmer" : ""}>{building ? t("artifact.building") : t("artifact.cancelled")}</small>
+        </div>
+        {building && onCancel && <button type="button" className="btn sm ghost" onClick={onCancel}>{t("common.cancel")}</button>}
+      </div>
+      {building && <i className="pv-prog" aria-hidden="true" />}
+    </div>
+  );
+}
+
+function FileCard({ file, index, onOpen }: { file: Artifact; index: number; onOpen: () => void }) {
+  const meta = [fileTypeLabel(file), sizeText(file.size)].join(" · ");
+  return (
+    <div
+      className="pv-fc"
+      style={{ "--i": index } as CSSProperties}
+      role="button"
+      tabIndex={0}
+      aria-label={t("file.preview") + " " + file.name}
+      onClick={onOpen}
+      onKeyDown={keyActivate(onOpen)}
+    >
+      <FileTile file={file} />
+      <span className="pv-fi">
+        <b>{file.name}</b>
+        <small>{meta}</small>
+      </span>
+      <span className="pv-fa">
+        <button type="button" className="icon-btn sm" onClick={(event) => { event.stopPropagation(); onOpen(); }} aria-label={t("file.preview")} title={t("file.preview")}>
+          <Eye className="ic" />
+        </button>
+        <a className="icon-btn sm" href={downloadUrl(file)} download={file.name} onClick={(event) => event.stopPropagation()} aria-label={t("file.downloadName", { name: file.name })} title={t("file.download")}>
+          <Download className="ic" />
+        </a>
+      </span>
+    </div>
+  );
+}
+
+function FileChip({ file, index, onOpen }: { file: Artifact; index: number; onOpen: () => void }) {
+  return (
+    <button type="button" className="pv-chip" style={{ "--i": index } as CSSProperties} onClick={onOpen} aria-label={t("file.preview") + " " + file.name}>
+      <FileTile file={file} small />
+      <span className="pv-fn">{file.name}</span>
+      <small>{sizeText(file.size)}</small>
+    </button>
+  );
+}
+
+type Row = { kind: "files"; files: Artifact[] } | { kind: "artifact"; file: Artifact };
+
+/** Ordered rows: consecutive plain files share one wrapping row, artifacts are standalone cards. */
+function rowsOf(files: Artifact[], artifactCards: boolean): Row[] {
+  const rows: Row[] = [];
+  for (const file of files) {
+    if (artifactCards && opensInDock(file)) rows.push({ kind: "artifact", file });
+    else {
+      const last = rows[rows.length - 1];
+      if (last?.kind === "files") last.files.push(file);
+      else rows.push({ kind: "files", files: [file] });
+    }
+  }
+  return rows;
+}
+
 export const FileCards = memo(function FileCards({
   files,
   variant = "artifact",
   compactImages = false,
+  pendingImages,
 }: {
   files?: Artifact[];
   variant?: "artifact" | "attachment";
+  /** Embedded files render as inline chips and images stay chips instead of a gallery. */
   compactImages?: boolean;
+  pendingImages?: PendingImage[];
 }) {
   useI18n();
+  const owner = useArtifactOwner();
   const [preview, setPreview] = useState<Artifact | null>(null);
-  if (!files?.length) return null;
+  const [viewer, setViewer] = useState<number | null>(null);
+  const origins = useRef(new Map<number, HTMLElement>());
+  const { gallery, rows } = useMemo(() => {
+    const list = files ?? [];
+    return {
+      gallery: list.filter(isRasterImage),
+      rows: rowsOf(compactImages ? list : list.filter((file) => !isRasterImage(file)), variant === "artifact" && !compactImages),
+    };
+  }, [files, compactImages, variant]);
+  useEffect(() => rememberArtifacts((files ?? []).filter(opensInDock), owner), [files, owner]);
+  const register = useCallback((index: number, element: HTMLElement | null) => {
+    if (element) origins.current.set(index, element);
+    else origins.current.delete(index);
+  }, []);
+  if (!files?.length && !pendingImages?.length) return null;
+  const openFile = (file: Artifact) => {
+    if (isRasterImage(file)) setViewer(Math.max(0, gallery.findIndex((item) => item.id === file.id)));
+    else if (opensInDock(file) && hasDockHost()) openArtifact(file, owner);
+    else setPreview(file);
+  };
+  let chipIndex = 0;
   return (
     <>
-      <div className={`file-cards ${variant === "attachment" ? "attachment-cards" : "artifact-cards"}`}>
-        {files.map((file) => file.mime_type.startsWith("image/") && !compactImages ? (
-          <div className={`message-image${file.generation ? " generated-image" : ""}`} key={file.id}>
-            <button className="message-image-open" onClick={() => setPreview(file)} aria-label={t("file.viewImage", { name: file.name })}>
-              <img src={file.url} alt={file.generation?.prompt || file.name} loading="lazy" decoding="async" width={file.generation?.width} height={file.generation?.height} />
-            </button>
-            <a className="icon-button image-download" href={downloadUrl(file)} download={file.name} aria-label={t("file.downloadName", { name: file.name })}>
-              <Download size={16} />
-            </a>
-          </div>
-        ) : (
-          <div className={`file-card file-card-${previewType(file)} ${["html", "svg"].includes(previewType(file)) ? "interactive-file-card" : ""}`} key={file.id}>
-            <button className="file-open" onClick={() => setPreview(file)}>
-              {["html", "svg"].includes(previewType(file)) ? (
-                <Code2 size={21} />
-              ) : file.mime_type.startsWith("image/") ? (
-                <Image size={21} />
-              ) : (
-                <FileText size={21} />
-              )}
-              <span>
-                <strong>{file.name}</strong>
-                <small>
-                  {["html", "svg"].includes(previewType(file)) ? `${previewType(file).toUpperCase()} · ${sizeText(file.size)}` : sizeText(file.size)}
-                  {variant === "artifact" && file.version && file.version > 1 ? ` · v${file.version}` : ""}
-                </small>
-              </span>
-            </button>
-            <a
-              className="icon-button"
-              href={downloadUrl(file)}
-              download={file.name}
-              aria-label={t("file.downloadName", { name: file.name })}
-            >
-              <Download size={17} />
-            </a>
-          </div>
-        ))}
-      </div>
-      {preview && (
-        <ArtifactPreview file={preview} onClose={() => setPreview(null)} />
+      {!compactImages && (gallery.length > 0 || (pendingImages?.length ?? 0) > 0) && (
+        <ImageGrid images={gallery} pending={pendingImages} onOpen={setViewer} register={register} />
       )}
+      {rows.map((row, position) =>
+        row.kind === "artifact" ? (
+          <ArtifactCard key={row.file.id} file={row.file} onOpen={() => openFile(row.file)} />
+        ) : (
+          <div className="pv-files" data-v={compactImages ? "chip" : "card"} key={`files-${position}`}>
+            {row.files.map((file) => {
+              const index = chipIndex++;
+              return compactImages ? (
+                <FileChip key={file.id} file={file} index={index} onOpen={() => openFile(file)} />
+              ) : (
+                <FileCard key={file.id} file={file} index={index} onOpen={() => openFile(file)} />
+              );
+            })}
+          </div>
+        ),
+      )}
+      {viewer !== null && (
+        <Suspense fallback={null}>
+          <ImageViewer
+            images={gallery}
+            index={viewer}
+            getOrigin={(index) => origins.current.get(Math.min(index, MAX_TILES - 1)) ?? null}
+            onClose={() => setViewer(null)}
+          />
+        </Suspense>
+      )}
+      {preview && <FilePreview file={preview} onClose={() => setPreview(null)} />}
     </>
   );
 });
