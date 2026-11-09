@@ -14,12 +14,23 @@
     </head>
     <body>
         <script>
+            // Appearance is restored before first paint: theme (light | dark | system), look (quiet | mono), canvas (paper | flat).
             try {
-                const t = localStorage.getItem('assistant.theme.v1')
-                if (t === 'dark') {
-                    document.documentElement.dataset.theme = t
-                    document.documentElement.classList.add('dark')
+                const root = document.documentElement
+                const apply = (dark) => {
+                    root.dataset.theme = dark ? 'dark' : 'light'
+                    root.classList.toggle('dark', dark)
                 }
+                const t = localStorage.getItem('assistant.theme.v1')
+                if (t === 'system') {
+                    const query = matchMedia('(prefers-color-scheme: dark)')
+                    apply(query.matches)
+                    query.addEventListener('change', (event) => {
+                        if (localStorage.getItem('assistant.theme.v1') === 'system') apply(event.matches)
+                    })
+                } else if (t === 'dark') apply(true)
+                if (localStorage.getItem('assistant.look.v1') === 'mono') root.dataset.look = 'mono'
+                if (localStorage.getItem('assistant.canvas.v1') === 'flat') root.dataset.canvas = 'flat'
             } catch {}
         </script>
         <div id="root"></div>
