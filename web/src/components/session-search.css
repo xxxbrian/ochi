@@ -1,22 +1,20 @@
-.modal-body.session-search-body { padding: 0; }
-.session-search-input { display: flex; align-items: center; gap: 12px; min-height: 52px; margin: 0 16px; border-bottom: 1px solid var(--line); color: var(--muted); }
-.session-search-input input { flex: 1; min-width: 0; min-height: 44px; padding: 12px 0; border: 0; outline: 0; color: var(--ink); background: transparent; font-size: 16px; line-height: 24px; }
-.session-search-results { min-height: 80px; max-height: min(440px, 60dvh); overflow-y: auto; padding: 8px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; overscroll-behavior: contain; }
-.session-search-result { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 64px; padding: 12px; border-radius: 10px; color: var(--ink); background: transparent; text-align: left; }
-.session-search-result.is-active, .session-search-result:hover { background: var(--hover); }
-.search-result-icon { flex-shrink: 0; margin-top: 4px; color: var(--muted); }
-.search-result-content { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
-.search-result-content strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 21px; font-weight: 500; }
-.search-result-excerpt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--muted); font-size: 13px; line-height: 20px; }
-.search-result-meta { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; line-height: 20px; }
-.search-result-content mark { padding: 0 2px; border-radius: 4px; color: var(--ink); background: var(--accent-soft); font-weight: 500; }
-.search-result-enter { flex-shrink: 0; margin-top: 4px; color: var(--muted); }
-.search-empty { padding: 32px 16px; text-align: center; color: var(--muted); font-size: 14px; }
-.search-load-more { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 36px; padding: 8px; border-radius: 8px; color: var(--muted); background: transparent; font-size: 13px; }
-.search-load-more:hover { color: var(--ink); background: var(--hover); }
-@media (max-width: 760px) {
-    .session-search-results { max-height: min(440px, 60dvh); }
-    .session-search-result { padding: 12px 8px; }
-    .search-result-enter { display: none; }
-    .search-load-more { min-height: 44px; }
-}
+/* Command palette (Design Lab): input row, grouped list of menu-item rows. */
+.modal-body.palette-body { padding: 0; display: flex; flex-direction: column; min-height: 0; }
+.pal-input { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; flex: none; color: var(--muted); border-bottom: 1px solid var(--line); }
+.pal-input input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: calc(var(--fs-ui) + 1px); }
+.pal-input input::placeholder { color: var(--subtle); }
+.pal-list { min-height: 80px; max-height: min(440px, 60dvh); overflow-y: auto; overscroll-behavior: contain; padding: 6px; display: flex; flex-direction: column; gap: 1px; }
+.pal-list > * { flex: none; }
+.pal-item .mi-text { flex: 1; min-width: 0; }
+.pal-item .mi-text b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-item .mi-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-item mark, .pal-excerpt mark { background: var(--accent-soft-2); color: inherit; border-radius: 2px; }
+.pal-item kbd { margin-left: auto; }
+.pal-item > .ic:last-child { margin-left: auto; }
+.pal-empty { padding: 28px 12px; text-align: center; color: var(--muted); font-size: var(--fs-sm); }
+.pal-skel { display: flex; align-items: center; gap: 10px; padding: 8px 9px; }
+.pal-skel > .skel.circle { width: 16px; height: 16px; flex: none; }
+.pal-skel-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pal-more { justify-content: center; color: var(--muted); }
+/* Open: rows rise in with a short stagger (only while the palette is first appearing, not on every keystroke). */
+.pal-list[data-intro="true"] .pal-item, .pal-list[data-intro="true"] .menu-label { animation: rise var(--dur-3) var(--ease) both; animation-delay: calc(min(var(--i, 0), 8) * 22ms + 40ms); }
