@@ -15,7 +15,7 @@ function load(file, imports = {}, tail = "", globals = {}) {
   const module = { exports: {} };
   vm.runInNewContext(output + tail, {
     module, exports: module.exports, URL, ...globals,
-    require(name) { if (sharedModule(name)) return sharedModule(name); if (name in imports) return imports[name]; if (name === "./ComputerQueueDetails") return { ComputerQueueDetails: () => null }; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
+    require(name) { if (/\/Loading$/.test(name)) return { LoadingDots: () => null, SkelRows: () => null }; if (sharedModule(name)) return sharedModule(name); if (name in imports) return imports[name]; if (name === "./ComputerQueueDetails") return { ComputerQueueDetails: () => null }; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
   }, { filename: file });
   return module.exports;
 }
@@ -35,13 +35,14 @@ test("public progress alone counts as process; final answer alone does not", () 
   assert.equal(process.processHasContent([]), false);
 });
 
-test("only consecutive same-family tools are grouped with a stable first id", () => {
+test("consecutive finished tools group across families with a stable first id", () => {
   const entries = [tool("T1", 1), tool("T2", 2), reasoning("R1", 3), tool("T3", 4), tool("T4", 5, "files_read"), tool("T5", 6, "files_write")];
   const rows = process.groupProcessEntries(entries);
-  assert.deepEqual(Array.from(rows, (row) => row.kind), ["tools", "entry", "entry", "tools"]);
+  assert.deepEqual(Array.from(rows, (row) => row.kind), ["tools", "entry", "tools"]);
   assert.equal(rows[0].id, "T1");
   assert.deepEqual(Array.from(rows[0].entries, (entry) => entry.id), ["T1", "T2"]);
-  assert.equal(rows[3].family, "files");
+  assert.deepEqual(Array.from(rows[2].entries, (entry) => entry.id), ["T3", "T4", "T5"]);
+  assert.equal(process.groupProcessEntries([tool("T1", 1)])[0].kind, "entry", "a lone call stays a plain row");
 });
 
 test("thinking and public progress each break adjacent-tool aggregation", () => {
@@ -70,9 +71,22 @@ test("permission and user-input requests do not disappear inside a generic group
   }
 });
 
-test("each search query and subsequent page read stay separate", () => {
+test("search queries and page reads fold into one group of finished work", () => {
   const rows = process.groupProcessEntries([tool("S1", 1, "web_search"), tool("S2", 2, "web_search"), tool("F1", 3, "web_fetch"), tool("F2", 4, "web_fetch")]);
-  assert.equal(rows.length, 4);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].entries.length, 4);
+});
+
+test("every server tool has a localized verb and no raw tool id reaches a sentence", () => {
+  for (const name of ["exec", "isolated_research", "browser_snapshot", "files_copy", "computer_release", "skills_promote", "memory_delete", "schedule_list"]) {
+    const info = process.toolInfo(name);
+    assert.equal(info.known, true, name);
+    assert.doesNotMatch(info.running, /_/, name);
+    assert.doesNotMatch(info.label, /_/, name);
+  }
+  const unknown = process.toolInfo("vendor_new_tool");
+  assert.doesNotMatch(unknown.label + unknown.running, /vendor_new_tool|vendor/);
+  assert.match(process.toolInfo("mcp_github_search").label, /github search/);
 });
 
 test("normal search output has one query and compact safe results, no secret-bearing endpoint fields", () => {
@@ -137,51 +151,63 @@ test("run artifacts project into the canonical message attachment field", () => 
   assert.equal(Object.hasOwn(message, "artifacts"), false);
 });
 
-test("actual tool-group rendering inherits an expanded first detail on single-to-group growth", () => {
+const stepStubs = (React) => ({
+  react: React,
+  "react/jsx-runtime": require("react/jsx-runtime"),
+  "lucide-react": require("lucide-react"),
+  "../lib/processTimeline": process,
+  "../lib/processTiming": load("src/lib/processTiming.ts"),
+  "../hooks/useStickToEnd": { useStickToEnd() {} },
+  "./ComputerSteps": { computerStepPart: () => null },
+  "./ComputerQueueDetails": { ComputerQueueDetails: () => null },
+  "./FileCards": { FileCards: ({ files }) => React.createElement("span", { "data-files": files.map((file) => file.id).join(",") }, files.map((file) => file.name).join(",")) },
+  "./Modal": { Modal: () => null },
+  "./SearchSources": { SearchResults: () => null, Favicon: () => null },
+  "../lib/highlight": { flavorOf: () => "text", highlightLines: (text) => text.split("\n").map((line) => [{ text: line }]) },
+  "./process.css": {},
+});
+
+test("actual tool rows: a failed call opens itself and shows its error; a finished call stays closed unless the user opens it", () => {
   const React = require("react");
   const { renderToStaticMarkup } = require("react-dom/server");
-  const { TestToolGroup } = load("src/components/ProcessTimeline.tsx", {
-    react: React,
-    "react/jsx-runtime": require("react/jsx-runtime"),
-    "lucide-react": require("lucide-react"),
-    "../lib/processTimeline": process,
-    "./ProcessSteps": {
-      toolIcon: () => null,
-      StepCard: () => null,
-      StepList: ({ expansion }) => React.createElement("span", null, expansion.T1 ? "first-detail-stays-open" : "closed"),
-    },
-    "./ThinkingDetails": { ThinkingContent: () => null },
-    "./process-timeline.css": {},
-  }, "\nexports.TestToolGroup = ToolGroup;");
-  const row = process.groupProcessEntries([tool("T1", 1), tool("T2", 2)])[0];
-  const props = { row, expansion: { T1: true }, onExpandedChange() {}, onStepExpandedChange() {} };
-  const markup = renderToStaticMarkup(React.createElement(TestToolGroup, props));
-  assert.match(markup, /aria-expanded="true"/);
-  assert.match(markup, /first-detail-stays-open/);
-  const explicitlyClosed = renderToStaticMarkup(React.createElement(TestToolGroup, { ...props, expanded: false }));
-  assert.match(explicitlyClosed, /aria-expanded="false"/);
-  assert.doesNotMatch(explicitlyClosed, /first-detail-stays-open/);
+  const bodies = load("src/components/ToolBodies.tsx", stepStubs(React));
+  const { ToolRow, ToolGroup } = load("src/components/ProcessSteps.tsx", { ...stepStubs(React), "./ToolBodies": bodies, "../lib/stepMotion": load("src/lib/stepMotion.ts"), "./ThinkingDetails": { ThinkingContent: () => null } });
+  const clock = { initial: new Set(), times: new Map() };
+  const failed = tool("F1", 1, "files_read", "failed", JSON.stringify({ error: "No such file" }));
+  const failedMarkup = renderToStaticMarkup(React.createElement(ToolRow, { entry: failed, live: false, fold: false, enter: false, clock }));
+  assert.match(failedMarkup, /data-status="error"/);
+  assert.match(failedMarkup, /aria-expanded="true"/);
+  assert.match(failedMarkup, /No such file/);
+  const ok = renderToStaticMarkup(React.createElement(ToolRow, { entry: tool("T1", 1), live: false, fold: false, enter: false, clock }));
+  assert.match(ok, /data-status="done"/);
+  assert.match(ok, /aria-expanded="false"/);
+  assert.match(ok, /st-check/);
+  assert.doesNotMatch(ok, /ind-bars/);
+  const running = renderToStaticMarkup(React.createElement(ToolRow, { entry: tool("T2", 2, "exec", "running"), live: true, fold: false, enter: false, clock }));
+  assert.match(running, /data-motion="caret"/, "a running command keeps its terminal icon and blinks a caret");
+  assert.doesNotMatch(running, /st-tile live|class="busy/, "no generic spinner replaces the tile icon");
+  assert.match(running, /<svg[^>]*lucide-terminal/, "the tile still shows the family icon");
+  assert.doesNotMatch(renderToStaticMarkup(React.createElement(ToolRow, { entry: tool("T1", 1), live: false, fold: false, enter: false, clock })), /data-motion/, "finished rows carry no motion");
+  assert.doesNotMatch(running, /ind-bars/, "bars belong to the process header only");
+  assert.doesNotMatch(running, /st-ring/);
+  assert.match(running, /aria-expanded="true"/, "a running command opens its terminal");
+  const group = process.groupProcessEntries([tool("T1", 1), tool("T2", 2, "exec", "running")])[0];
+  const groupMarkup = renderToStaticMarkup(React.createElement(ToolGroup, { row: group, live: true, peek: true, fold: false, enter: false, clock }));
+  assert.match(groupMarkup, /class="step group/);
+  assert.match(groupMarkup, /data-fold="true"/, "peek folds all but the newest child");
+  assert.match(groupMarkup, /steps nested/);
 });
 
 test("actual image tool detail renders its delivered artifact and keeps failed generation output visible", () => {
   const React = require("react");
   const { renderToStaticMarkup } = require("react-dom/server");
-  const { StepCard } = load("src/components/ProcessSteps.tsx", {
-    react: React,
-    "react/jsx-runtime": require("react/jsx-runtime"),
-    "lucide-react": require("lucide-react"),
-    "../lib/processTimeline": process,
-    "./FileCards": { FileCards: ({ files }) => React.createElement("span", { "data-files": files.map((file) => file.id).join(",") }, files.map((file) => file.name).join(",")) },
-    "./Modal": { Modal: () => null },
-    "./SearchSources": { SearchResults: () => null, SearchSiteIcons: () => null },
-    "./execution.css": {},
-  });
+  const { ToolBody } = load("src/components/ToolBodies.tsx", stepStubs(React));
   const artifact = { id: "image-current", name: "generated.png", url: "/api/files/image-current/content", mime_type: "image/png", size: 1024 };
   const step = tool("I1", 1, "generate_image", "completed", JSON.stringify({ delivered: true, artifact, url: artifact.url })).step;
-  const markup = renderToStaticMarkup(React.createElement(StepCard, { step, expanded: true }));
+  const markup = renderToStaticMarkup(React.createElement(ToolBody, { step, kind: "image", queue: null, needsUser: false, failed: false }));
   assert.match(markup, /data-files="image-current"/);
   assert.match(markup, /generated\.png/);
-  const failed = renderToStaticMarkup(React.createElement(StepCard, { step: { ...step, status: "failed", output: JSON.stringify({ error: "Generation failed" }) }, expanded: true }));
+  const failed = renderToStaticMarkup(React.createElement(ToolBody, { step: { ...step, status: "failed", output: JSON.stringify({ error: "Generation failed" }) }, kind: "image", queue: null, needsUser: false, failed: true }));
   assert.match(failed, /Generation failed/);
   assert.doesNotMatch(failed, /data-files=/);
 });
@@ -201,7 +227,7 @@ function messageScrollHarness() {
   const jsx = (type, props) => ({ type, props });
   class Element {
     constructor(inner = false) { this.inner = inner; }
-    closest(selector) { return this.inner && selector.includes(".process-viewport") ? this : null; }
+    closest(selector) { return this.inner && selector.includes(".think-box") ? this : null; }
   }
   let stateIndex = 0;
   const React = {
@@ -227,7 +253,7 @@ function messageScrollHarness() {
     "../lib/markdown": {},
     "../lib/runPresentation": {},
     "./MarkdownMessage": {}, "./UserMessage": {}, "./HistoryProcess": {},
-    "./FileCards": {}, "./Composer": {}, "./WaitingInputCard": {}, "./chat.css": {},
+    "./FileCards": {}, "./Composer": {}, "./WaitingInputCard": {}, "./EmptyHero": { EmptyHero: () => null }, "./thread.css": {},
   }, "", {
     Element, performance: { now: () => 0 },
     requestAnimationFrame(callback) { frames.set(++nextFrame, callback); return nextFrame; },
@@ -311,8 +337,8 @@ test("outer gestures or explicit latest action can deliberately resume follow af
 });
 
 test("outer chat scroll ownership opts out of competing browser scroll anchoring", () => {
-  const css = fs.readFileSync(path.resolve(__dirname, "../src/components/chat.css"), "utf8");
-  const outer = css.match(/\.messages-scroll\s*\{([^}]*)\}/)?.[1];
+  const css = fs.readFileSync(path.resolve(__dirname, "../src/components/thread.css"), "utf8");
+  const outer = css.match(/\.scroller\s*\{([^}]*)\}/)?.[1];
   assert.match(outer ?? "", /overflow-anchor\s*:\s*none\s*;/);
 });
 

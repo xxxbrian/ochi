@@ -15,7 +15,7 @@ function load(file, imports = {}, globals = {}, tail = "") {
   const module = { exports: {} };
   vm.runInNewContext(output + tail, {
     module, exports: module.exports, ...globals,
-    require(name) { if (sharedModule(name)) return sharedModule(name); if (name in imports) return imports[name]; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
+    require(name) { if (/\/Loading$/.test(name)) return { LoadingDots: () => null, SkelRows: () => null }; if (sharedModule(name)) return sharedModule(name); if (name in imports) return imports[name]; const locale = i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
   });
   return module.exports;
 }
@@ -43,101 +43,124 @@ test("compact elapsed formatting has stable second/minute/hour boundaries", () =
   }
 });
 
-test("the header clock keeps one interval across token updates and clears it on terminal/unmount", () => {
-  let now = Date.parse(end), state, previousDependencies, cleanup, interval, started = 0, cleared = 0;
-  class Clock extends Date { static now() { return now; } }
-  const react = {
-    useState(initial) { state ??= initial(); return [state, (next) => { state = next; }]; },
-    useEffect(effect, dependencies) {
-      if (previousDependencies?.every((value, index) => value === dependencies[index])) return;
-      cleanup?.();
-      cleanup = effect();
-      previousDependencies = dependencies;
-    },
-  };
-  const { useProcessElapsed } = load("src/hooks/useProcessElapsed.ts", { react, "../lib/processTiming": timing }, {
-    Date: Clock,
-    setInterval(callback, delay) { assert.equal(delay, 1000); interval = callback; started++; return started; },
-    clearInterval() { cleared++; interval = undefined; },
-  });
-  assert.equal(useProcessElapsed(start, end, true), "1 分 7 秒");
-  now += 2000;
-  interval();
-  assert.equal(useProcessElapsed(start, "2026-10-16T00:01:09Z", true), "1 分 9 秒");
-  assert.equal(started, 1, "tokens must not restart the local timer");
-  assert.equal(useProcessElapsed(start, end, false), "1 分 7 秒");
-  assert.equal(cleared, 1);
-  assert.equal(interval, undefined);
-  useProcessElapsed(start, end, true);
-  cleanup();
-  assert.equal(cleared, 2);
+const headerOf = (patch) => {
+  const process = load("src/lib/processTimeline.ts");
+  const { describeHeader } = load("src/lib/processHeader.ts", { "./processTiming": timing, "./processTimeline": process });
+  return describeHeader({ active: false, entries: [], durationMs: 12_000, ...patch });
+};
+const toolEntry = (id, seq, status = "completed", name = "exec", args = { command: `echo ${id}` }) => ({ id, seq, kind: "tool", step: { id, name, status, arguments: args } });
+const thinkingEntry = (id, seq, done) => ({ id, seq, kind: "reasoning", reasoning: { id, kind: "reasoning", text: "Plan", done } });
+
+test("header model: running tool names its verb and keeps the subject in a separate mono field", () => {
+  const header = headerOf({ status: "running", active: true, entries: [toolEntry("T1", 1, "running", "isolated_research", { task: "compare vendors" })] });
+  assert.equal(header.state, "running");
+  assert.equal(header.label, "正在独立调研");
+  assert.equal(header.sub, "compare vendors");
+  assert.equal(header.mono, true);
+  assert.doesNotMatch(header.label, /isolated_research/, "a raw tool id never reaches a sentence");
+  const unknown = headerOf({ status: "running", active: true, entries: [toolEntry("T2", 1, "running", "vendor_thing", {})] });
+  assert.doesNotMatch(unknown.label, /vendor_thing/);
 });
 
-test("public paragraphs never shimmer; the short working status owns slow reduced-motion-safe animation", () => {
-  const React = require("react");
-  const { renderToStaticMarkup } = require("react-dom/server");
-  const { PublicProgress } = load("src/components/ProcessTimeline.tsx", {
-    react: React, "react/jsx-runtime": require("react/jsx-runtime"), "lucide-react": require("lucide-react"),
-    "../lib/processTimeline": {}, "./ProcessSteps": {}, "./ThinkingDetails": {}, "./process-timeline.css": {},
-  });
-  const active = renderToStaticMarkup(React.createElement(PublicProgress, { text: "正在核对来源", active: true, preview: true }));
-  const complete = renderToStaticMarkup(React.createElement(PublicProgress, { text: "正在核对来源" }));
-  assert.match(active, /process-progress-preview/);
-  assert.doesNotMatch(active, /is-working/);
-  assert.doesNotMatch(complete, /is-working/);
-  const css = fs.readFileSync(path.resolve(__dirname, "../src/components/thinking.css"), "utf8");
-  assert.match(css, /\.ochi-status-label\.is-working[^}]*animation: ochi-status-shimmer 8s linear infinite/);
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*animation: none;[\s\S]*color: var\(--muted\);/);
-  assert.doesNotMatch(fs.readFileSync(path.resolve(__dirname, "../src/components/process-timeline.css"), "utf8"), /shimmer/);
+test("header model: thinking, writing, waiting, done, failed and stopped each own a state and label", () => {
+  assert.equal(headerOf({ status: "running", active: true, entries: [thinkingEntry("R1", 1, false)] }).label, "思考中");
+  assert.equal(headerOf({ status: "running", active: true, entries: [toolEntry("T1", 1), thinkingEntry("R1", 2, true)] }).label, "正在撰写回复");
+  assert.equal(headerOf({ status: "running", active: true, entries: [] }).label, "正在处理");
+  const waiting = headerOf({ status: "waiting_user", active: true, entries: [toolEntry("T1", 1)], waitingKind: "computer_permission" });
+  assert.equal(waiting.state, "waiting");
+  assert.equal(waiting.label, "等待授权");
+  const done = headerOf({ status: "completed", entries: [toolEntry("T1", 1), toolEntry("T2", 2)] });
+  assert.equal(done.state, "done");
+  assert.equal(done.label, "已处理");
+  assert.equal(done.duration, "12 秒", "the duration is its own field, shown at the far right");
+  assert.equal(done.sub, "2 个工具调用");
+  const thoughtOnly = headerOf({ status: "completed", entries: [thinkingEntry("R1", 1, true)] });
+  assert.equal(thoughtOnly.label, "已思考");
+  assert.equal(thoughtOnly.duration, "12 秒");
+  assert.equal(headerOf({ status: "failed", entries: [toolEntry("T1", 1)] }).state, "failed");
+  assert.equal(headerOf({ status: "cancelled", entries: [toolEntry("T1", 1)] }).label, "已停止 · 处理了 12 秒");
 });
 
-test("live process step counts exclude running and failed calls and preserve terminal labels", () => {
+test("header label ids change per phase, not per token, so the rolling label animates once", () => {
+  const first = headerOf({ status: "running", active: true, entries: [thinkingEntry("R1", 1, false)] });
+  const grown = headerOf({ status: "running", active: true, entries: [{ ...thinkingEntry("R1", 1, false), reasoning: { id: "R1", kind: "reasoning", text: "A much longer thought", done: false } }] });
+  assert.equal(first.id, grown.id);
+  assert.notEqual(first.id, headerOf({ status: "running", active: true, entries: [toolEntry("T1", 2, "running")] }).id);
+});
+
+function reducedCss(css) { return css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)")); }
+
+test("motion: the running indicator is the lab bars, nothing rotates, and reduced motion removes ambient loops", () => {
+  const css = fs.readFileSync(path.resolve(__dirname, "../src/components/process.css"), "utf8");
+  assert.match(css, /\.ind-bars i[^}]*animation: bars/);
+  assert.doesNotMatch(css, /st-ring|ring-sweep|ind-pulse|sonar/, "no old ring, arc or sonar remains");
+  assert.match(css, /@keyframes ring-turn \{ to \{ --ring-a: 360deg; \}/, "the running ring turns only a gradient angle, never the tile");
+  assert.match(reducedCss(css), /st-dot::after \{ animation: none/, "the ring is static under reduced motion");
+  assert.doesNotMatch(css.match(/@keyframes[^{]*\{(?:[^{}]|\{[^}]*\})*\}/g).join("\n"), /(?<![-\w])rotate\s*:/, "no process keyframe rotates a box");
+  const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(reduced, /\.ind-bars i[^}]*animation: none/);
+  assert.doesNotMatch(fs.readFileSync(path.resolve(__dirname, "../src/components/ThinkingDetails.tsx"), "utf8"), /shimmer/);
+});
+
+test("finished header strip is flat: no overlap, fixed chip size, four families then +N, two then +N on narrow screens", () => {
+  const css = fs.readFileSync(path.resolve(__dirname, "../src/components/process.css"), "utf8");
+  const strip = css.match(/\.proc-icons i, \.st-strip i \{[^}]*\}/)[0];
+  assert.match(strip, /width: 17px; height: 17px/);
+  assert.doesNotMatch(css, /margin-left: -5px; box-shadow: 0 0 0 2px var\(--canvas\)/, "chips never overlap");
+  assert.match(css, /@media \(max-width: 480px\) \{[^}]*\.proc-icons i:nth-of-type\(n \+ 3\) \{ display: none; \}/);
+});
+
+test("live process rendering: rolling header, shimmer while running, groups for finished work, ring only on running rows", () => {
   const React = require("react");
   const { renderToStaticMarkup } = require("react-dom/server");
   const process = load("src/lib/processTimeline.ts");
-  const { ProcessDetails } = load("src/components/ProcessDetails.tsx", {
+  const stubs = {
+    RunningBars: () => React.createElement("span", { className: "ind-bars" }),
+    Collapse: ({ open, className, children }) => open ? React.createElement("div", { className }, children) : null,
+    hueStyle: () => ({}), toolIcon: () => null,
+    ThinkingRow: ({ entry, fold }) => React.createElement("li", { "data-row": "thinking", "data-fold": fold }, entry.id),
+    ToolRow: ({ entry, fold }) => React.createElement("li", { "data-row": "tool", "data-fold": fold }, entry.id),
+    ToolGroup: ({ row, fold }) => React.createElement("li", { "data-row": "group", "data-fold": fold }, row.entries.length),
+    ProgressRow: ({ entry, fold }) => React.createElement("li", { "data-row": "progress", "data-fold": fold }, entry.id),
+  };
+  const { ProcessTimeline } = load("src/components/ProcessTimeline.tsx", {
     react: React, "react/jsx-runtime": require("react/jsx-runtime"), "lucide-react": require("lucide-react"),
-    "../lib/processTimeline": process,
-    "./ThinkingDetails": { OchiActivityMark: ({ working }) => React.createElement("span", { "data-face-working": Boolean(working) }) },
-    "./ProcessTimeline": {
-      ProcessTimeline: ({ active, bounded }) => React.createElement("span", { "data-working": Boolean(active), "data-bounded": bounded }),
-    },
-    "./ProcessElapsed": { ProcessElapsed: () => React.createElement("span", null, "· 12 秒") },
-    "./ComputerQueueDetails": { ComputerQueueDetails: () => null },
-    "./ProcessSteps": {}, "./execution.css": {},
+    "../lib/processTimeline": process, "../lib/processHeader": load("src/lib/processHeader.ts", { "./processTiming": timing, "./processTimeline": process }),
+    "../lib/processTiming": timing, "../lib/entryClock": load("src/lib/entryClock.ts", { react: React }),
+    "./ComputerQueueDetails": { ComputerQueueDetails: () => null }, "./ProcessSteps": stubs, "./process.css": {},
   });
-  const timeline = ["completed", "running", "failed"].map((status, seq) => ({ id: String(seq), seq, kind: "tool", step: { id: String(seq), name: "exec", status } }));
-  const props = { active: true, status: "running", timeline };
-  const live = renderToStaticMarkup(React.createElement(ProcessDetails, props));
-  assert.match(live, /已完成 1 步/);
-  assert.match(live, /12 秒/);
-  assert.match(live, /ochi-status-label is-working/);
-  assert.match(live, /data-face-working="true"/);
-  const failed = renderToStaticMarkup(React.createElement(ProcessDetails, { ...props, status: "failed", active: false }));
-  assert.match(failed, /未完成/);
-  const stopped = renderToStaticMarkup(React.createElement(ProcessDetails, { ...props, status: "cancelled", active: false }));
+  const timeline = [toolEntry("T1", 1), toolEntry("T2", 2), thinkingEntry("R1", 3, false)];
+  const props = { timeline, active: true, status: "running", createdAt: start, updatedAt: end, renderBody: (text) => text };
+  const live = renderToStaticMarkup(React.createElement(ProcessTimeline, props));
+  assert.match(live, /roll shimmer/);
+  assert.match(live, /ind-bars/);
+  assert.doesNotMatch(live, /ind-pulse|st-ring/);
+  assert.match(live, /aria-expanded="true"/, "a working run opens its rail");
+  assert.match(live, /data-row="group"[^>]*data-fold="true"/, "peek folds everything but the newest row");
+  assert.match(live, /data-row="thinking"[^>]*data-fold="false"/);
+  const finished = renderToStaticMarkup(React.createElement(ProcessTimeline, { ...props, active: false, status: "completed" }));
+  assert.match(finished, /aria-expanded="false"/, "history opens collapsed");
+  assert.match(finished, /ind-done/);
+  assert.match(finished, /已处理.*个工具调用.*proc-meta[^>]*>1 分 7 秒/s, "label, tool count, strip, then the duration at the far right");
+  assert.doesNotMatch(finished, /shimmer/);
+  const waiting = renderToStaticMarkup(React.createElement(ProcessTimeline, { ...props, status: "waiting_user" }));
+  assert.match(waiting, /ind-wait/);
+  assert.doesNotMatch(waiting, /shimmer/);
+  const failed = renderToStaticMarkup(React.createElement(ProcessTimeline, { ...props, active: false, status: "failed" }));
+  assert.match(failed, /ind-bad/);
+  const stopped = renderToStaticMarkup(React.createElement(ProcessTimeline, { ...props, active: false, status: "cancelled" }));
   assert.match(stopped, /已停止/);
-  const expanded = renderToStaticMarkup(React.createElement(ProcessDetails, { ...props, expanded: true }));
-  assert.match(expanded, /data-working="true"/);
-  const waiting = renderToStaticMarkup(React.createElement(ProcessDetails, { ...props, status: "waiting_user", expanded: true }));
-  assert.doesNotMatch(waiting, /ochi-status-label is-working/);
-  assert.match(waiting, /data-face-working="false"/);
-  const compact = renderToStaticMarkup(React.createElement(ProcessDetails, { ...props, compact: true, bounded: false, expanded: true }));
-  assert.doesNotMatch(compact, /data-face-working|12 秒|ochi-status-label is-working/);
-  assert.match(compact, /data-bounded="false"/);
+  const empty = renderToStaticMarkup(React.createElement(ProcessTimeline, { ...props, timeline: [], active: false, status: "completed" }));
+  assert.match(empty, /data-empty="true"/);
 });
 
 test("every process disclosure uses a horizontal closed chevron and a downward open rotation", () => {
-  for (const file of ["ProcessDetails.tsx", "HistoryProcess.tsx", "ProcessTimeline.tsx", "ProcessSteps.tsx"]) {
+  for (const file of ["ProcessTimeline.tsx", "HistoryProcess.tsx", "ProcessSteps.tsx"]) {
     const source = fs.readFileSync(path.resolve(__dirname, "../src/components", file), "utf8");
     assert.match(source, /ChevronRight/);
     assert.doesNotMatch(source, /ChevronDown/);
   }
-  for (const file of ["execution.css", "process-timeline.css", "run-transcript.css"]) {
-    const css = fs.readFileSync(path.resolve(__dirname, "../src/components", file), "utf8");
-    assert.match(css, /rotate\(90deg\)/);
-    assert.doesNotMatch(css, /rotate\(180deg\)/);
-  }
+  assert.match(fs.readFileSync(path.resolve(__dirname, "../src/styles.css"), "utf8"), /aria-expanded="true"\] > \.chev[^}]*rotate: 90deg/);
 });
 
 test("Markdown keeps its block renderer when streaming ends without incomplete parsing or terminal animation", () => {
@@ -155,53 +178,23 @@ test("Markdown keeps its block renderer when streaming ends without incomplete p
   assert.equal(final.props.isAnimating, false);
 });
 
-test("thinking observes natural content across the four-line streaming threshold and layout changes", () => {
-  const slots = [];
-  const effects = [];
-  const natural = { scrollHeight: 24 };
-  let cursor = 0, observed, resize, disconnected = false, observerCount = 0;
+test("thinking streams in a short box that follows new text, then settles into a taller scrollable block", () => {
+  const stick = [];
   const jsx = (type, props) => ({ type, props });
-  const { TestThinkingPart } = load("src/components/ThinkingDetails.tsx", {
-    react: {
-      memo: (component) => component, lazy: () => "Markdown", Suspense: "Suspense",
-      useMemo: (callback) => callback(),
-      useState(initial) { const index = cursor++; slots[index] ??= { value: initial }; return [slots[index].value, (next) => { slots[index].value = next; }]; },
-      useRef(initial) { const index = cursor++; slots[index] ??= { current: initial }; return slots[index]; },
-      useLayoutEffect(effect) { const index = cursor++; if (!slots[index]) { slots[index] = true; effects.push(effect); } },
-    },
-    "react/jsx-runtime": { jsx, jsxs: jsx }, "lucide-react": {},
-    "../lib/runPresentation": { formatReasoningDisplay: (text) => text }, "./thinking.css": {},
-  }, {
-    getComputedStyle: () => ({ lineHeight: "24px" }),
-    ResizeObserver: class {
-      constructor(callback) { resize = callback; observerCount++; }
-      observe(node) { observed = node; }
-      disconnect() { disconnected = true; }
-    },
-  }, "\nexports.TestThinkingPart = ThinkingPart;");
-  function render() {
-    cursor = 0;
-    const tree = TestThinkingPart({ part: { id: "R", kind: "reasoning", text: "Streaming thought" }, active: true });
-    const body = tree.props.children[0];
-    assert.equal(body.props.className, "thinking-part-body");
-    const contents = body.props.children;
-    assert.equal(contents.props.className, "thinking-part-content");
-    contents.props.ref.current = natural;
-    return tree;
-  }
-  let view = render();
-  const cleanup = effects[0]();
-  assert.equal(observed, natural, "the unclipped wrapper owns the observation");
-  assert.equal(view.props.children[1], null);
-  natural.scrollHeight = 96; resize(); view = render();
-  assert.equal(view.props.children[1], null, "exactly four lines need no disclosure");
-  natural.scrollHeight = 120; resize(); view = render();
-  assert.equal(view.props.children[1].props.children, "展开思考");
-  natural.scrollHeight = 72; resize(); view = render();
-  assert.equal(view.props.children[1], null, "wider layout or smaller type remeasures");
-  natural.scrollHeight = 144; resize(); view = render();
-  assert.equal(view.props.children[1].props.children, "展开思考", "narrower layout or larger type remeasures");
-  assert.equal(observerCount, 1, "stream deltas do not recreate the observer");
-  cleanup();
-  assert.equal(disconnected, true);
+  const { ThinkingContent } = load("src/components/ThinkingDetails.tsx", {
+    react: { memo: (component) => component, lazy: () => "Markdown", Suspense: "Suspense", useMemo: (callback) => callback(), useRef: (initial) => ({ current: initial }) },
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    "../lib/i18n": { useI18n() {} },
+    "../lib/runPresentation": { formatReasoningDisplay: (text) => text },
+    "../hooks/useStickToEnd": { useStickToEnd: (_ref, dependency, enabled) => stick.push({ dependency, enabled }) },
+    "./process.css": {},
+  });
+  const live = ThinkingContent({ part: { id: "R", kind: "reasoning", text: "Streaming thought" }, active: true });
+  assert.match(live.props.className, /\blive\b/);
+  assert.deepEqual(stick.at(-1), { dependency: "Streaming thought", enabled: true });
+  const done = ThinkingContent({ part: { id: "R", kind: "reasoning", text: "Streaming thought", done: true }, active: true });
+  assert.doesNotMatch(done.props.className, /\blive\b/);
+  assert.equal(stick.at(-1).enabled, false, "a finished block is never force-scrolled");
+  const idle = ThinkingContent({ part: { id: "R", kind: "reasoning", text: "History" } });
+  assert.doesNotMatch(idle.props.className, /\blive\b/);
 });

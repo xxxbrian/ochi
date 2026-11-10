@@ -1,164 +1,159 @@
 import { t, useI18n } from "../lib/i18n";
-import { ChevronRight, LoaderCircle, MessageCircle } from "lucide-react";
-import { lazy, memo, Suspense, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ProcessEntry } from "../lib/types";
-import { groupProcessEntries, lastMatching, type ProcessRow } from "../lib/processTimeline";
-import { StepCard, StepList, toolIcon } from "./ProcessSteps";
-import { ThinkingContent } from "./ThinkingDetails";
-import "./process-timeline.css";
+import { Check, ChevronRight, CircleAlert, Hourglass, Square } from "lucide-react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { ProcessEntry, RunStatus, WaitingInput } from "../lib/types";
+import { groupProcessEntries, stepFamilies, type ToolFamily } from "../lib/processTimeline";
+import { describeHeader, type HeaderState } from "../lib/processHeader";
+import { formatProcessElapsed, processElapsedMilliseconds } from "../lib/processTiming";
+import { useEntryClock, type EntryClock } from "../lib/entryClock";
+import { ComputerQueueDetails } from "./ComputerQueueDetails";
+import { Collapse, hueStyle, ProgressRow, RunningBars, ThinkingRow, ToolGroup, ToolRow, toolIcon } from "./ProcessSteps";
+import "./process.css";
 
-const MarkdownContent = lazy(() => import("./MarkdownContent"));
-
-export const PublicProgress = memo(function PublicProgress({ text, preview = false, streaming = false }: { text: string; preview?: boolean; active?: boolean; streaming?: boolean }) {
-  useI18n();
+// Previous labels roll out upward while the new one rolls in, so a state change reads as motion, not a flash.
+function RollingLabel({ id, shimmer, children }: { id: string; shimmer: boolean; children: ReactNode }) {
+  const last = useRef<{ id: string; node: ReactNode }>({ id, node: children });
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [leaving, setLeaving] = useState<{ id: string; node: ReactNode } | null>(null);
+  const [rolled, setRolled] = useState(false);
+  useLayoutEffect(() => {
+    if (last.current.id === id) return;
+    setLeaving(last.current);
+    setRolled(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setLeaving(null), 400);
+  }, [id]);
+  useLayoutEffect(() => { last.current = { id, node: children }; });
+  useLayoutEffect(() => () => clearTimeout(timer.current), []);
   return (
-    <div className={preview ? "process-progress-preview" : "process-progress"}>
-      {!preview ? <span className="process-progress-icon" aria-hidden="true"><MessageCircle size={14} /></span> : null}
-      <div className="process-progress-text">
-        <Suspense fallback={<p className="thinking-plain">{text}</p>}>
-          <MarkdownContent content={text} isStreaming={streaming} />
-        </Suspense>
-      </div>
-    </div>
+    <span className="proc-label">
+      {leaving ? <span className="roll roll-out" key={`out:${leaving.id}`} aria-hidden="true">{leaving.node}</span> : null}
+      <span className={`roll${rolled ? " roll-in" : ""}${shimmer ? " shimmer" : ""}`} key={id}>{children}</span>
+    </span>
   );
-});
+}
 
-const ToolGroup = memo(function ToolGroup({ row, expanded, expansion, onExpandedChange, onStepExpandedChange }: {
-  row: Extract<ProcessRow, { kind: "tools" }>;
+function Indicator({ state }: { state: HeaderState }) {
+  if (state === "done") return <span className="ind ind-done"><Check className="ic" /></span>;
+  if (state === "failed") return <span className="ind ind-bad"><CircleAlert className="ic" /></span>;
+  if (state === "stopped") return <span className="ind ind-stop"><Square className="ic" /></span>;
+  if (state === "waiting") return <span className="ind ind-wait"><Hourglass className="ic" /></span>;
+  return <span className="ind"><RunningBars count={4} /></span>;
+}
+
+// Finished header strip: one flat chip per tool family. Wide screens show four then "+N"; narrow ones show two then "+N".
+const STRIP_WIDE = 4;
+const STRIP_NARROW = 2;
+function FamilyStrip({ families }: { families: ToolFamily[] }) {
+  return (
+    <span className="proc-icons" aria-hidden="true">
+      {families.slice(0, STRIP_WIDE).map((family) => <i key={family} style={hueStyle(family)}>{toolIcon(family)}</i>)}
+      {families.length > STRIP_WIDE ? <b className="more wide">+{families.length - STRIP_WIDE}</b> : null}
+      {families.length > STRIP_NARROW ? <b className="more narrow">+{families.length - STRIP_NARROW}</b> : null}
+    </span>
+  );
+}
+
+// The running header clock ticks locally, so it never rerenders the timeline.
+function HeaderClock({ createdAt, updatedAt }: { createdAt?: string; updatedAt?: string }) {
+  const [mounted] = useState(Date.now);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(timer);
+  }, []);
+  const start = Date.parse(createdAt ?? "");
+  const elapsed = Number.isFinite(start) ? Math.max(0, Math.max(now, Date.parse(updatedAt ?? "") || 0) - start) : now - mounted;
+  return <span className="proc-meta tnum" aria-label={t("process.elapsed", { duration: formatProcessElapsed(elapsed) })}>{formatProcessElapsed(elapsed)}</span>;
+}
+
+export type ProcessProps = {
+  timeline: ProcessEntry[];
+  active: boolean;
+  status?: RunStatus;
+  waitingKind?: WaitingInput["kind"];
+  resource?: string;
+  error?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // The reader's own choice. Without one the header opens while the run works and closes shortly after it ends.
   expanded?: boolean;
-  expansion: Record<string, boolean>;
-  onExpandedChange: (id: string, expanded: boolean) => void;
-  onStepExpandedChange: (id: string, expanded: boolean) => void;
-}) {
-  useI18n();
-  const steps = row.entries.flatMap((entry) => entry.step ? [entry.step] : []);
-  const open = expanded ?? steps.some((step) => expansion[step.id]);
-  const running = steps.some((step) => step.status === "running");
-  const title = t(`process.group.${running ? "running" : "done"}.${row.family}`, { count: steps.length });
-  return (
-    <div className={`process-tool-group ${open ? "is-expanded" : ""}`} data-process-id={row.id}>
-      <button className="process-group-toggle step-summary" aria-expanded={open} onClick={() => onExpandedChange(row.id, !open)}>
-        <span className="process-group-icon" aria-hidden="true">
-          {running ? <LoaderCircle size={14} className="spin" /> : toolIcon(row.family)}
-        </span>
-        <span className="process-group-title">{title}</span>
-        <ChevronRight size={14} className="process-group-chevron" />
-      </button>
-      {open ? <div className="process-group-children"><StepList steps={steps} expansion={expansion} onExpandedChange={onStepExpandedChange} /></div> : null}
-    </div>
-  );
-});
-
-const TimelineEntry = memo(function TimelineEntry({ entry, active, workingProgress, expanded, onExpandedChange }: { entry: ProcessEntry; active: boolean; workingProgress: boolean; expanded?: boolean; onExpandedChange: (id: string, expanded: boolean) => void }) {
-  useI18n();
-  let content;
-  if (entry.kind === "tool" && entry.step) content = <StepCard step={entry.step} expanded={expanded} onExpandedChange={onExpandedChange} />;
-  else if (entry.kind === "progress" && entry.text?.trim()) content = <PublicProgress text={entry.text} active={workingProgress} streaming={active && Boolean(entry.pending)} />;
-  else if (entry.kind === "reasoning" && entry.reasoning?.text.trim()) content = <ThinkingContent parts={[entry.reasoning]} active={active} />;
-  else return null;
-  return <div className="process-timeline-entry" data-process-id={entry.id}>{content}</div>;
-});
+  onExpandedChange?: (expanded: boolean) => void;
+  renderBody: (text: string, id: string, streaming: boolean) => ReactNode;
+  // One clock for the whole run, so a row keeps its timing when the transcript regroups it into another block.
+  clock?: EntryClock;
+  // Entries that describe the header when this block has no rows of its own (the live status after an interim reply).
+  headerEntries?: ProcessEntry[];
+  // Lets the host find this block in the DOM.
+  blockId?: string;
+  // Called with a pending automatic collapse so the host can hold the reader's scroll position.
+  onAutoCollapse?: (blockId?: string) => void;
+};
 
 export const ProcessTimeline = memo(function ProcessTimeline({
-  timeline,
-  active = false,
-  working = active,
-  error,
-  bounded = true,
-}: {
-  timeline: ProcessEntry[];
-  active?: boolean;
-  working?: boolean;
-  error?: string;
-  bounded?: boolean;
-}) {
+  timeline, active, status, waitingKind, resource, error, createdAt, updatedAt, expanded, onExpandedChange, renderBody, onAutoCollapse, clock: sharedClock, headerEntries, blockId,
+}: ProcessProps) {
   useI18n();
-  const viewport = useRef<HTMLDivElement>(null);
-  const contents = useRef<HTMLDivElement>(null);
-  const followLatest = useRef(active);
-  const lastScrollTop = useRef(0);
-  const readingAnchor = useRef<{ id: string; top: number } | null>(null);
-  const [stepExpansion, setStepExpansion] = useState<Record<string, boolean>>({});
-  const [groupExpansion, setGroupExpansion] = useState<Record<string, boolean>>({});
-  const changeStepExpansion = useCallback((id: string, expanded: boolean) => {
-    setStepExpansion((current) => ({ ...current, [id]: expanded }));
-  }, []);
-  const changeGroupExpansion = useCallback((id: string, expanded: boolean) => {
-    setGroupExpansion((current) => ({ ...current, [id]: expanded }));
-  }, []);
-  const rows = useMemo(() => groupProcessEntries(timeline), [timeline]);
-  const latestProgressId = lastMatching(timeline, (entry) => entry.kind === "progress" && Boolean(entry.text?.trim()))?.id;
+  const ownClock = useEntryClock(timeline);
+  const clock = sharedClock ?? ownClock;
+  const rows = useMemo(() => groupProcessEntries(timeline.filter((entry) => entry.kind === "tool" ? Boolean(entry.step) : Boolean((entry.reasoning?.text ?? entry.text)?.trim()))), [timeline]);
+  const hasRows = rows.length > 0 || Boolean(error);
+  const peek = active;
+  const durationMs = processElapsedMilliseconds(createdAt, updatedAt, false, 0);
+  const header = useMemo(() => describeHeader({ status, active, entries: headerEntries ?? timeline, waitingKind, resource, durationMs }), [status, active, timeline, headerEntries, waitingKind, resource, durationMs]);
+  const [localTouched, setLocalTouched] = useState<boolean | undefined>(undefined);
+  const touched = expanded ?? localTouched;
+  // Automatic policy: open while the run works, close 0.7 s after it ends.
+  const wantOpen = active && hasRows;
+  const [auto, setAuto] = useState(wantOpen);
+  const collapse = useRef(onAutoCollapse);
+  collapse.current = onAutoCollapse;
+  useEffect(() => {
+    if (wantOpen) { setAuto(true); return; }
+    if (!auto) return;
+    collapse.current?.(blockId);
+    const timer = setTimeout(() => setAuto(false), 700);
+    return () => clearTimeout(timer);
+  }, [wantOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const open = touched ?? auto;
+  const toggle = () => { setLocalTouched(!open); onExpandedChange?.(!open); };
 
-  function captureAnchor() {
-    const node = viewport.current;
-    if (!node) return;
-    const bounds = node.getBoundingClientRect();
-    for (const row of node.querySelectorAll<HTMLElement>("[data-process-id]")) {
-      const rect = row.getBoundingClientRect();
-      if (rect.bottom > bounds.top && rect.top < bounds.bottom) {
-        readingAnchor.current = { id: row.dataset.processId!, top: rect.top - bounds.top };
-        return;
-      }
-    }
-    readingAnchor.current = null;
-  }
+  const counted = header.counted;
+  const strip = header.state === "done" && !open ? stepFamilies(counted, Infinity) : [];
+  const shimmer = active && header.state === "running";
+  const lastIndex = rows.length - 1;
 
-  useLayoutEffect(() => {
-    const node = viewport.current;
-    const content = contents.current;
-    if (!node || !content) return;
-    const observer = new ResizeObserver(() => {
-      if (followLatest.current) node.scrollTop = node.scrollHeight;
-      else if (readingAnchor.current) {
-        const anchor = readingAnchor.current;
-        const row = [...node.querySelectorAll<HTMLElement>("[data-process-id]")].find((element) => element.dataset.processId === anchor.id);
-        if (row) node.scrollTop += row.getBoundingClientRect().top - node.getBoundingClientRect().top - anchor.top;
-      }
-      lastScrollTop.current = node.scrollTop;
-      captureAnchor();
-    });
-    observer.observe(content);
-    if (active) node.scrollTop = node.scrollHeight;
-    lastScrollTop.current = node.scrollTop;
-    captureAnchor();
-    return () => observer.disconnect();
-  }, []);
-
-  function onScroll() {
-    const node = viewport.current;
-    if (!node) return;
-    const moved = node.scrollTop - lastScrollTop.current;
-    if (moved < -1) followLatest.current = false;
-    else if (moved > 1) followLatest.current = node.scrollHeight - node.clientHeight - node.scrollTop < 24;
-    lastScrollTop.current = node.scrollTop;
-    captureAnchor();
-  }
-
-  function pauseForExpansion() {
-    // Reading an older row must not be undone by the next token or resize.
-    followLatest.current = false;
-    captureAnchor();
-  }
+  const label = <>
+    <Indicator state={header.state} />
+    <RollingLabel id={header.id} shimmer={shimmer}>
+      <span className="lbl-main">{header.label}</span>
+      {header.sub ? <span className={`lbl-sub${header.mono ? " mono" : ""}`}>{header.sub}</span> : null}
+    </RollingLabel>
+    {strip.length ? <FamilyStrip families={strip} /> : null}
+    {header.queue ? <ComputerQueueDetails progress={header.queue} live={active} /> : active ? <HeaderClock createdAt={createdAt} updatedAt={updatedAt} /> : header.duration ? <span className="proc-meta tnum">{header.duration}</span> : null}
+  </>;
 
   return (
-    <div
-      className={`process-viewport${bounded ? "" : " is-unbounded"}`}
-      ref={viewport}
-      onScroll={onScroll}
-      onWheel={(event) => { if (event.deltaY < 0) pauseForExpansion(); }}
-      onKeyDown={(event) => { if (["ArrowUp", "PageUp", "Home"].includes(event.key)) pauseForExpansion(); }}
-      onClickCapture={(event) => { if (event.target instanceof Element && event.target.closest("button, summary")) pauseForExpansion(); }}
-      role="region"
-      aria-label={t("process.title")}
-      tabIndex={0}
-    >
-      <div className="process-timeline" ref={contents}>
-        {rows.map((row) => {
-          if (row.kind === "tools") return <ToolGroup key={row.id} row={row} expanded={groupExpansion[row.id]} expansion={stepExpansion} onExpandedChange={changeGroupExpansion} onStepExpandedChange={changeStepExpansion} />;
-          return <TimelineEntry key={row.id} entry={row.entry} active={active} workingProgress={working && row.id === latestProgressId} expanded={row.entry.step ? Boolean(stepExpansion[row.entry.step.id]) : undefined} onExpandedChange={changeStepExpansion} />;
-        })}
-        {error ? <details className="technical-details"><summary>{t("error.details")}</summary><pre>{error}</pre></details> : null}
-      </div>
+    <div className="proc" data-block={blockId} data-state={header.state} data-open={open} data-empty={!hasRows && !active}>
+      {hasRows
+        ? <button className="proc-head" aria-expanded={open} onClick={toggle}>{label}<ChevronRight className="chev ic" aria-hidden="true" /></button>
+        : <div className="proc-head static" role={active ? "status" : undefined}>{label}</div>}
+      {hasRows ? (
+        <Collapse open={open} className="proc-body">
+          <ol className="steps">
+            {rows.map((row, index) => {
+              const fold = peek && index < lastIndex;
+              const enter = !clock.initial.has(row.id);
+              if (row.kind === "tools") return <ToolGroup key={row.id} row={row} live={active} peek={peek} fold={fold} enter={enter} clock={clock} />;
+              const entry = row.entry;
+              if (entry.kind === "reasoning") return <ThinkingRow key={row.id} entry={entry} active={active} fold={fold} enter={enter} clock={clock} />;
+              if (entry.kind === "tool") return <ToolRow key={row.id} entry={entry} live={active} fold={fold} enter={enter} clock={clock} />;
+              return <ProgressRow key={row.id} entry={entry} fold={fold} enter={enter} streaming={active && index === lastIndex && status === "running"} renderBody={renderBody} />;
+            })}
+          </ol>
+          {error ? <details className="technical-details"><summary>{t("error.details")}</summary><pre>{error}</pre></details> : null}
+        </Collapse>
+      ) : null}
     </div>
   );
 });

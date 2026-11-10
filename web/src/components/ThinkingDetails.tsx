@@ -1,74 +1,26 @@
-import { t, useI18n } from "../lib/i18n";
-import { lazy, memo, Suspense, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Lightbulb } from "lucide-react";
+import { useI18n } from "../lib/i18n";
+import { lazy, memo, Suspense, useMemo, useRef } from "react";
 import type { ReasoningPart } from "../lib/types";
 import { formatReasoningDisplay } from "../lib/runPresentation";
-import "./thinking.css";
+import { useStickToEnd } from "../hooks/useStickToEnd";
+import "./process.css";
 
 const MarkdownContent = lazy(() => import("./MarkdownContent"));
 
-export function OchiActivityMark({ working = true }: { working?: boolean }) {
-  useI18n();
-  return (
-    <span className={`ochi-activity-mark${working ? " is-working" : ""}`} aria-hidden="true">
-      <span className="ochi-mark-face">
-        <span className="ochi-mark-eyes">
-          <span className="ochi-mark-eye" />
-          <span className="ochi-mark-eye" />
-        </span>
-      </span>
-    </span>
-  );
-}
-
-const ThinkingPart = memo(function ThinkingPart({ part, active }: { part: ReasoningPart; active: boolean }) {
+// Reasoning text in a bounded box. While streaming it is a five-line window that follows the newest
+// text and fades at the top; once finished it is a taller, normally scrollable block.
+export const ThinkingContent = memo(function ThinkingContent({ part, active = false }: { part: ReasoningPart; active?: boolean }) {
   useI18n();
   const content = useMemo(() => formatReasoningDisplay(part.text), [part.text]);
-  const [open, setOpen] = useState(false);
-  const [long, setLong] = useState(false);
-  const contents = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const node = contents.current;
-    if (!node) return;
-    const measure = () => {
-      const line = Number.parseFloat(getComputedStyle(node).lineHeight) || 24;
-      setLong(node.scrollHeight > line * 4 + 1);
-    };
-    measure();
-    // The clipped body stops resizing at four lines; observe natural content.
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-  return <div className={`thinking-part${open ? " is-expanded" : ""}`}>
-    <div className="thinking-part-body">
-      <div className="thinking-part-content" ref={contents}>
-        <Suspense fallback={<p className="thinking-plain">{content}</p>}>
-          <MarkdownContent content={content} isStreaming={active && !part.done} />
-        </Suspense>
-      </div>
-    </div>
-    {long || open ? <button className="thinking-part-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? t("process.collapseThinking") : t("process.expandThinking")}</button> : null}
-  </div>;
-});
-
-export const ThinkingContent = memo(function ThinkingContent({
-  parts,
-  active = false,
-}: {
-  parts: ReasoningPart[];
-  active?: boolean;
-}) {
-  useI18n();
+  const live = active && !part.done;
+  const box = useRef<HTMLDivElement>(null);
+  useStickToEnd(box, content, live);
   return (
-    <div className="thinking-content">
-      <span className="thinking-rail" aria-hidden="true"><Lightbulb size={14} /></span>
-      <div className="thinking-parts">
-        {parts.map((part) =>
-          part.text.trim() ? (
-            <ThinkingPart part={part} active={active} key={part.id} />
-          ) : null,
-        )}
+    <div className={`think-box${live ? " live" : ""}`} ref={box} tabIndex={0}>
+      <div className="think-text">
+        <Suspense fallback={<p className="thinking-plain">{content}</p>}>
+          <MarkdownContent content={content} isStreaming={live} />
+        </Suspense>
       </div>
     </div>
   );
