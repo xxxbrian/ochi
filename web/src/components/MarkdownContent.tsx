@@ -43,7 +43,7 @@ const components: NonNullable<ComponentProps<typeof Streamdown>["components"]> =
     // Code and math nodes are enhanced by the official Streamdown plugins.
     blockquote: ({ children }) => <blockquote>{children}</blockquote>,
     table: ({ children }) => (
-      <div className="markdown-table">
+      <div className="table-wrap">
         <table>{children}</table>
       </div>
     ),
@@ -146,7 +146,7 @@ export default function MarkdownContent({
   // Switching to the static renderer replaces every block and loses selection.
   return (
     <Streamdown
-      className="markdown"
+      className="markdown prose"
       plugins={plugins}
       components={components}
       controls={controls}

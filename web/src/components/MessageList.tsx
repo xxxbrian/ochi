@@ -11,14 +11,7 @@ import {
   type PointerEvent,
   type SyntheticEvent,
 } from "react";
-import {
-  ArrowDown,
-  Check,
-  Copy,
-  LoaderCircle,
-  RotateCcw,
-  Volume2,
-} from "lucide-react";
+import { ArrowDown, Check, Copy, RotateCw, Volume2 } from "lucide-react";
 import { isActiveStatus } from "../lib/api";
 import type { Message, Snapshot } from "../lib/types";
 import { chatMessageKey, projectChatMessages } from "../lib/chatProjection";
@@ -30,7 +23,8 @@ import { HistoryProcess } from "./HistoryProcess";
 import { FileCards } from "./FileCards";
 import { effortLabel } from "../lib/reasoningLabels";
 import { WaitingInputCard } from "./WaitingInputCard";
-import "./chat.css";
+import "./thread.css";
+import { LoadingDots } from "./ui/Loading";
 
 type Props = {
   messages: Message[];
@@ -46,6 +40,14 @@ type Props = {
 function messageRunStatus(message?: Message, snapshot?: Snapshot | null) {
   if (message?.run_status && !isActiveStatus(message.run_status)) return message.run_status;
   return snapshot?.status ?? message?.run_status;
+}
+
+function durationText(message: Message) {
+  const start = Date.parse(message.run_created_at ?? "");
+  const end = Date.parse(message.run_updated_at ?? "");
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "";
+  const seconds = Math.max(1, Math.round((end - start) / 1000));
+  return seconds < 60 ? t("message.seconds", { n: seconds }) : t("message.minutes", { m: Math.floor(seconds / 60), s: seconds % 60 });
 }
 
 const MessageActions = memo(function MessageActions({
@@ -73,9 +75,7 @@ const MessageActions = memo(function MessageActions({
       setSpeaking(false);
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(
-      message.content.replace(/[#*`]/g, ""),
-    );
+    const utterance = new SpeechSynthesisUtterance(message.content.replace(/[#*`]/g, ""));
     utterance.lang = getLocale();
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
@@ -83,36 +83,27 @@ const MessageActions = memo(function MessageActions({
     window.speechSynthesis.speak(utterance);
     setSpeaking(true);
   }
+  const meta = [
+    message.role === "assistant" ? message.model_name : "",
+    message.role === "assistant" && message.effort ? effortLabel(message.effort) : "",
+    message.role === "assistant" ? durationText(message) : "",
+  ].filter(Boolean).join(" · ");
   return (
-    <div className="message-actions">
-      <button
-        className="icon-button"
-        onClick={() => void copy()}
-        aria-label={copied ? t("common.copied") : t("common.copy")}
-        title={t("common.copy")}
-      >
-        {copied ? <Check size={15} /> : <Copy size={15} />}
+    <div className="ai-actions">
+      <button className={`icon-btn sm${copied ? " flash" : ""}`} onClick={() => void copy()} aria-label={copied ? t("common.copied") : t("common.copy")} title={t("common.copy")}>
+        {copied ? <Check className="ic" /> : <Copy className="ic" />}
       </button>
       {message.role === "assistant" && "speechSynthesis" in window && (
-        <button
-          className={`icon-button ${speaking ? "is-active" : ""}`}
-          onClick={speak}
-          aria-label={speaking ? t("message.stopSpeech") : t("message.readAloud")}
-          title={t("message.readAloud")}
-        >
-          <Volume2 size={16} />
+        <button className="icon-btn sm" aria-pressed={speaking} onClick={speak} aria-label={speaking ? t("message.stopSpeech") : t("message.readAloud")} title={t("message.readAloud")}>
+          <Volume2 className="ic" />
         </button>
       )}
       {onRetry && (
-        <button
-          className="icon-button"
-          onClick={() => onRetry(message)}
-          aria-label={t("message.regenerate")}
-          title={t("message.regenerate")}
-        >
-          <RotateCcw size={15} />
+        <button className="icon-btn sm" onClick={() => onRetry(message)} aria-label={t("message.regenerate")} title={t("message.regenerate")}>
+          <RotateCw className="ic" />
         </button>
       )}
+      {meta && <span className="ai-meta tnum" title={meta}>{meta}</span>}
     </div>
   );
 });
@@ -147,18 +138,20 @@ const HistoryMessage = memo(function HistoryMessage({
   const visibleContent = terminalMessage && message.content.trim() ? message.content
     : snapshot && !isActiveStatus(runStatus) ? publicReply(snapshot)
     : snapshot ? publicReply(snapshot) : message.content;
-  const embeddedImages = useMemo(
-    () => markdownImageUrls(message.content),
-    [message.content],
-  );
-  const separateFiles = files?.filter(
-    (file) => !file.mime_type.startsWith("image/") || !embeddedImages.has(file.url),
-  );
-  const embeddedFiles = files?.filter(
-    (file) => file.mime_type.startsWith("image/") && embeddedImages.has(file.url),
-  );
+  const embeddedImages = useMemo(() => markdownImageUrls(message.content), [message.content]);
+  const separateFiles = files?.filter((file) => !file.mime_type.startsWith("image/") || !embeddedImages.has(file.url));
+  const embeddedFiles = files?.filter((file) => file.mime_type.startsWith("image/") && embeddedImages.has(file.url));
+  if (message.role === "user")
+    return (
+      <UserMessage
+        message={message}
+        onEdit={onEdit}
+        onRetry={onRetry}
+        attachments={message.attachments?.length ? <div className="attach-row"><FileCards files={message.attachments} variant="attachment" /></div> : null}
+      />
+    );
   return (
-    <article className={`message-row ${message.role}`}>
+    <article className="ai-row">
       {process ? <HistoryProcess
         runId={message.run_id!}
         stepCount={message.step_count ?? 0}
@@ -176,30 +169,10 @@ const HistoryMessage = memo(function HistoryMessage({
         onExpandedChange={(expanded) => onProcessOpen?.(message.run_id!, expanded)}
         renderBody={(text, _id, streaming) => <MarkdownMessage message={{ ...message, content: text }} isStreaming={streaming} />}
       /> : null}
-      {message.role === "user" && (
-        <FileCards
-          files={message.attachments}
-          variant="attachment"
-        />
-      )}
-      {message.role === "user" ? (
-        <UserMessage message={message} onEdit={onEdit} onRetry={onRetry} />
-      ) : !process && visibleContent ? <MarkdownMessage message={{ ...message, content: visibleContent }} isStreaming={runStatus === "running"} /> : null}
-      {message.role !== "user" && (
-        <>
-          <FileCards files={separateFiles} />
-          <FileCards files={embeddedFiles} compactImages />
-        </>
-      )}
-      {message.role !== "user" && visibleContent && !isActiveStatus(runStatus) && <div className="message-footer">
-        <MessageActions message={{ ...message, content: visibleContent }} onRetry={onRetry} />
-        {message.role === "assistant" && message.model_name && (
-          <span className="message-model" title={`${message.model_name}${message.effort ? ` · ${effortLabel(message.effort)}` : ""}`}>
-            {message.model_name}
-            {message.effort ? ` · ${effortLabel(message.effort)}` : ""}
-          </span>
-        )}
-      </div>}
+      {!process && visibleContent ? <MarkdownMessage message={{ ...message, content: visibleContent }} isStreaming={runStatus === "running"} /> : null}
+      <FileCards files={separateFiles} />
+      <FileCards files={embeddedFiles} compactImages />
+      {visibleContent && !isActiveStatus(runStatus) && <MessageActions message={{ ...message, content: visibleContent }} onRetry={onRetry} />}
     </article>
   );
 });
@@ -226,19 +199,30 @@ const History = memo(function History({
     if (message.role === "assistant" && message.created_at) lastAssistant = index;
   });
   const lastRetry = lastAssistant > lastUser ? lastAssistant : lastUser;
-  return messages.map((message, index) => (
-    <HistoryMessage
-      key={chatMessageKey(message)}
-      message={message}
-      snapshot={
-        message.run_id === latestSnapshot?.run_id ? latestSnapshot : null
-      }
-      onRetry={index === lastRetry && message.run_id ? onRetry : undefined}
-      onEdit={index === lastUser ? onEdit : undefined}
-      processOpen={message.run_id ? processExpansion[message.run_id] : undefined}
-      onProcessOpen={onProcessOpen}
-    />
-  ));
+  // A turn is a user message plus the assistant messages that answer it.
+  const turns: { index: number; message: Message }[][] = [];
+  messages.forEach((message, index) => {
+    if (message.role === "user" || !turns.length) turns.push([{ index, message }]);
+    else turns[turns.length - 1].push({ index, message });
+  });
+  return turns.map((turn, turnIndex) => {
+    const running = turn.some(({ message }) => message.role === "assistant" && isActiveStatus(messageRunStatus(message, message.run_id === latestSnapshot?.run_id ? latestSnapshot : null)));
+    return (
+      <section key={chatMessageKey(turn[0].message)} className="turn" data-last={turnIndex === turns.length - 1 ? "true" : undefined} data-status={running ? "running" : undefined}>
+        {turn.map(({ index, message }) => (
+          <HistoryMessage
+            key={chatMessageKey(message)}
+            message={message}
+            snapshot={message.run_id === latestSnapshot?.run_id ? latestSnapshot : null}
+            onRetry={index === lastRetry && message.run_id ? onRetry : undefined}
+            onEdit={index === lastUser ? onEdit : undefined}
+            processOpen={message.run_id ? processExpansion[message.run_id] : undefined}
+            onProcessOpen={onProcessOpen}
+          />
+        ))}
+      </section>
+    );
+  });
 });
 
 export function MessageList({
@@ -344,23 +328,23 @@ export function MessageList({
     setShowJump(true);
   }
   function onUserScroll(event: SyntheticEvent<HTMLDivElement>) {
-    if (event.target instanceof Element && event.target.closest(".process-viewport, .run-transcript.is-archived .run-work-surface")) pauseForDetails();
+    if (event.target instanceof Element && event.target.closest(".tb-out, .tb-code, .tb-plain, .tb-tree, .think-box, .steps.nested, .technical-details pre")) pauseForDetails();
     else userScrolling();
   }
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     userScrollUntil.current = performance.now() + 400;
-    if (event.target instanceof Element && event.target.closest(".process-toggle, .thinking-part-toggle, .step-summary, .technical-details > summary, .process-viewport, .run-transcript.is-archived .run-work-surface"))
+    if (event.target instanceof Element && event.target.closest(".proc-head, .st-head, .technical-details > summary, .tb-tech > summary, .tb-out, .tb-code, .tb-plain, .tb-tree, .think-box, .steps.nested, .technical-details pre"))
       pauseForDetails();
     else if (event.target === event.currentTarget) userScrolling();
   }
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const navigationKey = ["Home", "End", "PageUp", "PageDown", "ArrowUp", "ArrowDown", " "].includes(event.key);
-    const innerProcess = event.target instanceof Element && event.target.closest(".process-viewport, .run-transcript.is-archived .run-work-surface");
+    const innerProcess = event.target instanceof Element && event.target.closest(".tb-out, .tb-code, .tb-plain, .tb-tree, .think-box, .steps.nested, .technical-details pre");
     if (innerProcess && navigationKey) {
       pauseForDetails();
       return;
     }
-    const details = event.target instanceof Element && event.target.closest(".process-toggle, .thinking-part-toggle, .step-summary, .technical-details > summary, .process-viewport");
+    const details = event.target instanceof Element && event.target.closest(".proc-head, .st-head, .technical-details > summary, .tb-tech > summary, .tb-out, .tb-code, .tb-plain, .tb-tree, .think-box, .steps.nested, .technical-details pre");
     if (details && (event.key === "Enter" || event.key === " ")) pauseForDetails();
     else if (navigationKey) {
       userScrolling();
@@ -396,7 +380,7 @@ export function MessageList({
   return (
     <div className="messages-region">
       <div
-        className="messages-scroll"
+        className="scroller messages-scroll"
         role="region"
         aria-label={t("message.listLabel")}
         tabIndex={0}
@@ -407,10 +391,10 @@ export function MessageList({
         onPointerDownCapture={onPointerDown}
         onKeyDownCapture={onKeyDown}
       >
-        <div className="messages-column" ref={columnRef}>
+        <div className="thread messages-column" ref={columnRef}>
           {onLoadOlder && (
             <button
-              className="older-messages"
+              className="btn sm ghost older-messages"
               onClick={() => {
                 shouldStick.current = false;
                 const node = scrollRef.current;
@@ -424,11 +408,7 @@ export function MessageList({
               }}
               disabled={olderLoading}
             >
-              {olderLoading ? (
-                <LoaderCircle size={15} className="spin" />
-              ) : (
-                t("message.loadEarlier")
-              )}
+              {olderLoading ? <LoadingDots label={t("status.loading")} /> : t("message.loadEarlier")}
             </button>
           )}
           <History
@@ -447,20 +427,11 @@ export function MessageList({
               onResume={onResume}
             />
           )}
-          {messages.length === 0 && !snapshot && (
-            <div className="empty-state">
-              <h2>{t("message.explore")}</h2>
-            </div>
-          )}
         </div>
       </div>
       {showJump && (
-        <button
-          className="jump-latest icon-button"
-          aria-label={t("message.latest")}
-          onClick={jumpDown}
-        >
-          <ArrowDown size={18} />
+        <button className="icon-btn jump-latest" aria-label={t("message.latest")} onClick={jumpDown}>
+          <ArrowDown className="ic" />
         </button>
       )}
     </div>

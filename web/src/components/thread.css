@@ -1,0 +1,53 @@
+/* Conversation thread (Design Lab shell.css): scroller, turns, user bubble, assistant actions. */
+.messages-region { display: flex; flex: 1; min-height: 0; position: relative; }
+.scroller {
+    flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain;
+    /* MessageList owns following and prepend anchoring, including a paused reader. */
+    overflow-anchor: none;
+}
+.thread { display: flex; flex-direction: column; width: min(var(--thread-w), 100% - 40px); min-height: 100%; margin: 0 auto; padding: 8px 0 200px; }
+.turn { padding-top: var(--msg-gap); }
+.turn:first-child { padding-top: 6px; }
+.user-row { display: flex; position: relative; }
+.user-wrap { position: relative; max-width: var(--user-max-width); margin-inline-start: var(--user-margin-start); min-width: 0; padding-bottom: 30px; margin-bottom: -30px; }
+.user-body {
+    display: block; white-space: pre-wrap; word-break: break-word; outline: 0;
+    background: var(--user-fill); color: var(--user-ink); box-shadow: var(--user-ring); font-weight: var(--user-weight);
+    padding: var(--user-pad-y) var(--user-pad-x);
+    border-radius: var(--user-radius) var(--user-radius) var(--user-tail-radius) var(--user-radius);
+    font-size: calc(var(--fs-ui) + var(--user-text-boost)); letter-spacing: calc(var(--user-text-boost) * -0.012em);
+}
+.user-body:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+/* The bubble is a solid fill, so a translucent highlight vanishes: invert the bubble colours for the selection. */
+.user-body::selection, .user-body ::selection { background: var(--user-ink); color: var(--user-fill); }
+/* The wrapper's box reaches down over the tools (negative margin keeps layout intact), so moving the pointer from the bubble to a tool never leaves hover. */
+.user-tools {
+    position: absolute; top: calc(100% - 28px); display: flex; gap: 1px; z-index: 1; inset-inline-end: 0; pointer-events: none;
+    opacity: 0; translate: 0 -3px; transition: opacity var(--dur-2), translate var(--dur-3) var(--ease);
+}
+.user-wrap:hover .user-tools, .user-wrap:focus-within .user-tools, .user-tools:focus-within { opacity: 1; translate: 0 0; pointer-events: auto; }
+.attach-row { display: flex; gap: 6px; justify-content: flex-end; margin-bottom: 6px; flex-wrap: wrap; }
+/* The bubble column shrink-wraps, so percentage widths collapse: give attached grids a definite width and let chip rows wrap inside it. */
+.attach-row .pv-grid { width: min(360px, 60vw); margin: 0; }
+.attach-row .pv-grid:not([data-n="1"]) { width: min(420px, 70vw); }
+.attach-row .pv-files { flex: 0 1 auto; max-width: 100%; justify-content: flex-end; margin: 0; }
+.ai-row { margin-top: 16px; min-width: 0; }
+.ai-actions { display: flex; align-items: center; gap: 2px; margin: 8px 0 0 -6px; color: var(--muted); opacity: 0; transition: opacity var(--dur-2); }
+.turn:hover .ai-actions, .ai-actions:focus-within, .turn[data-last="true"] .ai-actions { opacity: 1; }
+.ai-meta { margin-left: 8px; font-size: var(--fs-xs); color: var(--subtle); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn[data-status="running"] .ai-actions { display: none; }
+@media (hover: none) { .ai-actions { opacity: 1; } .user-tools { display: none; } }
+.status-note { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 8px 12px; border-radius: var(--r-md); font-size: var(--fs-sm); background: var(--hover); color: var(--ink-2); }
+.status-note.danger { background: var(--danger-soft); color: var(--danger); }
+.older-messages { align-self: center; margin-bottom: 16px; }
+.chat-loading { flex: 1; min-height: 0; overflow: hidden; }
+.chat-skel { width: min(100%, 720px); margin: 0 auto; padding: 32px 20px; display: flex; flex-direction: column; gap: 12px; }
+.chat-skel-user { align-self: flex-end; width: 46%; height: 40px; border-radius: var(--r-lg, var(--r-md)); margin-bottom: 16px; }
+.jump-latest { position: absolute; bottom: 150px; left: 50%; translate: -50% 0; width: 36px; height: 36px; border-radius: 50%; background: var(--raised); color: var(--ink); box-shadow: var(--sh-pop); z-index: 3; }
+.jump-latest:hover { background: var(--raised); }
+.markdown-loading { margin: 0; white-space: pre-wrap; }
+
+/* reduced footprint on phones */
+@media (max-width: 760px) {
+    .ai-actions .icon-btn { width: 36px; height: 36px; }
+}

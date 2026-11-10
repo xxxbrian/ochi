@@ -1,19 +1,20 @@
 import { t, useI18n } from "../lib/i18n";
-import { memo, useState, type KeyboardEvent } from "react";
+import { memo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ContextMenu } from "@base-ui/react/context-menu";
-import { Check, Copy, Pencil, RotateCcw } from "lucide-react";
+import { Check, Copy, Pencil, RotateCw } from "lucide-react";
 import type { Message } from "../lib/types";
-import { MarkdownMessage } from "./MarkdownMessage";
-import "./user-message.css";
 
+/** User turn: attachments, the bubble (right-click / long-press menu) and hover tools. The look decides fill, alignment and weight through tokens. */
 export const UserMessage = memo(function UserMessage({
   message,
   onEdit,
   onRetry,
+  attachments,
 }: {
   message: Message;
   onEdit?: (message: Message) => void;
   onRetry?: (message: Message) => void;
+  attachments?: ReactNode;
 }) {
   useI18n();
   const [copied, setCopied] = useState(false);
@@ -30,43 +31,35 @@ export const UserMessage = memo(function UserMessage({
     if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
-    event.currentTarget.dispatchEvent(new MouseEvent("contextmenu", {
-      bubbles: true, clientX: rect.right - 16, clientY: rect.bottom - 8,
-    }));
+    event.currentTarget.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: rect.right - 16, clientY: rect.bottom - 8 }));
   }
   return (
     <ContextMenu.Root onOpenChange={(open, details) => {
-      if (open && details.event.type.startsWith("touch") && "vibrate" in navigator) {
-        navigator.vibrate(8);
-      }
+      if (open && details.event.type.startsWith("touch") && "vibrate" in navigator) navigator.vibrate(8);
     }}>
-      <ContextMenu.Trigger className="user-message-content" tabIndex={0}
-        aria-label={message.content || t("message.title")} onKeyDown={keyboardMenu}>
-        <MarkdownMessage message={message} />
-        <div className="user-message-actions">
-          <button className="icon-button" onClick={() => void copy()}
-            aria-label={copied ? t("message.copied") : t("message.copy")} title={t("common.copy")}>
-            {copied ? <Check size={15} /> : <Copy size={15} />}
-          </button>
-          {onEdit && <button className="icon-button" onClick={() => onEdit(message)}
-            aria-label={t("chat.editMessage")} title={t("common.edit")}><Pencil size={15} /></button>}
-          {onRetry && <button className="icon-button" onClick={() => onRetry(message)}
-            aria-label={t("message.resend")} title={t("message.resend")}><RotateCcw size={15} /></button>}
+      <div className="user-row">
+        <div className="user-wrap">
+          {attachments}
+          <ContextMenu.Trigger className="user-body" tabIndex={0} aria-label={message.content || t("message.title")} onKeyDown={keyboardMenu}>
+            {message.content}
+          </ContextMenu.Trigger>
+          <div className="user-tools">
+            <button className={`icon-btn sm${copied ? " flash" : ""}`} onClick={() => void copy()} aria-label={copied ? t("message.copied") : t("message.copy")} title={t("common.copy")}>
+              {copied ? <Check className="ic" /> : <Copy className="ic" />}
+            </button>
+            {onEdit && <button className="icon-btn sm" onClick={() => onEdit(message)} aria-label={t("chat.editMessage")} title={t("common.edit")}><Pencil className="ic" /></button>}
+            {onRetry && <button className="icon-btn sm" onClick={() => onRetry(message)} aria-label={t("message.resend")} title={t("message.resend")}><RotateCw className="ic" /></button>}
+          </div>
         </div>
-      </ContextMenu.Trigger>
+      </div>
       <ContextMenu.Portal>
-        <ContextMenu.Positioner className="action-menu-positioner" sideOffset={6}
-          collisionPadding={12} collisionAvoidance={{ side: "flip", align: "shift" }}>
-          <ContextMenu.Popup className="action-menu user-message-menu">
-            <ContextMenu.Item className="action-menu-item" onClick={() => void copy()}>
-              <Copy size={16} />{t("common.copy")}
-            </ContextMenu.Item>
-            {onEdit && <ContextMenu.Item className="action-menu-item" onClick={() => onEdit(message)}>
-              <Pencil size={16} />{t("common.edit")}
-            </ContextMenu.Item>}
-            {onRetry && <ContextMenu.Item className="action-menu-item" onClick={() => onRetry(message)}>
-              <RotateCcw size={16} />{t("message.resend")}
-            </ContextMenu.Item>}
+        <ContextMenu.Positioner className="pop-positioner" sideOffset={6} collisionPadding={8} collisionAvoidance={{ side: "flip", align: "shift" }}>
+          <ContextMenu.Popup className="pop">
+            <div className="menu">
+              <ContextMenu.Item className="menu-item" onClick={() => void copy()}><Copy className="ic" />{t("common.copy")}</ContextMenu.Item>
+              {onEdit && <ContextMenu.Item className="menu-item" onClick={() => onEdit(message)}><Pencil className="ic" />{t("common.edit")}</ContextMenu.Item>}
+              {onRetry && <ContextMenu.Item className="menu-item" onClick={() => onRetry(message)}><RotateCw className="ic" />{t("message.resend")}</ContextMenu.Item>}
+            </div>
           </ContextMenu.Popup>
         </ContextMenu.Positioner>
       </ContextMenu.Portal>

@@ -1,6 +1,5 @@
 import { lazy, memo, Suspense, useMemo } from "react";
 import type { Message } from "../lib/types";
-import "./chat.css";
 
 const MarkdownContent = lazy(() => import("./MarkdownContent"));
 
