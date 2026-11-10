@@ -18,6 +18,7 @@ function evaluate(source, imports = {}, globals = {}) {
     module, exports: module.exports, Intl, URLSearchParams, ...globals,
     require(name) {
       if (name in imports) return imports[name];
+      if (name === "./messages.process") return evaluate(read("src/lib/messages.process.ts"));
       throw new Error(`Unexpected fixture dependency: ${name}`);
     },
   });
@@ -94,8 +95,10 @@ test("mounted Computer permission choices follow language changes without resett
       },
     },
     "react/jsx-runtime": { jsx, jsxs: jsx },
-    "lucide-react": { ShieldCheck: "shield" },
-    "./execution.css": {},
+    "lucide-react": new Proxy({}, { get: (_, name) => String(name) }),
+    "../lib/computerAction": { permissionAnswerDecision: (value) => (value === "deny" ? "denied" : value === "allow_once" ? "once" : "conversation") },
+    "./ComputerSteps": { PermissionResult: () => null },
+    "./waiting-input.css": {},
   });
   const answers = [];
   let complete;
@@ -115,14 +118,14 @@ test("mounted Computer permission choices follow language changes without resett
   };
   let actions = buttons(render());
   assert.deepEqual(actions.map((button) => button.props.children), [
-    i18n.web.t("permission.once"), i18n.web.t("permission.conversation"), i18n.web.t("permission.deny"),
+    i18n.web.t("permission.deny"), i18n.web.t("permission.once"), i18n.web.t("permission.conversation"),
   ]);
-  actions[0].props.onClick();
+  actions[1].props.onClick();
   assert.deepEqual(answers, [{ runId: "R", answer: "allow_once" }]);
   i18n.runtime.setLanguage("zh-TW");
   actions = buttons(render());
   assert.deepEqual(actions.map((button) => button.props.children), [
-    i18n.web.t("permission.once"), i18n.web.t("permission.conversation"), i18n.web.t("permission.deny"),
+    i18n.web.t("permission.deny"), i18n.web.t("permission.once"), i18n.web.t("permission.conversation"),
   ]);
   assert.ok(actions.every((button) => button.props.disabled), "the existing pending answer stays pending");
   complete();
@@ -254,15 +257,21 @@ test("account language writes serialize and an old account failure cannot roll b
   }
   visit(source);
   assert.ok(declaration);
-  const owner = {}, ownerRef = { current: owner }, revision = { current: 0 };
-  const queue = { current: Promise.resolve() }, confirmed = { current: "en" };
+  const { createPreferencesOwner } = evaluate(read("src/lib/preferences.ts"));
   const requests = [];
+  const owner = createPreferencesOwner("old-account", {
+    preferences: async () => ({ language: "en" }),
+    updatePreferences: (patch) => new Promise((resolve, reject) => requests.push({ patch, resolve, reject })),
+  });
+  const ownerRef = { current: owner };
+  owner.subscribe(() => {
+    const value = owner.getSnapshot().preferences;
+    if (value && ownerRef.current === owner) i18n.runtime.setLanguage(value.language);
+  });
+  await owner.load();
   const { changeLanguage } = evaluate(`export const ${declaration.getText(source)};`, {}, {
     useCallback: (callback) => callback,
-    modelPreferenceOwner: ownerRef, languagePreferenceRevision: revision,
-    languagePreferenceWrites: queue, confirmedLanguageRef: confirmed,
-    setLanguage: i18n.runtime.setLanguage,
-    api: { updatePreferences: (patch) => new Promise((resolve, reject) => requests.push({ patch, resolve, reject })) },
+    preferencesOwnerRef: ownerRef,
   });
   const first = changeLanguage("zh-CN");
   const second = changeLanguage("zh-TW");
@@ -273,7 +282,11 @@ test("account language writes serialize and an old account failure cannot roll b
   await first;
   await Promise.resolve();
   assert.equal(requests.length, 2);
-  ownerRef.current = {};
+  owner.deactivate();
+  ownerRef.current = createPreferencesOwner("new-account", {
+    preferences: async () => ({ language: "en" }),
+    updatePreferences: async (patch) => patch,
+  });
   i18n.runtime.setLanguage("en");
   requests[1].reject(new Error("Old account failed"));
   await second;

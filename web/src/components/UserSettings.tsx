@@ -1,456 +1,162 @@
-import { t, useI18n, getLocale, type LanguagePreference } from "../lib/i18n";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowUpRight,
-  ArrowLeft,
-  Brain,
-  ChevronDown,
-  ListFilter,
-  LoaderCircle,
-  Paintbrush,
-  Pencil,
-  Plus,
-  Puzzle,
-  Search,
-  Trash2,
-} from "lucide-react";
-import { api } from "../lib/api";
-import type { Memory, Project } from "../lib/types";
+import { t, useI18n, type LanguagePreference } from "../lib/i18n";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { Brain, Check, ChevronLeft, ChevronRight, Cpu, Database, Palette, Puzzle, SlidersHorizontal, User as UserIcon, type LucideIcon } from "lucide-react";
+import type { Project, User } from "../lib/types";
 import { Modal } from "./Modal";
-import { SelectField } from "./ui/Select";
-import { UserPlugins } from "./UserPlugins";
-import "./settings.css";
+import { AccountTab } from "./settings/AccountTab";
+import { AppearanceTab } from "./settings/AppearanceTab";
+import { DataTab } from "./settings/DataTab";
+import { GeneralTab } from "./settings/GeneralTab";
+import { MemoryTab } from "./settings/MemoryTab";
+import { ModelsTab } from "./settings/ModelsTab";
+import { PluginsTab } from "./settings/PluginsTab";
+import { Avatar, SavedContext } from "./settings/ui";
+import "./settings/settings.css";
 
+type Tab = "general" | "appearance" | "models" | "memory" | "plugins" | "data" | "account";
+const TAB_ORDER: Tab[] = ["general", "appearance", "models", "memory", "plugins", "data", "account"];
+const TAB_SWAP_MS = 130;
+const SAVED_MS = 1500;
 
 export default function UserSettings({
   onClose,
   projects = [],
   onNavigate,
   onLanguage,
+  user,
+  onLogout,
 }: {
   onClose: () => void;
   projects?: Project[];
   onNavigate?: (path: string) => void;
   onLanguage: (language: LanguagePreference) => Promise<void>;
+  user: User;
+  onLogout: () => void;
 }) {
-  const { language } = useI18n();
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const kinds = [
-  { value: "fact", label: t("memory.fact") },
-  { value: "preference", label: t("memory.preference") },
-  { value: "session_summary", label: t("memory.sessionSummary") },
-  { value: "project_summary", label: t("memory.projectSummary") },
-];
-  const [languageSaving, setLanguageSaving] = useState(false);
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [enabled, setEnabled] = useState(true);
-  const [editing, setEditing] = useState<Partial<Memory> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [scope, setScope] = useState("all");
-  const [kind, setKind] = useState("all");
-  const [preferenceUpdating, setPreferenceUpdating] = useState(false);
-  const [theme, setTheme] = useState(
-    document.documentElement.dataset.theme ?? "light",
-  );
-  const [section, setSection] = useState<"appearance" | "memory" | "plugins">("appearance");
-  const [filtering, setFiltering] = useState(false);
-  useEffect(() => {
-    let disposed = false;
-    Promise.all([api.memories(), api.preferences()])
-      .then(([items, preferences]) => {
-        if (!disposed) {
-          setMemories(items ?? []);
-          setEnabled(preferences.memory_enabled);
-        }
-      })
-      .catch((reason: Error) => {
-        if (!disposed) setError(reason.message);
-      })
-      .finally(() => {
-        if (!disposed) setLoading(false);
-      });
-    return () => {
-      disposed = true;
+  useI18n();
+  const [tab, setTab] = useState<Tab>("general");
+  const [shown, setShown] = useState<Tab>("general");
+  const [leaving, setLeaving] = useState(false);
+  const [dir, setDir] = useState(1);
+  // Narrow containers show the category list first and drill into a page, like a native settings app.
+  const [view, setView] = useState<"nav" | "content">(() => (window.matchMedia("(max-width: 700px)").matches ? "nav" : "content"));
+  const [savedVisible, setSavedVisible] = useState(false);
+  const [flash, setFlash] = useState("");
+  const [scrolled, setScrolled] = useState(false);
+  const swapTimer = useRef(0);
+  const savedTimer = useRef(0);
+  const scroller = useRef<HTMLDivElement>(null);
+  // The dialog content mounts through a portal after the first render, so the tab list is tracked as state.
+  const [tabs, setTabs] = useState<HTMLDivElement | null>(null);
+  useEffect(() => () => { window.clearTimeout(swapTimer.current); window.clearTimeout(savedTimer.current); }, []);
+
+  // Every successful change confirms itself with the "Saved" chip and a flash on its row.
+  const saved = useRef((row = "") => {
+    setSavedVisible(true);
+    setFlash(row);
+    window.clearTimeout(savedTimer.current);
+    savedTimer.current = window.setTimeout(() => { setSavedVisible(false); setFlash(""); }, SAVED_MS);
+  }).current;
+
+  function selectTab(next: Tab) {
+    setView("content");
+    if (next === tab) return;
+    setDir(TAB_ORDER.indexOf(next) > TAB_ORDER.indexOf(tab) ? 1 : -1);
+    setTab(next);
+    setLeaving(true);
+    window.clearTimeout(swapTimer.current);
+    swapTimer.current = window.setTimeout(() => {
+      setShown(next);
+      setLeaving(false);
+      scroller.current?.scrollTo({ top: 0 });
+    }, TAB_SWAP_MS);
+  }
+  // The pill slides to the current category; measuring keeps it right in every language.
+  useLayoutEffect(() => {
+    const element = tabs;
+    if (!element) return;
+    const place = () => {
+      const target = element.querySelector<HTMLElement>('button[aria-current="true"]');
+      if (!target) return;
+      element.style.setProperty("--py", `${target.offsetTop}px`);
+      element.style.setProperty("--ph", `${target.offsetHeight}px`);
+      element.dataset.ready = "true";
     };
-  }, []);
-  const filtered = useMemo(
-    () =>
-      memories.filter(
-        (memory) =>
-          (scope === "all" ||
-            (scope === "user" && !memory.project_id) ||
-            memory.project_id === scope) &&
-          (kind === "all" || memory.kind === kind) &&
-          memory.content.toLowerCase().includes(query.toLowerCase()),
-      ),
-    [memories, scope, kind, query],
-  );
-  async function save() {
-    if (!editing?.content?.trim() || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const metadata = {
-        kind: editing.kind ?? "fact",
-        project_id: editing.project_id ?? "",
-      };
-      const memory = editing.id
-        ? await api.updateMemory(editing.id, editing.content.trim(), metadata)
-        : await api.addMemory(editing.content.trim(), metadata);
-      setMemories((current) =>
-        editing.id
-          ? current.map((item) => (item.id === editing.id ? memory : item))
-          : [memory, ...current],
-      );
-      setEditing(null);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("error.save"));
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function remove(id: string) {
-    try {
-      await api.deleteMemory(id);
-      setMemories((current) => current.filter((item) => item.id !== id));
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("error.delete"));
-    }
-  }
-  function setColor(value: string) {
-    setTheme(value);
-    document.documentElement.dataset.theme = value;
-    document.documentElement.classList.toggle("dark", value === "dark");
-    try {
-      localStorage.setItem("assistant.theme.v1", value);
-    } catch {
-      /* Optional storage. */
-    }
-  }
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [tab, tabs]);
+
+  const categories: { id: Tab; label: string; desc: string; icon: LucideIcon }[] = [
+    { id: "general", label: t("settings.general"), desc: t("settings.desc.general"), icon: SlidersHorizontal },
+    { id: "appearance", label: t("settings.appearance"), desc: t("settings.desc.appearance"), icon: Palette },
+    { id: "models", label: t("settings.models"), desc: t("settings.desc.models"), icon: Cpu },
+    { id: "memory", label: t("memory.title"), desc: t("settings.desc.memory"), icon: Brain },
+    { id: "plugins", label: t("plugins.title"), desc: t("settings.desc.plugins"), icon: Puzzle },
+    { id: "data", label: t("settings.data"), desc: t("settings.desc.data"), icon: Database },
+    { id: "account", label: t("settings.account"), desc: t("settings.desc.account"), icon: UserIcon },
+  ];
+  const current = categories.find((item) => item.id === shown) ?? categories[0];
+  const name = user.display_name || user.username;
+  const role = t(user.role === "admin" ? "sidebar.role.admin" : "sidebar.role.user");
+  const content =
+    shown === "general" ? <GeneralTab onLanguage={onLanguage} />
+    : shown === "appearance" ? <AppearanceTab />
+    : shown === "models" ? <ModelsTab />
+    : shown === "memory" ? <MemoryTab accountId={user.id} projects={projects} onClose={onClose} onNavigate={onNavigate} />
+    : shown === "plugins" ? <PluginsTab />
+    : shown === "data" ? <DataTab />
+    : <AccountTab user={user} onLogout={onLogout} />;
+
   return (
-    <Modal
-      title={t("settings.title")}
-      onClose={onClose}
-      size="large"
-      className="ochi-settings-modal"
-      bodyClassName="ochi-settings-body"
-      footer={
-        editing && section === "memory" ? (
-          <div className="modal-actions">
-            <button
-              className="secondary-button"
-              onClick={() => setEditing(null)}
-            >
-              {t("common.cancel")}
-            </button>
-            <button
-              type="submit"
-              form="memory-editor"
-              className="primary-button"
-              disabled={busy || !editing.content?.trim()}
-            >
-              {busy && <LoaderCircle className="spin" size={15} />}
-              {t("common.save")}
-            </button>
-          </div>
-        ) : undefined
-      }
-    >
-      <div className="ochi-settings">
-        <nav className="ochi-settings__rail" aria-label={t("settings.categories")}>
-          <button
-            type="button"
-            aria-current={section === "appearance" ? "page" : undefined}
-            aria-controls="settings-appearance"
-            onClick={() => setSection("appearance")}
-          >
-            <Paintbrush size={16} />
-            {t("settings.appearance")}
-          </button>
-          <button
-            type="button"
-            aria-current={section === "memory" ? "page" : undefined}
-            aria-controls="settings-memory"
-            onClick={() => setSection("memory")}
-          >
-            <Brain size={16} />
-            {t("memory.title")}
-          </button>
-          <button
-            type="button"
-            aria-current={section === "plugins" ? "page" : undefined}
-            aria-controls="settings-plugins"
-            onClick={() => setSection("plugins")}
-          >
-            <Puzzle size={16} />
-            {t("plugins.title")}
-          </button>
-        </nav>
-        <div className="ochi-settings__content" key={section}>
-          {section === "appearance" ? (
-            <section className="ochi-settings__panel ochi-settings__appearance" id="settings-appearance" aria-label={t("settings.appearance")}>
-              <h3>{t("settings.appearance")}</h3>
-              <div className="ochi-settings__row">
-                <strong>{t("settings.theme")}</strong>
-                <SelectField
-                  value={theme}
-                  onChange={setColor}
-                  label={t("settings.theme")}
-                  options={[
-                    { value: "light", label: t("settings.light") },
-                    { value: "dark", label: t("settings.dark") },
-                  ]}
-                />
-              </div>
-              <div className="ochi-settings__row">
-                <strong>{t("settings.language")}</strong>
-                <SelectField
-                  value={language}
-                  label={t("settings.language")}
-                  disabled={languageSaving}
-                  onChange={(value) => {
-                    setLanguageSaving(true);
-                    setError("");
-                    void onLanguage(value as LanguagePreference).catch((reason: unknown) => {
-                      if (mounted.current) setError(reason instanceof Error ? reason.message : t("error.save"));
-                    }).finally(() => {
-                      if (mounted.current) setLanguageSaving(false);
-                    });
-                  }}
-                  options={[
-                    { value: "system", label: t("settings.systemLanguage") },
-                    { value: "en", label: t("settings.languageEnglish") },
-                    { value: "zh-CN", label: t("settings.languageSimplified") },
-                    { value: "zh-TW", label: t("settings.languageTraditional") },
-                  ]}
-                />
-              </div>
-            </section>
-          ) : section === "plugins" ? <UserPlugins /> : (
-            <section className="ochi-settings__panel ochi-settings__memory" id="settings-memory" aria-label={t("memory.title")}>
-              <div className="ochi-settings__heading">
-                {editing ? <div className="ochi-settings__edit-heading">
-                  <button
-                    className="icon-button"
-                    aria-label={t("memory.back")}
-                    onClick={() => setEditing(null)}
-                  >
-                    <ArrowLeft size={17} />
-                  </button>
-                  <h3>{editing.id ? t("memory.edit") : t("memory.add")}</h3>
-                </div> : <h3><Brain size={16} />{t("memory.title")} <span>{memories.length}</span></h3>}
-                {!editing && <label className="ochi-settings__switch" title={t("memory.enable")}><input
-                  type="checkbox"
-                  role="switch"
-                  aria-label={t("memory.enable")}
-                  checked={enabled}
-                  disabled={loading || preferenceUpdating}
-                  onChange={async (event) => {
-                    const value = event.target.checked;
-                    setPreferenceUpdating(true);
-                    setError("");
-                    try {
-                      const preferences = await api.updatePreferences({ memory_enabled: value });
-                      setEnabled(preferences.memory_enabled);
-                    } catch (reason) {
-                      setError(reason instanceof Error ? reason.message : t("error.save"));
-                    } finally {
-                      setPreferenceUpdating(false);
-                    }
-                  }}
-                /></label>}
-              </div>
-              {editing ? (
-              <form
-                id="memory-editor"
-                className="admin-form ochi-settings__editor"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void save();
-                }}
-              >
-                <label className="form-field">
-                  <span>{t("common.content")}</span>
-                  <textarea
-                    autoFocus
-                    rows={5}
-                    value={editing.content ?? ""}
-                    onChange={(event) =>
-                      setEditing({ ...editing, content: event.target.value })
-                    }
-                  />
-                </label>
-                <div className="form-grid">
-                  <label className="form-field">
-                    <span>{t("common.type")}</span>
-                    <SelectField
-                      label={t("memory.kind")}
-                      value={editing.kind ?? "fact"}
-                      onChange={(value) =>
-                        setEditing({
-                          ...editing,
-                          kind: value as Memory["kind"],
-                        })
-                      }
-                      options={kinds}
-                    />
-                  </label>
-                  <label className="form-field">
-                    <span>{t("memory.scope")}</span>
-                    <SelectField
-                      label={t("memory.scopeLabel")}
-                      value={editing.project_id ?? ""}
-                      onChange={(project_id) =>
-                        setEditing({ ...editing, project_id })
-                      }
-                      options={[
-                        { value: "", label: t("memory.personal") },
-                        ...projects.map((project) => ({
-                          value: project.id,
-                          label: project.name,
-                        })),
-                      ]}
-                    />
-                  </label>
-                </div>
-              </form>
-              ) : <>
-              <div className="ochi-settings__filters">
-                <div className="search-input">
-                  <Search size={16} />
-                  <input
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder={t("memory.search")}
-                    aria-label={t("memory.search")}
-                  />
-                </div>
-                  <button type="button" className={`icon-button ochi-settings__filter${filtering ? " is-active" : ""}`} aria-label={t("memory.filter")} title={t("memory.filter")} aria-expanded={filtering} aria-controls="memory-filters" onClick={() => setFiltering((value) => !value)}>
-                    <ListFilter size={17} />
-                    {(scope !== "all" || kind !== "all") && <span className="ochi-settings__filter-indicator" />}
-                  </button>
+    <Modal title={t("settings.title")} onClose={onClose} size="large" headerless className="st-modal" bodyClassName="st-modal-body">
+      <SavedContext.Provider value={{ flash, saved }}>
+        <div className="st-shell" data-tab={tab} data-view={view} data-scrolled={scrolled} style={{ "--dir": dir } as CSSProperties}>
+          <nav className="st-nav" aria-label={t("settings.categories")}>
+            <h2 className="st-nav-t" aria-hidden="true">{t("settings.title")}</h2>
+            <div className="st-tabs" ref={setTabs} role="tablist" aria-orientation="vertical">
+              <span className="st-pill" aria-hidden="true" />
+              {categories.map((item) => (
                 <button
-                  className="secondary-button"
-                  onClick={() => setEditing({ content: "", kind: "fact" })}
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  className="st-tab"
+                  aria-selected={tab === item.id}
+                  aria-current={tab === item.id}
+                  aria-controls={`settings-${item.id}`}
+                  onClick={() => selectTab(item.id)}
                 >
-                  <Plus size={16} />
-                  {t("common.add")}
+                  <span className="st-ti"><item.icon size={16} /></span>
+                  <span>{item.label}</span>
+                  <ChevronRight size={14} className="st-chev" aria-hidden="true" />
                 </button>
+              ))}
+            </div>
+            <div className="st-user">
+              <Avatar user={user} />
+              <span className="st-rt"><b>{name}</b><small>{role}</small></span>
+            </div>
+          </nav>
+          <section className="st-mn">
+            <header className="st-hd">
+              <button type="button" className="icon-btn st-cback" aria-label={t("settings.back")} onClick={() => setView("nav")}><ChevronLeft size={18} /></button>
+              <div className="st-ttl" data-leaving={leaving}>
+                <h2 className="st-ttx">{current.label}</h2>
+                <p className="st-desc">{current.desc}</p>
               </div>
-              {filtering && <div id="memory-filters" className="ochi-settings__filter-options">
-                <SelectField
-                  value={scope}
-                  onChange={setScope}
-                  label={t("memory.scopeLabel")}
-                  options={[
-                    { value: "all", label: t("memory.allScopes") },
-                    { value: "user", label: t("memory.personal") },
-                    ...projects.map((project) => ({ value: project.id, label: project.name })),
-                  ]}
-                />
-                <SelectField value={kind} onChange={setKind} label={t("memory.kind")}
-                  options={[{ value: "all", label: t("memory.allKinds") }, ...kinds]} />
-                <button className="text-button" type="button" onClick={() => { setScope("all"); setKind("all"); }}>{t("common.reset")}</button>
-              </div>}
-              {loading ? (
-                <div className="panel-loading">
-                  <LoaderCircle className="spin" size={20} />
-                </div>
-              ) : (
-                <div className="ochi-settings__records">
-                  {filtered.map((memory) => (
-                    <article key={memory.id}>
-                      <div className="ochi-settings__record-main">
-                        <div className="ochi-settings__metadata">
-                          <span>
-                            {kinds.find((item) => item.value === memory.kind)
-                              ?.label ?? t("memory.fact")}
-                          </span>
-                          <span>
-                            {memory.project_id
-                              ? (projects.find(
-                                  (project) => project.id === memory.project_id,
-                                )?.name ?? t("projects.title"))
-                              : t("memory.personal")}
-                          </span>
-                          <span>
-                            {memory.source === "automatic"
-                              ? t("common.automatic")
-                              : memory.source === "agent"
-                                ? t("memory.assistant")
-                                : t("common.manual")}
-                          </span>
-                        </div>
-                        <p>{memory.content}</p>
-                        <div className="ochi-settings__source">
-                          <time>
-                            {new Date(
-                              memory.updated_at ?? memory.created_at,
-                            ).toLocaleDateString(getLocale(), {
-                              month: "short",
-                              day: "numeric",
-                            })}
-                          </time>
-                          {memory.source_session_id && (
-                            <button
-                              className="text-button"
-                              onClick={() => {
-                                onClose();
-                                onNavigate?.(`/c/${memory.source_session_id}`);
-                              }}
-                            >
-                              {t("memory.sourceConversation")}
-                              <ArrowUpRight size={13} />
-                            </button>
-                          )}
-                        </div>
-                        {memory.source_excerpt && (
-                          <details className="ochi-settings__excerpt">
-                            <summary>
-                              {t("memory.sourceExcerpt")}
-                              <ChevronDown size={13} />
-                            </summary>
-                            <blockquote>{memory.source_excerpt}</blockquote>
-                          </details>
-                        )}
-                      </div>
-                      <div className="ochi-settings__record-actions">
-                        <button
-                          className="icon-button"
-                          onClick={() => setEditing(memory)}
-                          aria-label={t("memory.edit")}
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          className="icon-button danger"
-                          onClick={() => void remove(memory.id)}
-                          aria-label={t("memory.delete")}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                  {!filtered.length && (
-                    <div className="ochi-settings__empty">{query || kind !== "all" || scope !== "all" ? t("memory.noResults") : t("memory.empty")}</div>
-                  )}
-                </div>
-              )}
-              </>}
-            </section>
-          )}
-          {error && section === "memory" && (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          )}
+            </header>
+            <div className="st-scroll" ref={scroller} onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 4)}>
+              <div className="st-col">
+                <div className="st-bd" data-leaving={leaving} role="tabpanel" id={`settings-${shown}`} aria-label={current.label}>{content}</div>
+              </div>
+            </div>
+            <span className="st-saved" data-on={savedVisible} aria-hidden="true"><Check size={13} />{t("settings.saved")}</span>
+            <span className="sr-only" role="status">{savedVisible ? t("settings.saved") : ""}</span>
+          </section>
         </div>
-      </div>
+      </SavedContext.Provider>
     </Modal>
   );
 }
