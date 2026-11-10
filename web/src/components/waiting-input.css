@@ -1,0 +1,13 @@
+/* Questions Ochi asks mid-run (Design Lab "ask" card): options, free text, resolved answer. */
+.ask-card { margin: var(--pad-3) 0 var(--pad-5); padding: 14px; border-radius: var(--r-lg); background: var(--raised); box-shadow: 0 0 0 1px var(--line-strong), var(--sh-1); animation: rise var(--dur-3) var(--ease) both; }
+.ask-card .q { margin: 0; font-size: var(--fs-ui); font-weight: var(--weight-medium); line-height: 1.5; overflow-wrap: anywhere; }
+.ask-card .opts { display: grid; gap: 6px; margin: 10px 0; }
+.ask-card .opt { display: flex; flex-direction: column; text-align: left; padding: 8px 12px; border-radius: var(--r-md); box-shadow: 0 0 0 1px var(--line); transition: box-shadow var(--dur-2), background var(--dur-2), transform var(--dur-1); }
+.ask-card .opt b { font-weight: var(--weight-normal); overflow-wrap: anywhere; }
+.ask-card .opt:hover:not(:disabled) { background: var(--hover); }
+.ask-card .opt:active:not(:disabled) { transform: scale(0.99); }
+.ask-card .opt[aria-pressed="true"] { background: var(--accent-soft); box-shadow: 0 0 0 1.5px var(--accent), 0 0 0 4px var(--accent-soft); }
+.ask-card .opt:disabled { opacity: 0.6; }
+.ask-card .free { display: flex; gap: 8px; }
+.ask-card .free .input { flex: 1; min-width: 0; }
+.ask-card .form-error { margin: 8px 0 0; }

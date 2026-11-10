@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Clock3, Pencil, Trash2 } from "lucide-react";
 import type { PendingRun } from "../lib/types";
 import { Modal } from "./Modal";
-import "./execution.css";
+import "./composer.css";
 export function QueueTray({
   items,
   onCancel,
@@ -43,7 +43,7 @@ export function QueueTray({
               {item.message}
             </span>
             <button
-              className="icon-button"
+              className="icon-btn sm"
               aria-label={t("queue.edit")}
               onClick={() => {
                 setEditing(item);
@@ -54,7 +54,7 @@ export function QueueTray({
               <Pencil size={14} />
             </button>
             <button
-              className="icon-button"
+              className="icon-btn sm"
               aria-label={t("queue.cancel")}
               onClick={() => void onCancel(item.run_id)}
             >
@@ -70,14 +70,14 @@ export function QueueTray({
           footer={
             <>
               <button
-                className="secondary-button"
+                className="btn secondary"
                 onClick={() => setEditing(null)}
                 disabled={busy}
               >
                 {t("common.cancel")}
               </button>
               <button
-                className="primary-button"
+                className="btn primary"
                 disabled={busy || !text.trim()}
                 onClick={() => void save()}
               >
@@ -93,7 +93,7 @@ export function QueueTray({
             }}
           >
             <textarea
-              className="field-input"
+              className="textarea"
               rows={5}
               value={text}
               onChange={(event) => setText(event.target.value)}

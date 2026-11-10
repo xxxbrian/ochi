@@ -13,3 +13,5 @@ export function moveModel(ids: readonly string[], id: string, offset: -1 | 1): s
   [next[index], next[target]] = [next[target]!, next[index]!];
   return next;
 }
+
+export const contextLabel = (tokens: number) => (tokens >= 1_000_000 ? `${+(tokens / 1_000_000).toFixed(1)}M` : tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : String(tokens));

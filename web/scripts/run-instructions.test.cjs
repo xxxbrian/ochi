@@ -18,7 +18,7 @@ function load(file, imports = {}, globals = {}) {
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(output, { module, exports: module.exports, AbortController, TextEncoder, Date, Math, Map, Set, Promise, JSON, Error, ...globals,
-    require(name) { if (name in imports) return imports[name]; const locale = (name === "../i18n/errors" ? i18n.errors : name === "../i18n/process" ? i18n.process : name === "../i18n" ? i18n.runtime : undefined) ?? i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
+    require(name) { if (/\/Busy$/.test(name)) return { Busy: () => null }; if (/\/Loading$/.test(name)) return { LoadingDots: () => null, SkelRows: () => null }; if (name in imports) return imports[name]; const locale = (name === "../i18n/errors" ? i18n.errors : name === "../i18n/process" ? i18n.process : name === "../i18n" ? i18n.runtime : undefined) ?? i18n.resolve(name, file.startsWith("mobile/") ? "mobile" : "web"); if (locale) return locale; if (name.endsWith("/appearance")) return { sendsOnEnter: (e) => e.key === "Enter" && !e.shiftKey }; if (name.endsWith("/modelSelection")) return { contextLabel: (n) => String(n) }; if (name.endsWith("/reasoningLabels")) return { effortLabel: (value) => value }; throw new Error(`Unexpected import ${name}`); },
   }, { filename: file });
   return module.exports;
 }
@@ -220,8 +220,8 @@ function composerHarness(native, patch = {}) {
   const imports = {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx }, 'lucide-react': icons, 'lucide-react-native': icons,
     '../lib/api': { api: { upload: async () => ({ id: 'file', name: 'file', mime_type: 'text/plain', url: '/file', size: 1 }) } },
-    './ui/Select': { SelectField: 'SelectField' }, './FileCards': { sizeText: String }, './BrandIcon': { BrandIcon: 'BrandIcon' }, './composer.css': {},
-    '@base-ui/react/popover': { Popover: chrome },
+    './ui/Select': { SelectField: 'SelectField' }, '../lib/composeEvent': { COMPOSE_EVENT: 'ochi:compose' }, './FileCards': { sizeText: String }, './BrandIcon': { BrandIcon: 'BrandIcon' }, './composer.css': {},
+    '@base-ui/react/popover': { Popover: chrome }, '@base-ui/react/menu': { Menu: chrome },
     'react-native': { ...chrome, ...Object.fromEntries(['ActivityIndicator', 'Image', 'Pressable', 'ScrollView', 'Switch', 'Text', 'TextInput', 'View'].map((name) => [name, name])), Platform: { OS: 'ios' }, StyleSheet: { create: (value) => value, hairlineWidth: 0.5 }, useWindowDimensions: () => ({ width: 393, fontScale: 1 }) },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }) },
     '../ui/overlayGeometry': load('mobile/src/ui/overlayGeometry.ts'),
@@ -233,7 +233,7 @@ function composerHarness(native, patch = {}) {
   };
   const module = load(`${native ? 'mobile' : 'web'}/src/components/Composer.tsx`, imports, {
     setTimeout: time.setTimeout, clearTimeout: time.clearTimeout,
-    window: { matchMedia: () => ({ matches: false }) }, sessionStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: (key) => storage.delete(key) },
+    window: { matchMedia: () => ({ matches: false }), addEventListener() {}, removeEventListener() {} }, sessionStorage: { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: (key) => storage.delete(key) },
   });
   let props = { draftKey: 'S', models: [], modelId: '', effort: '', onModel() {}, onEffort() {}, computerEnabled: false, onComputer() {}, onError() {}, onStop() {}, onSubmit: async () => true, onSupplement: async () => true, busy: true, running: true, initialDraft: 'Preserve CSV', ...patch };
   function render(next = {}) { props = { ...props, ...next }; cursor = 0; dirty = false; tree = module.Composer(props); effects.splice(0).forEach((effect) => effect()); }

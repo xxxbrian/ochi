@@ -1,91 +1,102 @@
-.composer.ochi-composer {
-    container: ochi-input / inline-size;
-    width: 100%;
-    min-height: 102px;
-    padding: 12px 12px 8px;
-    border: 1px solid var(--line);
-    border-radius: 24px;
-    background: var(--surface-raised);
-    transition: border-color 160ms ease;
+/* Composer (Design Lab shell.css): the floating card, its tool chips, model/effort menus and the round send/stop button.
+   Owned here: .composer-wrap/.composer-in placement, queue tray and run-instruction notes that sit on the card. */
+.composer-wrap { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 20px 18px; pointer-events: none; z-index: 4; }
+.composer-wrap::before { content: ""; position: absolute; inset: -40px 0 0; background: linear-gradient(to top, var(--canvas) 52%, transparent); pointer-events: none; }
+.composer-in { position: relative; width: min(var(--thread-w), 100%); margin: 0 auto; pointer-events: auto; }
+.view-chat[data-empty="true"] .composer-wrap { position: relative; padding: 0 20px; margin: 0; }
+.view-chat[data-empty="true"] .composer-wrap::before { display: none; }
+
+.composer {
+    position: relative; container: composer / inline-size; background: var(--raised); border-radius: var(--r-composer);
+    box-shadow: var(--sh-composer); padding: 12px 12px 8px 16px; transition: box-shadow var(--dur-3) var(--ease);
 }
-.composer.ochi-composer:focus-within { border-color: var(--line-strong, var(--muted)); }
-.composer.ochi-composer textarea {
-    display: block;
-    width: 100%;
-    min-height: 44px;
-    max-height: 250px;
-    padding: 4px 8px 8px;
-    border: 0;
-    outline: 0;
-    resize: none;
-    background: transparent;
-    font-size: 16px;
-    line-height: 24px;
+.composer:focus-within { box-shadow: var(--sh-composer-focus); }
+.composer textarea {
+    display: block; width: 100%; min-height: 26px; max-height: 220px; border: 0; background: none; resize: none; outline: 0;
+    font: 400 calc(var(--fs-ui) + 1px)/1.55 var(--font-ui); padding: 2px 0;
 }
-.composer.ochi-composer textarea::placeholder { color: var(--muted); }
-.ochi-composer__toolbar, .ochi-composer__tools, .ochi-composer__send-tools { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.ochi-composer__supplement { flex-shrink: 0; min-width: 40px; min-height: 32px; padding: 4px 8px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 12px; line-height: 20px; white-space: nowrap; }
-.ochi-composer__supplement:hover:not(:disabled) { color: var(--ink); background: var(--hover); }
-.ochi-composer__supplement:disabled { opacity: 0.4; }
-.ochi-composer__toolbar { justify-content: space-between; }
-.ochi-composer__send-tools { flex-shrink: 0; margin-left: auto; }
-.ochi-composer__toolbar .icon-button { width: 32px; height: 32px; flex-basis: 32px; }
-.ochi-composer__toolbar .icon-button > svg { width: 18px; height: 18px; }
-.ochi-composer__toolbar .send-button { width: 40px; height: 40px; flex-basis: 40px; }
-.ochi-composer__model, .ochi-composer__reasoning { position: relative; display: flex; min-width: 0; }
-.ochi-composer__model { flex: 0 1 auto; max-width: 216px; }
-.ochi-composer__model .choice-trigger, .ochi-composer__reasoning .choice-trigger { width: auto; max-width: 100%; min-height: 32px; gap: 4px; padding: 4px; border: 0; background: transparent; color: var(--muted); font-size: 14px; line-height: 20px; }
-.ochi-composer__model .choice-trigger .choice-value { max-width: 160px; }
-.ochi-composer__model .choice-trigger:hover, .ochi-composer__reasoning .choice-trigger:hover { background: var(--hover); color: var(--ink); }
-.ochi-composer__effort-dot { display: none; }
-.ochi-composer__reasoning-toggle, .ochi-composer__budget-trigger { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px; border-radius: 8px; background: transparent; color: var(--muted); white-space: nowrap; font-size: 14px; }
-.ochi-composer__reasoning-toggle:hover, .ochi-composer__reasoning-toggle.is-active, .ochi-composer__budget-trigger:hover { color: var(--ink); background: var(--hover); }
-.ochi-composer__computer { display: inline-flex; align-items: center; flex-shrink: 0; gap: 4px; min-height: 32px; padding: 4px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 14px; white-space: nowrap; }
-.ochi-composer__computer:hover { color: var(--ink); }
-.ochi-composer__computer.is-active { background: transparent; color: var(--muted); }
-.ochi-composer__switch-track { display: inline-flex; align-items: center; flex: 0 0 24px; width: 24px; height: 14px; padding: 2px; border-radius: 16px; background: var(--line-strong, var(--subtle)); transition: background 160ms ease; }
-.ochi-composer__switch-track > span { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-raised); transition: transform 160ms ease; }
-.ochi-composer__computer.is-active .ochi-composer__switch-track { background: var(--ink); }
-.ochi-composer__computer.is-active .ochi-composer__switch-track > span { transform: translateX(10px); }
-.ochi-composer__computer.is-pending .ochi-composer__switch-track { opacity: 0.5; }
-.send-button { display: grid; place-items: center; padding: 0; border-radius: 50%; background: var(--accent); color: var(--surface); transition: opacity 160ms ease; }
-.send-button:disabled { opacity: 0.22; }
-.voice-button.is-listening { color: var(--danger); background: var(--hover); }
-.ochi-composer__budget-popup { width: 224px; max-width: calc(100vw - 24px); padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-raised); box-shadow: var(--shadow-popover); }
-.ochi-composer__budget-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-.ochi-composer__budget-heading h2 { margin: 0; font-size: 14px; font-weight: 550; }
-.ochi-composer__budget-heading .icon-button { width: 32px; height: 32px; flex-basis: 32px; }
-.ochi-composer__budget-popup label { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
-.ochi-composer__budget-popup input { width: 100%; min-width: 0; min-height: 36px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); font-size: 14px; }
-@container ochi-input (max-width: 680px) {
-    .ochi-composer__computer-label, .ochi-composer__send-tools .voice-button { display: none; }
-    .ochi-composer__model { max-width: 188px; }
-    .ochi-composer__model .choice-trigger .choice-value { max-width: 132px; }
+.composer textarea::placeholder { color: var(--subtle); }
+.composer-bar { display: flex; align-items: center; gap: 2px; margin-top: 6px; min-width: 0; }
+.composer-bar .grow { flex: 1; }
+
+.composer-files { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.composer-file {
+    display: inline-flex; align-items: center; gap: 8px; max-width: 220px; padding: 4px 4px 4px 8px; border-radius: var(--r-md);
+    background: var(--sunken); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--fs-sm); min-width: 0;
 }
-@container ochi-input (max-width: 560px) {
-    .ochi-composer__send-now { display: none; }
-    .ochi-composer__model { max-width: 152px; }
-    .ochi-composer__model .choice-trigger .choice-value { max-width: 96px; }
+.composer-file > span { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.composer-file strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-file small { color: var(--muted); font-size: var(--fs-xs); }
+.composer-file > .ic { color: var(--muted); }
+.composer-image img { width: 32px; height: 32px; border-radius: var(--r-xs); object-fit: cover; }
+
+.chip-btn {
+    display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border-radius: var(--r-md); min-width: 0;
+    color: var(--ink-2); font-weight: 500; font-size: var(--fs-sm); white-space: nowrap; transition: background var(--dur-1), color var(--dur-1);
 }
-@container ochi-input (max-width: 460px) {
-    .ochi-composer__tools, .ochi-composer__send-tools { gap: 0; }
-    .ochi-composer__toolbar { gap: 0; }
-    .ochi-composer__model { flex: 0 0 44px; max-width: 44px; }
-    .ochi-composer__toolbar .icon-button, .ochi-composer__toolbar .send-button, .ochi-composer__model .choice-trigger, .ochi-composer__reasoning .choice-trigger, .ochi-composer__budget-trigger, .ochi-composer__reasoning-toggle { width: 44px; min-width: 44px; min-height: 44px; height: 44px; flex-basis: 44px; max-width: none; padding: 0; justify-content: center; }
-    .ochi-composer__model .choice-trigger .choice-value, .ochi-composer__model .choice-trigger .choice-chevron, .ochi-composer__reasoning .choice-trigger .choice-value, .ochi-composer__reasoning .choice-trigger .choice-chevron, .ochi-composer__budget-trigger > span, .ochi-composer__reasoning-toggle > span { display: none; }
-    .ochi-composer__effort-dot { display: block; position: absolute; top: 8px; right: 8px; width: 4px; height: 4px; border-radius: 50%; background: var(--ink); pointer-events: none; }
-    .ochi-composer__computer { min-height: 44px; padding-inline: 4px; }
+.chip-btn:hover:not(:disabled), .chip-btn[aria-expanded="true"], .chip-btn[data-popup-open] { background: var(--hover); color: var(--ink); }
+.chip-btn:disabled { opacity: 0.45; }
+.chip-btn[aria-pressed="true"], .chip-btn[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); }
+.chip-btn .ic { width: 14px; height: 14px; color: var(--muted); }
+.chip-btn[aria-pressed="true"] .ic, .chip-btn[aria-checked="true"] .ic { color: currentColor; }
+.chip-btn img { width: 15px; height: 15px; }
+.chip-btn[data-pending] { opacity: 0.7; }
+.chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.model-chip { max-width: 216px; }
+
+.send {
+    width: 32px; height: 32px; margin-left: 4px; flex: none; border-radius: calc(var(--r-md) + 2px); display: grid; place-items: center;
+    background: var(--accent); color: var(--accent-ink); box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.22), 0 1px 2px rgb(var(--shadow-rgb) / 0.2);
+    transition: transform var(--dur-2) var(--ease), background var(--dur-2), opacity var(--dur-2);
 }
-@container ochi-input (max-width: 330px) {
-    .ochi-composer__tools { overflow-x: auto; scrollbar-width: none; }
-    .ochi-composer__tools::-webkit-scrollbar { display: none; }
-    .ochi-composer__tools > * { flex-shrink: 0; }
+.send:hover:not(:disabled) { transform: translateY(-1px); }
+.send:active:not(:disabled) { transform: scale(0.92); }
+.send:disabled { background: var(--active); color: var(--subtle); box-shadow: none; }
+.send .ic { width: 16px; height: 16px; stroke-width: 2.2; }
+.send[data-pending] .ic { animation: send-lift 0.9s var(--ease-io) infinite; }
+@keyframes send-lift { 0% { translate: 0 5px; opacity: 0; } 40% { opacity: 1; } 100% { translate: 0 -5px; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .send[data-pending] .ic { animation: none; } }
+.send[data-mode="stop"] { background: var(--ink); color: var(--canvas); border-radius: 50%; }
+.send[data-mode="stop"] .ic { fill: currentColor; width: 12px; height: 12px; }
+.icon-btn[data-listening] { color: var(--danger); background: var(--hover); }
+
+/* model + effort + budget popovers */
+.model-pop { width: 320px; padding: 5px; }
+.model-search { padding: 3px 3px 5px; }
+.model-search .input { height: 30px; }
+.model-list { max-height: 340px; overflow: auto; }
+.model-empty { padding: 14px; }
+.menu-item .tick-on { margin-left: auto; color: var(--accent); display: inline-flex; }
+.menu-item .tick-on .ic { color: currentColor; width: 14px; height: 14px; }
+.budget-pop { width: 224px; padding: 8px; }
+.budget-field { display: flex; align-items: center; gap: 8px; padding: 2px 4px 4px; }
+.budget-field .field-hint { margin: 0; }
+
+/* queued messages + run-instruction receipts hang off the card's top edge */
+.queue-tray {
+    max-height: 176px; overflow: auto; margin: 0 14px -10px; padding: 8px 12px 14px; border-radius: var(--r-lg) var(--r-lg) 0 0;
+    background: var(--sunken); box-shadow: 0 0 0 1px var(--line); font-size: var(--fs-sm); color: var(--ink-2);
+}
+.queue-tray article { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.queue-tray article + article { border-top: 1px solid var(--line); }
+.queue-tray article > svg { flex: none; color: var(--muted); width: 14px; height: 14px; }
+.queue-tray article > span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.queue-tray small { margin-right: 8px; color: var(--muted); font-size: var(--fs-xs); }
+.run-instructions { max-height: 88px; overflow-y: auto; margin: 0 14px 6px; color: var(--muted); font-size: var(--fs-xs); }
+.run-instructions__receipt, .run-instructions__notice { display: flex; align-items: center; gap: 12px; min-height: 26px; }
+.run-instructions__content { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.run-instructions__status { flex: none; }
+.run-instructions__notice button { padding: 4px 8px; margin-left: auto; border-radius: var(--r-sm); color: var(--ink); }
+.run-instructions__notice button:hover { background: var(--hover); }
+
+/* narrow cards: icon-only chips, 44px touch targets */
+@container composer (max-width: 560px) {
+    .chip-btn:not(.model-chip) .chip-label { display: none; }
+    .model-chip { max-width: 148px; }
 }
 @media (max-width: 760px), (pointer: coarse) {
-    .ochi-composer__supplement { min-height: 44px; }
-    .composer.ochi-composer { padding: 12px 8px 8px; }
-    .ochi-composer__toolbar .icon-button, .ochi-composer__toolbar .send-button { width: 44px; height: 44px; flex-basis: 44px; }
-    .ochi-composer__model .choice-trigger, .ochi-composer__reasoning .choice-trigger, .ochi-composer__budget-trigger, .ochi-composer__reasoning-toggle, .ochi-composer__computer { min-height: 44px; }
-    .ochi-composer__budget-popup input { min-height: 44px; font-size: 16px; }
-    .ochi-composer__budget-heading .icon-button { width: 44px; height: 44px; flex-basis: 44px; }
+    .composer { padding: 12px 8px 8px 12px; }
+    .chip-btn { min-height: 36px; }
+    .send { width: 40px; height: 40px; }
+    .queue-tray .icon-btn { width: 36px; height: 36px; }
 }

@@ -1,8 +1,11 @@
+import { COMPOSE_EVENT } from "../lib/composeEvent";
 import { t, useI18n, getLocale } from "../lib/i18n";
+import { sendsOnEnter } from "../lib/appearance";
 import {
   memo,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -11,21 +14,26 @@ import {
 import {
   ArrowUp,
   Brain,
-  LoaderCircle,
+  Check,
+  ChevronDown,
+  FileUp,
+  ImagePlus,
   Mic,
   Monitor,
   Paperclip,
   Plus,
-  Square,
+  Search,
   SkipForward,
+  Square,
   X,
 } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
+import { Menu } from "@base-ui/react/menu";
 import type { Artifact, Model } from "../lib/types";
 import { api } from "../lib/api";
 import type { InstructionAcceptance } from "../lib/runInstructions";
+import { contextLabel } from "../lib/modelSelection";
 import { effortLabel } from "../lib/reasoningLabels";
-import { SelectField } from "./ui/Select";
 import { sizeText } from "./FileCards";
 import { BrandIcon } from "./BrandIcon";
 import "./composer.css";
@@ -92,53 +100,108 @@ function readDraft(key: string) {
     return "";
   }
 }
-function ThinkingBudget({
-  value,
-  min,
-  max,
-  disabled,
-  onChange,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  disabled: boolean;
-  onChange: (value: number) => void;
-}) {
+function ThinkingBudget({ value, min, max, disabled, onChange }: { value: number; min: number; max: number; disabled: boolean; onChange: (value: number) => void }) {
   useI18n();
   const [draftBudget, setDraftBudget] = useState(String(value));
   useEffect(() => setDraftBudget(String(value)), [value]);
   function commitBudget() {
     const parsed = Number(draftBudget);
-    const next = draftBudget.trim() && Number.isFinite(parsed)
-      ? Math.min(max, Math.max(min, Math.round(parsed)))
-      : value;
+    const next = draftBudget.trim() && Number.isFinite(parsed) ? Math.min(max, Math.max(min, Math.round(parsed))) : value;
     setDraftBudget(String(next));
     onChange(next);
   }
   return <Popover.Root>
-    <Popover.Trigger type="button" className="ochi-composer__budget-trigger" disabled={disabled} aria-label={t("reasoning.budget")} title={t("reasoning.budgetValue", { count: value })}>
-      <Brain size={18} />
-      <span>{value.toLocaleString(getLocale())}</span>
+    <Popover.Trigger type="button" className="chip-btn" disabled={disabled} aria-label={t("reasoning.budget")} title={t("reasoning.budgetValue", { count: value })}>
+      <Brain className="ic" />
+      <span className="chip-label">{value.toLocaleString(getLocale())}</span>
     </Popover.Trigger>
     <Popover.Portal>
-      <Popover.Positioner className="choice-positioner" side="top" sideOffset={7} align="start">
-        <Popover.Popup className="ochi-composer__budget-popup">
-          <div className="ochi-composer__budget-heading">
-            <Popover.Title>{t("reasoning.budget")}</Popover.Title>
-            <Popover.Close className="icon-button" aria-label={t("common.close")}><X size={16} /></Popover.Close>
-          </div>
-          <label>
-            <input type="number" aria-label={t("reasoning.budget")} min={min} max={max} step={512} value={draftBudget} onChange={(event) => setDraftBudget(event.target.value)} onBlur={commitBudget} onKeyDown={(event) => {
+      <Popover.Positioner className="pop-positioner" side="top" sideOffset={8} align="end">
+        <Popover.Popup className="pop budget-pop">
+          <div className="menu-label"><Popover.Title render={<span />}>{t("reasoning.budget")}</Popover.Title></div>
+          <label className="budget-field">
+            <input className="input" type="number" aria-label={t("reasoning.budget")} min={min} max={max} step={512} value={draftBudget} onChange={(event) => setDraftBudget(event.target.value)} onBlur={commitBudget} onKeyDown={(event) => {
               if (event.key === "Enter") { event.preventDefault(); commitBudget(); }
             }} />
-            <span>{t("common.tokens")}</span>
+            <span className="field-hint">{t("common.tokens")}</span>
           </label>
         </Popover.Popup>
       </Popover.Positioner>
     </Popover.Portal>
   </Popover.Root>;
 }
+
+/** Model chip + searchable, provider-grouped menu (lab composer model menu). */
+function ModelPicker({ models, value, disabled, onChange }: { models: Model[]; value: string; disabled: boolean; onChange: (id: string) => void }) {
+  useI18n();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const current = models.find((model) => model.id === value);
+  const groups = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    const map = new Map<string, Model[]>();
+    for (const model of models) {
+      if (needle && !model.name.toLowerCase().includes(needle) && !(model.provider_name ?? "").toLowerCase().includes(needle)) continue;
+      const key = model.provider_name ?? "";
+      map.set(key, [...(map.get(key) ?? []), model]);
+    }
+    return [...map.entries()];
+  }, [models, query]);
+  return <Popover.Root open={open} onOpenChange={(next) => { setOpen(next); if (!next) setQuery(""); }}>
+    <Popover.Trigger type="button" className="chip-btn model-chip" disabled={disabled} aria-label={t("composer.chooseModel")} title={current?.name || t("composer.chooseModel")}>
+      <BrandIcon src={current?.icon || current?.provider_icon} size={15} />
+      <span className="chip-label">{current?.name || t("composer.chooseModel")}</span>
+      <ChevronDown className="ic chev down" />
+    </Popover.Trigger>
+    <Popover.Portal>
+      <Popover.Positioner className="pop-positioner" side="top" sideOffset={8} align="end" collisionPadding={8}>
+        <Popover.Popup className="pop model-pop" aria-label={t("composer.chooseModel")} initialFocus={false}>
+          <div className="search-field model-search">
+            <Search className="ic" />
+            <input className="input" autoFocus placeholder={t("composer.searchModels")} aria-label={t("composer.searchModels")} autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} />
+          </div>
+          <div className="menu model-list" role="menu">
+            {groups.length === 0 && <div className="menu-label model-empty">{t("composer.noModels")}</div>}
+            {groups.map(([provider, items]) => <div key={provider} role="group">
+              {provider && <div className="menu-label">{provider}</div>}
+              {items.map((model) => <button key={model.id} type="button" role="menuitemradio" aria-checked={model.id === value} className="menu-item rich"
+                onClick={() => { onChange(model.id); setOpen(false); }}>
+                <BrandIcon src={model.icon || model.provider_icon} size={16} />
+                <span className="mi-text"><b>{model.name}</b>{model.context_window > 0 && <small className="mono">{contextLabel(model.context_window)}</small>}</span>
+                <Check className="ic tick" />
+              </button>)}
+            </div>)}
+          </div>
+        </Popover.Popup>
+      </Popover.Positioner>
+    </Popover.Portal>
+  </Popover.Root>;
+}
+
+/** Reasoning-effort chip + radio menu. */
+function EffortPicker({ efforts, value, disabled, onChange }: { efforts: string[]; value: string; disabled: boolean; onChange: (value: string) => void }) {
+  useI18n();
+  const options = ["", ...efforts];
+  return <Menu.Root>
+    <Menu.Trigger className="chip-btn" disabled={disabled} aria-label={t("reasoning.effort")} title={t("reasoning.effortValue", { level: effortLabel(value) })}>
+      <Brain className="ic" />
+      <span className="chip-label">{value ? effortLabel(value) : t("reasoning.effort")}</span>
+    </Menu.Trigger>
+    <Menu.Portal>
+      <Menu.Positioner className="pop-positioner" side="top" sideOffset={8} align="end" collisionPadding={8}>
+        <Menu.Popup className="pop">
+          <Menu.RadioGroup className="menu" value={value} onValueChange={(next) => onChange(String(next))}>
+            {options.map((option) => <Menu.RadioItem key={option || "default"} value={option} className="menu-item" closeOnClick>
+              <span className="mi-text">{option ? effortLabel(option) : t("common.default")}</span>
+              <Menu.RadioItemIndicator className="tick-on"><Check className="ic" /></Menu.RadioItemIndicator>
+            </Menu.RadioItem>)}
+          </Menu.RadioGroup>
+        </Menu.Popup>
+      </Menu.Positioner>
+    </Menu.Portal>
+  </Menu.Root>;
+}
+
 // Input owns draft state independently from the growing run snapshot.
 export const Composer = memo(function Composer({
   onSubmit,
@@ -175,9 +238,18 @@ export const Composer = memo(function Composer({
   const [listening, setListening] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
   const recognition = useRef<Recognition | null>(null);
   const rootRef = useRef<HTMLFormElement>(null);
   const mounted = useRef(true);
+  useEffect(() => {
+    const compose = (event: Event) => {
+      setDraft((event as CustomEvent<string>).detail);
+      inputRef.current?.focus();
+    };
+    window.addEventListener(COMPOSE_EVENT, compose);
+    return () => window.removeEventListener(COMPOSE_EVENT, compose);
+  }, []);
   const latestDraft = useRef({ draft, files });
   latestDraft.current = { draft, files };
   const currentModel = models.find((model) => model.id === modelId);
@@ -250,8 +322,7 @@ export const Composer = memo(function Composer({
   }
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (
-      event.key === "Enter" &&
-      !event.shiftKey &&
+      sendsOnEnter(event) &&
       !event.nativeEvent.isComposing &&
       event.nativeEvent.keyCode !== 229 &&
       !window.matchMedia("(pointer: coarse)").matches
@@ -273,6 +344,7 @@ export const Composer = memo(function Composer({
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
+      if (imageRef.current) imageRef.current.value = "";
     }
   }
   function toggleVoice() {
@@ -306,32 +378,20 @@ export const Composer = memo(function Composer({
     }
   }
 
+  const canSend = Boolean(draft.trim() || files.length) && !unavailable && !submitting && !supplementBusy && !uploading;
   return (
-    <form
-      className="composer ochi-composer"
-      ref={rootRef}
-      onSubmit={(event) => void submit(event)}
-    >
+    <form className="composer" ref={rootRef} onSubmit={(event) => void submit(event)}>
       {files.length > 0 && (
         <div className="composer-files">
           {files.map((file) => (
             <div className={`composer-file ${file.mime_type.startsWith("image/") ? "composer-image" : ""}`} key={file.id}>
-              {file.mime_type.startsWith("image/") ? <img src={file.url} alt={file.name} /> : <Paperclip size={15} />}
+              {file.mime_type.startsWith("image/") ? <img src={file.url} alt={file.name} /> : <Paperclip className="ic" />}
               <span>
                 <strong>{file.name}</strong>
                 <small>{sizeText(file.size)}</small>
               </span>
-              <button
-                type="button"
-                className="icon-button"
-                onClick={() =>
-                  setFiles((current) =>
-                    current.filter((item) => item.id !== file.id),
-                  )
-                }
-                aria-label={t("file.remove", { name: file.name })}
-              >
-                <X size={15} />
+              <button type="button" className="icon-btn sm" onClick={() => setFiles((current) => current.filter((item) => item.id !== file.id))} aria-label={t("file.remove", { name: file.name })}>
+                <X className="ic" />
               </button>
             </div>
           ))}
@@ -346,161 +406,79 @@ export const Composer = memo(function Composer({
         placeholder={onSupplement ? t("composer.supplementPlaceholder") : t("composer.placeholder")}
         aria-label={t("composer.messageLabel")}
       />
-      <div className="ochi-composer__toolbar">
-        <div className="ochi-composer__tools">
-          <input
-            ref={fileRef}
-            type="file"
-            multiple
-            hidden
-            onChange={(event) => void upload(event.target.files)}
-          />
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={t("composer.addFile")}
-            title={t("composer.addFile")}
-            disabled={uploading || unavailable}
-            onClick={() => fileRef.current?.click()}
-          >
-            {uploading ? (
-              <LoaderCircle size={18} className="spin" />
-            ) : (
-              <Plus size={18} />
-            )}
+      <div className="composer-bar">
+        <input ref={fileRef} type="file" multiple hidden onChange={(event) => void upload(event.target.files)} />
+        <input ref={imageRef} type="file" accept="image/*" multiple hidden onChange={(event) => void upload(event.target.files)} />
+        <Menu.Root>
+          <Menu.Trigger className={`icon-btn sm${uploading ? " btn-progress" : ""}`} aria-label={uploading ? t("composer.uploading") : t("composer.addFile")} title={uploading ? t("composer.uploading") : t("composer.addFile")} disabled={uploading || unavailable}>
+            <Plus className="ic" />
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Positioner className="pop-positioner" side="top" sideOffset={8} align="start">
+              <Menu.Popup className="pop">
+                <div className="menu">
+                  <Menu.Item className="menu-item" onClick={() => fileRef.current?.click()}><FileUp className="ic" />{t("composer.uploadFile")}</Menu.Item>
+                  <Menu.Item className="menu-item" onClick={() => imageRef.current?.click()}><ImagePlus className="ic" />{t("composer.uploadImage")}</Menu.Item>
+                </div>
+              </Menu.Popup>
+            </Menu.Positioner>
+          </Menu.Portal>
+        </Menu.Root>
+        <button
+          type="button"
+          role="switch"
+          className={`chip-btn computer-chip-btn${computerUpdating ? " btn-progress" : ""}`}
+          aria-label={t("computer.allow")}
+          aria-checked={computerEnabled}
+          aria-pressed={computerEnabled}
+          data-pending={computerUpdating || undefined}
+          title={computerOnce ? t("computer.allowOnce") : computerEnabled ? t("computer.allowOn") : t("computer.allowOff")}
+          disabled={unavailable || computerUpdating}
+          onClick={() => onComputer(!computerEnabled)}
+        >
+          <Monitor className="ic" />
+          <span className="chip-label">{computerOnce ? t("computer.once") : t("computer.title")}</span>
+        </button>
+        <span className="grow" />
+        {models.length > 0 && <ModelPicker models={models} value={modelId} disabled={unavailable} onChange={onModel} />}
+        {efforts.length > 0 && <EffortPicker efforts={efforts} value={effort} disabled={unavailable} onChange={onEffort} />}
+        {configuredReasoning && toggleThinking && !efforts.length && (
+          <button type="button" className="chip-btn" aria-pressed={reasoningEnabled} aria-label={t("reasoning.thinking")}
+            title={reasoningEnabled ? t("reasoning.on") : t("reasoning.off")} disabled={unavailable} onClick={() => onReasoningEnabled?.(!reasoningEnabled)}>
+            <Brain className="ic" />
+            <span className="chip-label">{reasoningEnabled ? t("common.on") : t("common.close")}</span>
           </button>
-          {models.length > 0 && (
-            <div className="ochi-composer__model" title={currentModel?.name || t("composer.chooseModel")}>
-              <SelectField
-                compact
-                label={t("composer.chooseModel")}
-                title={currentModel?.name || t("composer.chooseModel")}
-                icon={<BrandIcon src={currentModel?.icon || currentModel?.provider_icon} size={18} />}
-                value={modelId}
-                onChange={onModel}
-                disabled={unavailable}
-                options={models.map((model) => ({
-                  value: model.id,
-                  label: model.name,
-                  detail: model.provider_name,
-                  icon: <BrandIcon src={model.icon || model.provider_icon} size={18} />,
-                }))}
-              />
-            </div>
-          )}
-          {efforts.length > 0 && (
-            <div className="ochi-composer__reasoning" title={t("reasoning.effortValue", { level: effortLabel(effort) })}>
-              <SelectField
-                compact
-                label={t("reasoning.effort")}
-                title={t("reasoning.effortValue", { level: effortLabel(effort) })}
-                icon={<Brain size={18} />}
-                value={effort}
-                onChange={onEffort}
-                disabled={unavailable}
-                options={[{ value: "", label: t("common.default") }, ...efforts.map((value) => ({ value, label: effortLabel(value) }))]}
-              />
-              {effort && <span className="ochi-composer__effort-dot" aria-hidden="true" />}
-            </div>
-          )}
-          {configuredReasoning && toggleThinking && !efforts.length && (
-            <button
-              type="button"
-              className={`effort-button ochi-composer__reasoning-toggle ${reasoningEnabled ? "is-active" : ""}`}
-              aria-pressed={reasoningEnabled}
-              aria-label={t("reasoning.thinking")}
-              title={reasoningEnabled ? t("reasoning.on") : t("reasoning.off")}
-              disabled={unavailable}
-              onClick={() => onReasoningEnabled?.(!reasoningEnabled)}
-            >
-              <Brain size={18} />
-              <span>{reasoningEnabled ? t("common.on") : t("common.close")}</span>
-            </button>
-          )}
-          {configuredReasoning && budgetThinking && (
-            <ThinkingBudget value={budget ?? currentModel?.reasoning_budget_default ?? 2048} min={budgetOption?.min ?? currentModel?.reasoning_budget_min ?? 0} max={budgetOption?.max ?? currentModel?.reasoning_budget_max ?? 100000} disabled={unavailable} onChange={(value) => onBudget?.(value)} />
-          )}
-          <button
-            type="button"
-            role="switch"
-            className={`computer-switch ochi-composer__computer ${computerEnabled ? "is-active" : ""} ${computerUpdating ? "is-pending" : ""}`}
-            aria-label={t("computer.allow")}
-            aria-checked={computerEnabled}
-            title={computerOnce ? t("computer.allowOnce") : computerEnabled ? t("computer.allowOn") : t("computer.allowOff")}
-            disabled={unavailable || computerUpdating}
-            onClick={() => onComputer(!computerEnabled)}
-          >
-            {computerUpdating ? (
-              <LoaderCircle size={18} className="spin" />
-            ) : (
-              <Monitor size={18} />
-            )}
-            <span className="ochi-composer__computer-label">{computerOnce ? t("computer.once") : t("computer.title")}</span>
-            <span className="ochi-composer__switch-track" aria-hidden="true"><span /></span>
+        )}
+        {configuredReasoning && budgetThinking && (
+          <ThinkingBudget value={budget ?? currentModel?.reasoning_budget_default ?? 2048} min={budgetOption?.min ?? currentModel?.reasoning_budget_min ?? 0} max={budgetOption?.max ?? currentModel?.reasoning_budget_max ?? 100000} disabled={unavailable} onChange={(value) => onBudget?.(value)} />
+        )}
+        {onSupplement && (
+          <button type="button" className="btn sm secondary" aria-label={t("composer.supplementLabel")} title={files.length ? t("composer.supplementNoFiles") : t("composer.supplementLabel")}
+            disabled={!draft.trim() || files.length > 0 || unavailable || submitting || supplementBusy || uploading}
+            onMouseDown={(event) => event.preventDefault()} onClick={() => void supplement()}>{t("composer.supplement")}</button>
+        )}
+        {voiceAvailable && (
+          <button type="button" className="icon-btn sm" aria-pressed={listening} data-listening={listening || undefined}
+            aria-label={listening ? t("composer.stopRecording") : t("composer.voiceInput")} title={t("composer.voiceInput")} onClick={toggleVoice}>
+            <Mic className="ic" />
           </button>
-        </div>
-        <div className="ochi-composer__send-tools">
-          {onSupplement && (
-            <button type="button" className="ochi-composer__supplement"
-              aria-label={t("composer.supplementLabel")} title={files.length ? t("composer.supplementNoFiles") : t("composer.supplementLabel")}
-              disabled={!draft.trim() || files.length > 0 || unavailable || submitting || supplementBusy || uploading}
-              onMouseDown={(event) => event.preventDefault()} onClick={() => void supplement()}>{t("composer.supplement")}</button>
-          )}
-          {voiceAvailable && (
-            <button
-              type="button"
-              className={`icon-button voice-button ${listening ? "is-listening" : ""}`}
-              aria-label={listening ? t("composer.stopRecording") : t("composer.voiceInput")}
-              title={t("composer.voiceInput")}
-              onClick={toggleVoice}
-            >
-              <Mic size={19} />
-            </button>
-          )}
-          {busy && (
-            <button
-              type="button"
-              className="icon-button stop-run-button"
-              aria-label={t("composer.stopTask")}
-              title={t("common.stop")}
-              disabled={stopping || unavailable}
-              onClick={onStop}
-            >
-              <Square size={15} fill="currentColor" />
-            </button>
-          )}
-          {busy && onSubmitNow && (draft.trim() || files.length > 0) && (
-            <button
-              type="button"
-              className="icon-button ochi-composer__send-now"
-              aria-label={t("composer.stopAndSend")}
-              title={t("composer.stopAndSend")}
-              disabled={unavailable || submitting || supplementBusy || uploading}
-              onClick={() => void submit(undefined, true)}
-            >
-              <SkipForward size={17} />
-            </button>
-          )}
-          <button
-            type="submit"
-            className="send-button"
-            aria-label={busy ? t("composer.queue") : t("common.send")}
-            title={busy ? t("composer.queue") : t("common.send")}
-            disabled={
-              (!draft.trim() && !files.length) ||
-              unavailable ||
-              submitting ||
-              supplementBusy ||
-              uploading
-            }
-          >
-            {submitting ? (
-              <LoaderCircle size={17} className="spin" />
-            ) : (
-              <ArrowUp size={19} />
-            )}
+        )}
+        {busy && onSubmitNow && (draft.trim() || files.length > 0) && (
+          <button type="button" className="icon-btn sm" aria-label={t("composer.stopAndSend")} title={t("composer.stopAndSend")}
+            disabled={unavailable || submitting || supplementBusy || uploading} onClick={() => void submit(undefined, true)}>
+            <SkipForward className="ic" />
           </button>
-        </div>
+        )}
+        {(!busy || canSend) && (
+          <button type="submit" className="send" data-pending={submitting || undefined} aria-label={busy ? t("composer.queue") : t("common.send")} title={busy ? t("composer.queue") : t("common.send")} disabled={!canSend}>
+            <ArrowUp className="ic" />
+          </button>
+        )}
+        {busy && (
+          <button type="button" className="send" data-mode="stop" aria-label={t("composer.stopTask")} title={t("common.stop")} disabled={stopping || unavailable} onClick={onStop}>
+            <Square className="ic" />
+          </button>
+        )}
       </div>
     </form>
   );
