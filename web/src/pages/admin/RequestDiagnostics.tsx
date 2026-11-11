@@ -1,10 +1,12 @@
 import { t, useAdminI18n, getLocale } from "./i18n";
 import { useEffect, useId, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Copy, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, Copy, Eraser, RefreshCw } from "lucide-react";
 import { adminApi } from "../../lib/api";
 import type { ProviderRequestDetail, ProviderRequestPage, ProviderRequestSummary } from "../../lib/types";
 import { Modal } from "../../components/Modal";
 import { ErrorNotice } from "./Fields";
+import { AdminHeader, Card, Drawer, Empty, Meter, onActivate, Pill, Seg, SkeletonRows, Stat } from "./ui";
+import { CopyButton } from "./CopyButton";
 
 function duration(value?: number) {
   if (value == null) return "—";
@@ -46,20 +48,20 @@ function RequestFacts({ item }: { item: ProviderRequestDetail }) {
     [t("readError"), item.read_error || "—"], [t("upstreamErrorCode"), item.upstream_error_code || "—"],
     [t("upstreamErrorType"), item.upstream_error_type || "—"], [t("upstreamError"), item.upstream_error || "—"],
   ];
-  return <dl className="request-facts">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
+  return <dl className="ad-facts">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
 }
 
 function RequestPayload({ headers, body }: { headers?: Record<string, string[]>; body?: string }) {
   useAdminI18n();
-  return <div className="request-payload">
-    <h4>{t("httpHeaders")}</h4><pre>{headers && Object.keys(headers).length ? JSON.stringify(headers, null, 2) : t("none")}</pre>
-    <h4>{t("httpBody")}</h4><pre>{body || t("noCapturedBody")}</pre>
+  return <div className="ad-payload">
+    <h4 className="ad-dh4">{t("httpHeaders")}</h4><pre className="ad-code">{headers && Object.keys(headers).length ? JSON.stringify(headers, null, 2) : t("none")}</pre>
+    <h4 className="ad-dh4">{t("httpBody")}</h4><pre className="ad-code">{body || t("noCapturedBody")}</pre>
   </div>;
 }
 
 function RequestDetail({ item }: { item: ProviderRequestDetail }) {
   useAdminI18n();
-  const [tab, setTab] = useState("metadata");
+  const [tab, setTab] = useState<string>("metadata");
   const [copyError, setCopyError] = useState("");
   const [copied, setCopied] = useState(false);
   const tabID = useId();
@@ -77,26 +79,23 @@ function RequestDetail({ item }: { item: ProviderRequestDetail }) {
     }
   }
   return <>
-    <div className="request-detail-toolbar">
-      <div className="request-tabs" role="tablist" aria-label={t("requestDetails")}>
-        {tabs.map(value => <button key={value.id} id={`${tabID}-${value.id}`} type="button" role="tab" aria-selected={tab === value.id} aria-controls={`${tabID}-content`} className={tab === value.id ? "selected" : ""} onClick={() => setTab(value.id)}>{value.title}</button>)}
-      </div>
-      <button type="button" className="secondary-button" onClick={() => void copy()}><Copy size={14} />{copied ? t("copied") : t("copyJSON")}</button>
-    </div>
+    <Seg small label={t("requestDetails")} value={tab} onChange={setTab} options={tabs.map((value) => ({ v: value.id, l: value.title }))} />
     <ErrorNotice error={copyError} />
-    {item.truncated && <p className="request-capture-note" role="status">{t("captureTruncatedHint")}</p>}
-    <div id={`${tabID}-content`} role="tabpanel" aria-labelledby={`${tabID}-${tab}`} className="request-detail-content">
+    {item.truncated && <div className="ad-alert" role="status"><div>{t("captureTruncatedHint")}</div></div>}
+    <div id={`${tabID}-content`} role="tabpanel" className="ad-detail-content">
       {tab === "metadata" ? <RequestFacts item={item} />
         : tab === "request" ? <RequestPayload headers={item.request_headers} body={item.request_body} />
         : tab === "response" ? <RequestPayload headers={item.response_headers} body={item.response_body} />
-        : item.stream_chunks?.length ? <div className="request-stream" aria-label={t("rawSSEData")}>
-          {item.stream_chunks.map(chunk => <div key={chunk.sequence}><span title={t("lineNumber", { number: chunk.sequence })}>#{chunk.sequence} · +{chunk.at_ms} ms</span><pre>{chunk.data}</pre></div>)}
-        </div> : <div className="table-empty">{t("noCapturedStream")}</div>}
+        : item.stream_chunks?.length ? <div className="ad-stream" aria-label={t("rawSSEData")}>
+          {item.stream_chunks.map(chunk => <div key={chunk.sequence}><span className="muted mono" title={t("lineNumber", { number: chunk.sequence })}>#{chunk.sequence} · +{chunk.at_ms} ms</span><pre className="ad-code">{chunk.data}</pre></div>)}
+        </div> : <Empty icon={<Activity className="ic" />} title={t("noCapturedStream")} />}
     </div>
+    <footer className="ad-df ad-df-inline"><span className="muted mono">{item.id}</span><span className="grow" />
+      <button type="button" className="btn sm secondary" onClick={() => void copy()}><Copy className="ic" />{copied ? t("copied") : t("copyJSON")}</button></footer>
   </>;
 }
 
-export function RequestDiagnostics({ runID }: { runID?: string }) {
+export function RequestDiagnostics({ runID, embedded }: { runID?: string; embedded?: boolean }) {
   useAdminI18n();
   const [page, setPage] = useState<ProviderRequestPage | null>(null);
   const [offset, setOffset] = useState(0);
@@ -111,7 +110,6 @@ export function RequestDiagnostics({ runID }: { runID?: string }) {
   const [detailRevision, setDetailRevision] = useState(0);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const listID = useId();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -157,44 +155,66 @@ export function RequestDiagnostics({ runID }: { runID?: string }) {
     }
   }
   const limit = page?.limit ?? 30;
-  return <div className="request-diagnostics">
-    <div className="request-toolbar">
-      <p>{t(runID ? "runRequestsRetention" : "requestsRetention", {
-        days: page?.retention_days ?? 7, global: 2048, run: page?.max_requests_per_run ?? 256,
-      })}</p>
-      <div>
-        <button type="button" className="icon-button" aria-label={t("refreshRequests")} disabled={loading || clearing} onClick={() => { setNotice(""); setRevision(value => value + 1); }}><RefreshCw size={16} className={loading ? "spin" : undefined} /></button>
-        <button type="button" className="secondary-button" disabled={loading || clearing || !page?.total} onClick={() => setConfirmClear(true)}><Trash2 size={14} />{t("clearRecords")}</button>
-      </div>
-    </div>
+  const rows = page?.items ?? [];
+  const failures = rows.filter((item) => item.error || (item.status_code ?? 0) >= 400).length;
+  const timed = rows.filter((item) => item.duration_ms != null);
+  const average = timed.length ? Math.round(timed.reduce((sum, item) => sum + (item.duration_ms ?? 0), 0) / timed.length) : null;
+  const slowest = Math.max(1000, ...timed.map((item) => item.duration_ms ?? 0));
+  const selected = rows.find((item) => item.id === selectedID);
+  const actions = <>
+    <button type="button" className="btn secondary" aria-label={t("refreshRequests")} disabled={loading || clearing} onClick={() => { setNotice(""); setRevision(value => value + 1); }}><RefreshCw className={`ic${loading ? " ic-turn" : ""}`} />{t("refresh")}</button>
+    <button type="button" className="btn secondary" disabled={loading || clearing || !page?.total} onClick={() => setConfirmClear(true)}><Eraser className="ic" />{t("clearRecords")}</button>
+  </>;
+  return <>
+    {embedded ? <div className="ad-toolbar ad-embedded-actions"><p className="muted">{t("runRequestsRetention", { days: page?.retention_days ?? 7, global: 2048, run: page?.max_requests_per_run ?? 256 })}</p><span className="grow" />{actions}</div> : <AdminHeader actions={actions} />}
     <ErrorNotice error={error} notice={notice} />
-    <div className="request-list" aria-busy={loading}>
-      {loading ? <div className="table-empty"><LoaderCircle className="spin" size={18} aria-label={t("loadingRequests")} /></div>
-        : page?.items.length ? page.items.map(item => <article key={item.id}>
-          <button type="button" className="request-summary" aria-expanded={selectedID === item.id} aria-controls={`${listID}-${item.id}`} onClick={() => setSelectedID(value => value === item.id ? null : item.id)}>
-            <span className="request-summary-main"><strong>{item.model || item.model_id || "—"}</strong><small>{item.purpose} · {item.protocol} · {item.round ? `${t("roundNumber", { number: item.round })} · ` : ""}{t("requestAttempt", { number: item.attempt })}</small><small>{timestamp(item.started_at)}</small></span>
-            <span className={`request-summary-status${item.error || (item.status_code ?? 0) >= 400 ? " danger" : ""}`}><span>{requestStatus(item)}</span><small>{item.finish_reason || item.response_status || item.error_class || (item.stream ? t("streaming") : t("nonStreaming"))}</small><span className="request-flags">{item.truncated && <small>{t("truncated")}</small>}{item.redacted && <small>{t("redacted")}</small>}</span></span>
-            <span className="request-summary-timing"><span>{duration(item.duration_ms)}</span><small>TTFB {duration(item.ttfb_ms)}</small><small>TTFT {duration(item.ttft_ms)}</small></span>
-            <ChevronDown size={16} className={selectedID === item.id ? "is-expanded" : undefined} />
-          </button>
-          {selectedID === item.id && <div id={`${listID}-${item.id}`} className="request-expanded">
-            {detailLoading || (!detail && !detailError) ? <div className="table-empty"><LoaderCircle className="spin" size={18} aria-label={t("loadingRequestDetails")} /></div>
-              : detailError ? <><ErrorNotice error={detailError} /><button type="button" className="secondary-button" onClick={() => setDetailRevision(value => value + 1)}>{t("retry")}</button></>
-              : detail && detail.id === item.id ? <RequestDetail key={detail.id} item={detail} /> : null}
-          </div>}
-        </article>) : !error && <div className="request-empty"><strong>{t("noRequests")}</strong><span>{t("enableDebugHint")}</span></div>}
-    </div>
-    {page && <div className="table-pagination">
-      <span>{t("recordsRange", { total: page.total, start: page.total ? offset + 1 : 0, end: Math.min(offset + limit, page.total) })}</span>
-      <div><button type="button" className="icon-button" aria-label={t("previousRequestsPage")} disabled={loading || clearing || offset === 0} onClick={() => setOffset(value => Math.max(0, value - limit))}><ChevronLeft size={16} /></button><span>{Math.floor(offset / limit) + 1} / {Math.max(1, Math.ceil(page.total / limit))}</span><button type="button" className="icon-button" aria-label={t("nextRequestsPage")} disabled={loading || clearing || offset + limit >= page.total} onClick={() => setOffset(value => value + limit)}><ChevronRight size={16} /></button></div>
+    {!embedded && <div className="ad-stats">
+      <Stat label={t("records")} value={(page?.total ?? 0).toLocaleString(getLocale())} sub={t(runID ? "runRequestsRetentionShort" : "requestsRetentionShort", { days: page?.retention_days ?? 7 })} />
+      <Stat label={t("errorsOnPage")} value={failures} sub={t("onThisPage", { count: rows.length })} tone={failures ? "warn" : "success"} />
+      <Stat label={t("averageDuration")} value={average == null ? "—" : duration(average)} sub={t("onThisPage", { count: timed.length })} />
     </div>}
-    {confirmClear && <Modal className="ochi-admin-modal" title={runID ? t("clearRunRequestsQuestion") : t("clearAllRequestsQuestion")} size="small" onClose={() => { if (!clearing) setConfirmClear(false); }} footer={<div className="modal-actions"><button type="button" className="secondary-button" disabled={clearing} onClick={() => setConfirmClear(false)}>{t("cancel")}</button><button type="button" className="danger-button" disabled={clearing} onClick={() => void clear()}>{clearing && <LoaderCircle className="spin" size={14} />}{t("clear")}</button></div>}>
+    <Card flush aria-busy={loading}>
+      {loading && !page ? <SkeletonRows rows={6} />
+        : rows.length ? <>
+          <div className="ad-tscroll ad-tall"><table className="ad-table ad-reqs">
+            <thead><tr><th>{t("start")}</th><th>{t("model")}</th><th>{t("status")}</th><th>{t("duration")}</th><th className="ad-hide-s">{t("protocol")}</th></tr></thead>
+            <tbody>{rows.map((item, index) => {
+              const bad = Boolean(item.error) || (item.status_code ?? 0) >= 400;
+              const ms = item.duration_ms ?? 0;
+              return (
+                <tr key={item.id} tabIndex={0} aria-label={`${item.model || item.model_id || item.id} ${requestStatus(item)}`} style={{ "--i": Math.min(index, 12) } as React.CSSProperties}
+                  onClick={() => setSelectedID(item.id)} onKeyDown={onActivate(() => setSelectedID(item.id))}>
+                  <td className="mono muted">{timestamp(item.started_at)}</td>
+                  <td><b>{item.model || item.model_id || "—"}</b><br /><small>{item.purpose} · {item.round ? `${t("roundNumber", { number: item.round })} · ` : ""}{t("requestAttempt", { number: item.attempt })}</small></td>
+                  <td><span className="ad-code-s" data-tone={bad ? "danger" : item.status_code ? "success" : "warn"}>{requestStatus(item)}</span>
+                    {(item.truncated || item.redacted) && <span className="ad-flags">{item.truncated && <Pill tone="warn">{t("truncated")}</Pill>}{item.redacted && <Pill>{t("redacted")}</Pill>}</span>}</td>
+                  <td className="ad-lat"><Meter pct={(ms / slowest) * 100} tone={ms > 2000 ? "danger" : ms > 1000 ? "warn" : ""} /><small className="tnum">{duration(item.duration_ms)}</small></td>
+                  <td className="muted ad-hide-s">{item.protocol}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table></div>
+          <footer className="ad-pager">
+            <span className="muted tnum">{t("recordsRange", { total: page?.total ?? 0, start: page?.total ? offset + 1 : 0, end: Math.min(offset + limit, page?.total ?? 0) })}</span><span className="grow" />
+            <button type="button" className="icon-btn sm" aria-label={t("previousRequestsPage")} disabled={loading || clearing || offset === 0} onClick={() => setOffset(value => Math.max(0, value - limit))}><ChevronLeft className="ic" /></button>
+            <span className="tnum muted">{Math.floor(offset / limit) + 1} / {Math.max(1, Math.ceil((page?.total ?? 0) / limit))}</span>
+            <button type="button" className="icon-btn sm" aria-label={t("nextRequestsPage")} disabled={loading || clearing || offset + limit >= (page?.total ?? 0)} onClick={() => setOffset(value => value + limit)}><ChevronRight className="ic" /></button>
+          </footer>
+        </>
+        : !error && <Empty icon={<Activity className="ic" />} title={t("noRequests")} desc={t("enableDebugHint")} />}
+    </Card>
+    {selected && <Drawer wide title={selected.model || selected.model_id || selected.id} sub={`${timestamp(selected.started_at)} · ${requestStatus(selected)} · ${duration(selected.duration_ms)}`} onClose={() => setSelectedID(null)}>
+      {detailLoading || (!detail && !detailError) ? <SkeletonRows rows={4} />
+        : detailError ? <><ErrorNotice error={detailError} /><button type="button" className="btn secondary" onClick={() => setDetailRevision(value => value + 1)}>{t("retry")}</button></>
+        : detail && detail.id === selected.id ? <RequestDetail key={detail.id} item={detail} /> : null}
+    </Drawer>}
+    {confirmClear && <Modal title={runID ? t("clearRunRequestsQuestion") : t("clearAllRequestsQuestion")} size="small" dismissible={!clearing} onClose={() => setConfirmClear(false)} footer={<div className="modal-actions"><button type="button" className="btn ghost" disabled={clearing} onClick={() => setConfirmClear(false)}>{t("cancel")}</button><button type="button" className={`btn danger${clearing ? " btn-progress" : ""}`} disabled={clearing} onClick={() => void clear()}>{clearing ? t("clearingEllipsis") : t("clear")}</button></div>}>
       <p>{t("clearRequestsHint")}</p>
     </Modal>}
-  </div>;
+  </>;
 }
 
 export function DebugPage() {
   useAdminI18n();
-  return <><div className="admin-page-heading"><h2>{t("requestDiagnostics")}</h2></div><RequestDiagnostics /></>;
+  return <RequestDiagnostics />;
 }

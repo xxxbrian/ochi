@@ -15,7 +15,7 @@ const { render, act, cleanup, fireEvent, within } = require("@testing-library/re
 const { createLoader } = require("../../shared/conversation/test-loader.cjs");
 const { createI18nHarness } = require("./i18n-harness.cjs");
 const root = path.resolve(__dirname, "../..");
-const flush = async () => { for (let i = 0; i < 25; i++) await Promise.resolve(); };
+const flush = async () => { for (let i = 0; i < 25; i++) await Promise.resolve(); await new Promise((r) => setTimeout(r, 30)); for (let i = 0; i < 25; i++) await Promise.resolve(); };
 function deferred() {
   let resolve, reject;
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
@@ -29,7 +29,7 @@ function screens(api, language = "en") {
     [path.join(root, "web/src/lib/api.ts")]: { adminApi: api },
     [path.join(root, "web/src/lib/router.ts")]: { statusLabel: (status) => status },
     [path.join(root, "web/src/components/ui/Select.tsx")]: { SelectField: () => null },
-    [path.join(root, "web/src/components/ProcessDetails.tsx")]: { StepList: () => null },
+    [path.join(root, "web/src/components/ProcessSteps.tsx")]: { StepList: () => null },
     [path.join(root, "web/src/components/FileCards.tsx")]: { FileCards: () => null },
     [path.join(root, "web/src/pages/admin/RequestDiagnostics.tsx")]: { RequestDiagnostics: () => null },
     [path.join(root, "web/src/pages/admin/UpdateCard.tsx")]: { UpdateCard: () => null },
@@ -41,8 +41,15 @@ async function mount(Page, props = {}) {
   await act(async () => { view = render(React.createElement(Page, props)); await flush(); });
   return view;
 }
+async function type(element, value) {
+  await act(async () => { fireEvent.change(element, { target: { value } }); await flush(); });
+}
 async function click(element) {
   await act(async () => { fireEvent.click(element); await flush(); });
+}
+async function openRowMenu(view, t, name) {
+  await click(view.getByRole("button", { name: t("editUserNamed", { name }) }));
+  return view;
 }
 test.afterEach(() => cleanup());
 const accounts = [
@@ -63,12 +70,19 @@ test("user deletion keeps pending confirmation open, shows failures inside it, a
     remove: (kind, id) => { calls.push({ kind, id }); return result.promise; },
   });
   const view = await mount(UsersPage, { currentUserID: "admin-qa" });
-  const ownDelete = view.getByRole("button", { name: t("deleteUserNamed", { name: "Current admin" }) });
-  assert.equal(ownDelete.disabled, true);
-  assert.equal(ownDelete.title, t("cannotDeleteCurrentUser"));
-  await click(view.getByRole("button", { name: t("deleteUserNamed", { name: "Mistyped account" }) }));
+  await openRowMenu(view, t, "Current admin");
+  const ownDelete = await view.findByRole("menuitem", { name: t("cannotDeleteCurrentUser") });
+  assert.equal(ownDelete.getAttribute("aria-disabled"), "true");
+  await act(async () => { fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" }); await flush(); });
+  await openRowMenu(view, t, "Mistyped account");
+  await click(await view.findByRole("menuitem", { name: t("deleteUser") }));
   let dialog = view.getByRole("dialog", { name: t("deleteUserQuestion") });
   assert.ok(within(dialog).getByText(t("deleteUserDescription")));
+  const confirmation = within(dialog).getByRole("textbox", { name: t("typeToConfirm", { name: "typo" }) });
+  assert.equal(within(dialog).getByRole("button", { name: t("delete"), exact: true }).disabled, true);
+  await type(confirmation, "typ");
+  assert.equal(within(dialog).getByRole("button", { name: t("delete"), exact: true }).disabled, true);
+  await type(confirmation, "typo");
   await click(within(dialog).getByRole("button", { name: t("delete"), exact: true }));
   assert.deepEqual(calls, [{ kind: "users", id: "typo-qa" }]);
   assert.equal(within(dialog).getByRole("button", { name: t("deletingEllipsis") }).disabled, true);
@@ -111,6 +125,8 @@ test("workspace deletion targets only a private workspace, preserves its account
   assert.deepEqual(calls, []);
   await click(view.getByRole("button", { name: t("deleteWorkspaceNamed", { name: "Mistyped account" }) }));
   dialog = view.getByRole("dialog");
+  assert.equal(within(dialog).getByRole("button", { name: t("delete"), exact: true }).disabled, true);
+  await type(within(dialog).getByRole("textbox", { name: t("typeToConfirm", { name: "Mistyped account" }) }), "Mistyped account");
   await click(within(dialog).getByRole("button", { name: t("delete"), exact: true }));
   assert.equal(within(dialog).getByRole("button", { name: "Close" }).disabled, true);
   assert.ok(view.getAllByRole("button", { name: t("rebuild"), hidden: true }).every((button) => button.disabled));
@@ -156,6 +172,7 @@ for (const language of ["en", "zh-CN", "zh-TW"]) {
     await click(view.getByRole("button", { name: t("deleteWorkspaceNamed", { name: "Mistyped account" }) }));
     const dialog = view.getByRole("dialog", { name: t("deleteWorkspaceQuestion") });
     assert.ok(within(dialog).getByText(t("deleteWorkspaceDescription")));
+    await type(within(dialog).getByRole("textbox", { name: t("typeToConfirm", { name: "Mistyped account" }) }), "Mistyped account");
     await click(within(dialog).getByRole("button", { name: t("delete"), exact: true }));
     assert.equal(within(dialog).getByRole("alert").textContent, t("operationFailed"));
     assert.equal(within(dialog).getByRole("button", { name: t("cancel") }).disabled, false);

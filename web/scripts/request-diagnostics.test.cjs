@@ -17,6 +17,7 @@ const deferred = () => {
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 };
+const uiStub = new Proxy({}, { get: (_t, key) => key === 'onActivate' ? (action) => ({ onClick: action }) : String(key) });
 const jsx = (type, props, key) => ({ type, props: props ?? {}, key });
 const walk = (node) => Array.isArray(node) ? node.flatMap(walk) : node && typeof node === 'object' && 'type' in node ? [node, ...walk(node.props.children)] : [];
 const text = (node) => Array.isArray(node) ? node.map(text).join('') : node && typeof node === 'object' && 'type' in node ? text(node.props.children) : node == null || typeof node === 'boolean' ? '' : String(node);
@@ -26,7 +27,7 @@ function evaluate(source, imports = {}, globals = {}, filename = 'fixture.tsx') 
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(output, { module, exports: module.exports, AbortController, Date, Error, JSON, Map, Promise, Set, ...globals,
-    require(name) {
+    require(name) { if (/\/Loading$/.test(name)) return { LoadingDots: () => null, SkelRows: () => null };
       if (sharedModule(name)) return sharedModule(name);
       if (name in imports) return imports[name];
       const locale = i18n.resolve(name, 'admin');
@@ -153,8 +154,9 @@ const detail = (id = 'trace-A') => ({
   stream_chunks: [{ sequence: 1, at_ms: 24, data: ': keepalive' }, { sequence: 2, at_ms: 46, data: 'data: {"delta":"RAW_SSE_MARKER"}' }, { sequence: 3, at_ms: 46, data: '' }],
 });
 const requestPage = (offset = 0, total = 2) => ({ items: [summary(), summary('trace-B')], total, limit: 30, offset, retention_days: 7, max_requests_per_run: 256 });
-const diagnosticImports = (adminApi = {}) => ({ '../../lib/api': { adminApi }, '../../components/Modal': { Modal: 'Modal' }, './Fields': { ErrorNotice: 'ErrorNotice' } });
-const expanded = (h) => h.nodes().filter((node) => node.type === 'button' && Object.hasOwn(node.props, 'aria-expanded'));
+const diagnosticImports = (adminApi = {}) => ({ '../../lib/api': { adminApi }, '../../components/Modal': { Modal: 'Modal' }, './ui': uiStub, './CopyButton': { CopyButton: 'CopyButton' }, '../../components/ui/Menu': { ActionMenu: 'ActionMenu', MenuAction: 'MenuAction' }, './Fields': { ErrorNotice: 'ErrorNotice' } });
+const expanded = (h) => h.nodes().filter((node) => node.type === 'tr' && node.props.tabIndex === 0);
+const drawers = (h) => h.nodes().filter((node) => node.type === 'Drawer');
 
 function diagnosticsHarness(transport = {}, props = { runID: 'R' }) {
   const lists = [], details = [], clears = [];
@@ -181,12 +183,12 @@ test('request lists fetch summaries only and expansion loads one detail with sta
   expanded(h)[1].props.onClick(); h.render(); await h.settle();
   assert.equal(h.details[0].signal.aborted, true);
   assert.equal(h.details.length, 2);
-  assert.equal(expanded(h).filter((node) => node.props['aria-expanded']).length, 1);
+  assert.equal(drawers(h).length, 1);
   first.resolve(detail()); await h.settle();
   assert.equal(h.nodes().filter((node) => node.type?.name === 'RequestDetail').length, 0, 'a late first-row response cannot populate the newly selected row');
   second.resolve(detail('trace-B')); await h.settle();
   assert.equal(h.nodes().find((node) => node.type?.name === 'RequestDetail').props.item.id, 'trace-B');
-  expanded(h)[1].props.onClick(); h.render(); await h.settle();
+  drawers(h)[0].props.onClose(); h.render(); await h.settle();
   assert.equal(h.details[1].signal.aborted, true);
   assert.equal(h.nodes().filter((node) => node.type?.name === 'RequestDetail').length, 0);
   h.unmount();
@@ -195,17 +197,18 @@ test('request lists fetch summaries only and expansion loads one detail with sta
 test('detail tabs mount only the selected payload and JSON copy preserves original body and SSE bytes', async () => {
   const item = detail(), copied = [];
   const h = hookHarness('src/pages/admin/RequestDiagnostics.tsx', 'TestRequestDetail', diagnosticImports(), { navigator: { clipboard: { writeText: async (value) => copied.push(value) } } }, { item }, '\nexports.TestRequestDetail = RequestDetail;');
-  const tabs = () => h.nodes().filter((node) => node.props.role === 'tab');
-  assert.equal(tabs().length, 4);
-  assert.equal(tabs()[0].props['aria-selected'], true);
+  const seg = () => h.nodes().find((node) => node.type === 'Seg');
+  const pick = (index) => seg().props.onChange(seg().props.options[index].v);
+  assert.equal(seg().props.options.length, 4);
+  assert.equal(seg().props.value, seg().props.options[0].v);
   assert.ok(h.nodes().some((node) => node.type?.name === 'RequestFacts'));
   assert.ok(!h.nodes().some((node) => node.type?.name === 'RequestPayload'));
   assert.doesNotMatch(text(h.tree), /REQUEST_RAW_MARKER|RESPONSE_RAW_MARKER|RAW_SSE_MARKER/);
-  tabs()[1].props.onClick(); h.render();
+  pick(1); h.render();
   assert.equal(h.nodes().find((node) => node.type?.name === 'RequestPayload').props.body, item.request_body);
-  tabs()[2].props.onClick(); h.render();
+  pick(2); h.render();
   assert.equal(h.nodes().find((node) => node.type?.name === 'RequestPayload').props.body, item.response_body);
-  tabs()[3].props.onClick(); h.render();
+  pick(3); h.render();
   assert.deepEqual(h.nodes().filter((node) => node.type === 'pre').map((node) => node.props.children), item.stream_chunks.map((chunk) => chunk.data));
   assert.match(text(h.tree), /#1.*24 ms.*#2.*46 ms.*#3.*46 ms/);
   h.nodes().find((node) => node.type === 'button' && text(node).includes('JSON')).props.onClick();
@@ -217,13 +220,13 @@ test('detail tabs mount only the selected payload and JSON copy preserves origin
 
 test('global request pagination stays scoped and clear waits for explicit confirmation before reloading page one', async () => {
   let cleared = false;
-  const h = diagnosticsHarness({ list: (_run, offset) => Promise.resolve(cleared ? { ...requestPage(0, 0), items: [] } : requestPage(offset, 61)), clear: () => { cleared = true; } }, {});
+  const h = diagnosticsHarness({ list: (_run, offset) => Promise.resolve(cleared ? { ...requestPage(0, 0), items: [] } : requestPage(offset, 61)), clear: () => { cleared = true; } }, { embedded: true });
   await h.settle();
   const pageButtons = () => h.nodes().filter((node) => node.type === 'button' && node.props['aria-label']?.includes('\u9875\u8bf7\u6c42'));
   assert.equal(pageButtons()[0].props.disabled, true);
   pageButtons()[1].props.onClick(); h.render(); await h.settle();
   assert.deepEqual(h.lists.map(({ runID, offset }) => [runID, offset]), [[undefined, 0], [undefined, 30]]);
-  const clearButton = h.nodes().find((node) => node.type === 'button' && node.props.children?.[0]?.type === 'Trash2');
+  const clearButton = h.nodes().find((node) => node.type === 'button' && node.props.children?.[0]?.type === 'Eraser');
   clearButton.props.onClick(); h.render();
   assert.deepEqual(h.clears, []);
   let modal = h.nodes().find((node) => node.type === 'Modal');
@@ -232,7 +235,7 @@ test('global request pagination stays scoped and clear waits for explicit confir
   assert.deepEqual(h.clears, [], 'dismissing confirmation does not delete logs');
   clearButton.props.onClick(); h.render();
   modal = h.nodes().find((node) => node.type === 'Modal');
-  walk(modal.props.footer).find((node) => node.props.className === 'danger-button').props.onClick();
+  walk(modal.props.footer).find((node) => /danger/.test(node.props.className ?? '')).props.onClick();
   await h.settle();
   assert.deepEqual(h.clears, [undefined]);
   assert.deepEqual(h.lists.map(({ runID, offset }) => [runID, offset]), [[undefined, 0], [undefined, 30], [undefined, 0]]);
@@ -246,8 +249,8 @@ function settingsHarness(saveSettings, settings = { debug_mode: false, system_pr
     '../../lib/api': { adminApi: { settings: async () => settings, models: async () => [], saveSettings } },
     '../../components/Modal': { Modal: 'Modal' }, '../../components/ui/Select': { SelectField: 'SelectField' },
     '../../lib/router': { statusLabel: (status) => status },
-    './Fields': { ErrorNotice: 'ErrorNotice', Field: 'Field', Toggle: 'Toggle' },
-    '../../components/ProcessDetails': { StepList: 'StepList' }, '../../components/FileCards': { FileCards: 'FileCards' },
+    './ui': uiStub, './CopyButton': { CopyButton: 'CopyButton' }, '../../components/ui/Menu': { ActionMenu: 'ActionMenu', MenuAction: 'MenuAction' }, './Fields': { ErrorNotice: 'ErrorNotice', Field: 'Field', Toggle: 'Toggle' },
+    '../../components/ProcessSteps': { StepList: 'StepList' }, '../../components/FileCards': { FileCards: 'FileCards' },
     './RequestDiagnostics': { RequestDiagnostics: 'RequestDiagnostics' },
     './UpdateCard': { UpdateCard: 'UpdateCard' },
   });
@@ -266,7 +269,7 @@ test('Debug saves immediately as an isolated patch and general settings never re
   assert.deepEqual(patches, [{ debug_mode: true }], 'toggling must not wait for the form save or include unrelated edits');
   assert.equal(debugToggle(h).props.value, false, 'the switch represents the last server-confirmed state while saving');
   assert.equal(debugToggle(h).props.disabled, true);
-  assert.ok(h.nodes().find((node) => node.type === 'button' && node.props.className === 'primary-button').props.disabled, 'general saves cannot race a pending debug patch');
+  assert.ok(h.nodes().find((node) => node.type === 'AdminHeader').props.actions.props.disabled, 'general saves cannot race a pending debug patch');
   debug.resolve({ debug_mode: true, system_prompt: 'Saved prompt', max_tool_rounds: 40 });
   await h.settle();
   assert.equal(debugToggle(h).props.value, true);

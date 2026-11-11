@@ -13,6 +13,7 @@ const deferred = () => {
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 };
+const uiStub = new Proxy({}, { get: (_t, key) => key === 'onActivate' ? (action) => ({ onClick: action }) : String(key) });
 const jsx = (type, props, key) => ({ type, props: props ?? {}, key });
 const walk = (node) => Array.isArray(node) ? node.flatMap(walk) : node && typeof node === 'object' && 'type' in node ? [node, ...walk(node.props.children)] : [];
 const text = (node) => Array.isArray(node) ? node.map(text).join('') : node && typeof node === 'object' && 'type' in node ? text(node.props.children) : node == null || typeof node === 'boolean' ? '' : String(node);
@@ -24,7 +25,8 @@ function evaluate(source, imports = {}, globals = {}) {
   const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
   vm.runInNewContext(output, { module, exports: module.exports, AbortController, Date, Error, JSON, Promise, Intl, ...i18n.web, ...i18n.errors, ...globals,
-    require(name) {
+    require(name) { if (/\/Loading$/.test(name)) return { LoadingDots: () => null, SkelRows: () => null };
+      if (name === './ui') return uiStub;
       if (name in imports) return imports[name];
       const locale = i18n.resolve(name, 'admin');
       if (locale) return locale;

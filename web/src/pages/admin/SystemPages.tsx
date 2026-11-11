@@ -1,29 +1,44 @@
 import { publicReply } from "../../../../shared/conversation/projection";
 import { t, useAdminI18n, getLocale, translateError } from "./i18n";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   ArrowUpRight,
+  Ban,
+  Check,
   ChevronLeft,
   ChevronRight,
   CircleAlert,
-  Cpu,
-  LoaderCircle,
+  CircleCheck,
+  CircleSlash,
+  CircleStop,
+  CircleX,
+  Clock,
+  Container,
+  Ellipsis,
+  History,
   Pencil,
-  Plus,
+  CirclePlay,
+  Play,
   RefreshCw,
+  RotateCw,
   Search,
   Trash2,
+  TriangleAlert,
+  UserPlus,
+  Wrench,
 } from "lucide-react";
 import { adminApi } from "../../lib/api";
 import type { AdminRun, AdminRunDetail, AdminRunFilter, AdminRunPage, AdminRunStats, Model, Step, User, Workspace } from "../../lib/types";
 import { Modal } from "../../components/Modal";
 import { SelectField } from "../../components/ui/Select";
+import { ActionMenu, MenuAction } from "../../components/ui/Menu";
 import { statusLabel } from "../../lib/router";
-import { ErrorNotice, Field, Toggle } from "./Fields";
-import { StepList } from "../../components/ProcessDetails";
+import { AdminSkeleton, confirmMatches, ErrorNotice, Field, Toggle, TypedConfirm } from "./Fields";
+import { StepList } from "../../components/ProcessSteps";
 import { FileCards } from "../../components/FileCards";
 import { RequestDiagnostics } from "./RequestDiagnostics";
 import { UpdateCard } from "./UpdateCard";
+import { AdminHeader, Card, CardHead, Checkbox, Collapse, Drawer, Empty, MenuSelect, Pill, Seg, SkeletonRows, StatusDot, Stat, Who, type Tone } from "./ui";
 
 const MarkdownContent = lazy(() => import("../../components/MarkdownContent"));
 
@@ -34,10 +49,51 @@ export function UsersPage({ currentUserID }: { currentUserID: string }) {
     (Partial<User> & { password?: string }) | null
   >(null);
   const [deleting, setDeleting] = useState<User | null>(null);
+  const [typed, setTyped] = useState("");
+  useEffect(() => setTyped(""), [deleting]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [deleteError, setDeleteError] = useState("");
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "user">("all");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [page, setPage] = useState(0);
+  const [sort, setSort] = useState<"name" | "role" | "status">("name");
+  const visibleUsers = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return users.filter(
+      (u) =>
+        (roleFilter === "all" || u.role === roleFilter) &&
+        (!q || `${u.display_name || ""} ${u.username}`.toLowerCase().includes(q)),
+    );
+  }, [users, query, roleFilter]);
+  async function bulkEnable(enabled: boolean) {
+    setBusy(true);
+    try {
+      for (const u of users.filter((x) => selected.includes(x.id))) {
+        await adminApi.save<User>("users", { id: u.id, username: u.username, display_name: u.display_name, role: u.role, enabled }, true);
+      }
+      setSelected([]);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("saveFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function setUserEnabled(user: User, enabled: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      await adminApi.save<User>("users", { id: user.id, username: user.username, display_name: user.display_name, role: user.role, enabled }, true);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("saveFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -87,167 +143,113 @@ export function UsersPage({ currentUserID }: { currentUserID: string }) {
       setBusy(false);
     }
   }
+  const PAGE = 10;
+  const sorted = useMemo(() => [...visibleUsers].sort((x, y) => {
+    if (sort === "role") return x.role.localeCompare(y.role) || (x.display_name || x.username).localeCompare(y.display_name || y.username);
+    if (sort === "status") return Number(y.enabled !== false) - Number(x.enabled !== false);
+    return (x.display_name || x.username).localeCompare(y.display_name || y.username, getLocale());
+  }), [visibleUsers, sort]);
+  const pages = Math.max(1, Math.ceil(sorted.length / PAGE));
+  const pageIndex = Math.min(page, pages - 1);
+  const rows = sorted.slice(pageIndex * PAGE, pageIndex * PAGE + PAGE);
+  const rowIDs = rows.filter((u) => u.id !== currentUserID).map((u) => u.id);
+  const pageSelected = rowIDs.length > 0 && rowIDs.every((id) => selected.includes(id));
+  const toggle = (id: string) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  const roleLabel = (role: string) => (role === "admin" ? t("administrator") : t("userRole"));
+  const filtered = query.trim() !== "" || roleFilter !== "all";
   return (
     <>
-      <div className="admin-page-heading">
-        <h2>{t("users")}</h2>
-        <button
-          className="primary-button"
-          onClick={() =>
-            setEditor({
-              username: "",
-              display_name: "",
-              role: "user",
-              enabled: true,
-              password: "",
-            })
-          }
-        >
-          <Plus size={16} />
-          {t("addUser")}</button>
-      </div>
+      <AdminHeader
+        actions={<button className="btn primary" onClick={() => setEditor({ username: "", display_name: "", role: "user", enabled: true, password: "" })}><UserPlus className="ic" />{t("addUser")}</button>}
+        toolbar={<>
+          <div className="search-field"><Search className="ic" /><input className="input" type="search" value={query} placeholder={t("adminSearchUsers")} aria-label={t("adminSearchUsers")}
+            onChange={(event) => { setQuery(event.target.value); setPage(0); }} /></div>
+          <Seg small label={t("adminColRole")} value={roleFilter} onChange={(next) => { setRoleFilter(next); setPage(0); }}
+            options={[{ v: "all", l: t("adminAllRoles") }, { v: "admin", l: t("administrator") }, { v: "user", l: t("userRole") }]} />
+          <span className="grow" />
+          <MenuSelect label={t("sortBy")} value={sort} onChange={setSort}
+            options={[{ v: "name", l: t("sortName") }, { v: "role", l: t("adminColRole") }, { v: "status", l: t("adminColStatus") }]} />
+        </>} />
       <ErrorNotice error={error} />
-      {loading ? (
-        <div className="panel-loading">
-          <LoaderCircle className="spin" size={22} />
-        </div>
-      ) : (
-        <div className="users-list">
-          {users.map((user) => (
-            <article key={user.id}>
-              <span className="account-avatar">
-                {(user.display_name || user.username).slice(0, 1)}
-              </span>
-              <div className="user-row-main">
-                <strong>{user.display_name || user.username}</strong>
-                <span>{user.username}</span>
-              </div>
-              <span className="admin-user-role">{user.role === "admin" ? t("administrator") : t("userRole")}</span>
-              <span className={`admin-state${user.enabled !== false ? " is-enabled" : ""}`}>
-                <i />{user.enabled !== false ? t("enabled") : t("disabled")}
-              </span>
-              <div className="admin-row-actions">
-                <button className="icon-button" aria-label={t("editUserNamed", { name: user.display_name || user.username })}
-                  title={t("editUser")} onClick={() => setEditor({ ...user, password: "" })}>
-                  <Pencil size={16} />
-                </button>
-                <button className="icon-button admin-delete-action" aria-label={t("deleteUserNamed", { name: user.display_name || user.username })}
-                  title={user.id === currentUserID ? t("cannotDeleteCurrentUser") : t("deleteUser")}
-                  disabled={user.id === currentUserID}
-                  onClick={() => {
-                    setDeleteError("");
-                    setDeleting(user);
-                  }}>
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-      {editor && (
-        <Modal
-          className="ochi-admin-modal"
-          title={editor.id ? t("editUser") : t("addUser")}
-          onClose={() => setEditor(null)}
-          footer={
-            <div className="modal-actions">
-              <button
-                type="submit"
-                form="user-editor"
-                className="primary-button"
-                disabled={busy}
-              >
-                {t("save")}</button>
+      <Card flush>
+        {loading ? <SkeletonRows rows={5} /> : <>
+          <Collapse open={selected.length > 0} className="ad-bulk-c">
+            <div className="ad-bulk" role="toolbar">
+              <b className="tnum">{t("adminSelectedCount", { count: selected.length })}</b><span className="grow" />
+              <button className="btn sm secondary" disabled={busy} onClick={() => void bulkEnable(true)}><Check className="ic" />{t("adminBulkEnable")}</button>
+              <button className="btn sm secondary" disabled={busy} onClick={() => void bulkEnable(false)}><Ban className="ic" />{t("adminBulkDisable")}</button>
+              <button className="btn sm ghost" onClick={() => setSelected([])}>{t("adminClearSelection")}</button>
             </div>
-          }
-        >
-          <form
-            id="user-editor"
-            className="admin-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void save();
-            }}
-          >
+          </Collapse>
+          {rows.length ? <>
+            <div className="ad-tscroll"><table className="ad-table ad-users">
+              <thead><tr>
+                <th className="c"><Checkbox checked={pageSelected} label={t("adminSelectAll")} onChange={() => setSelected((cur) => pageSelected ? cur.filter((id) => !rowIDs.includes(id)) : [...new Set([...cur, ...rowIDs])])} /></th>
+                <th>{t("adminColUser")}</th><th className="ad-hide-s">{t("adminColRole")}</th><th className="ad-hide-s">{t("adminColStatus")}</th><th className="c" />
+              </tr></thead>
+              <tbody>{rows.map((user, index) => {
+                const name = user.display_name || user.username;
+                const picked = selected.includes(user.id);
+                return (
+                  <tr key={user.id} data-sel={picked} style={{ "--i": index } as CSSProperties}>
+                    <td className="c"><Checkbox checked={picked} label={t("adminSelectUser", { name })} onChange={() => { if (user.id !== currentUserID) toggle(user.id); }} /></td>
+                    <td><Who name={name} sub={user.username} /></td>
+                    <td className="ad-hide-s"><Pill tone={user.role === "admin" ? "accent" : "neutral"}>{roleLabel(user.role)}</Pill></td>
+                    <td className="ad-hide-s"><StatusDot tone={user.enabled !== false ? "success" : ""}>{user.enabled !== false ? t("enabled") : t("disabled")}</StatusDot></td>
+                    <td className="c">
+                      <ActionMenu trigger={<Ellipsis className="ic" />} label={t("editUserNamed", { name })} className="icon-btn sm">
+                        <MenuAction onClick={() => setEditor({ ...user, password: "" })}><Pencil className="ic" />{t("editUser")}</MenuAction>
+                        <MenuAction disabled={user.id === currentUserID} onClick={() => void setUserEnabled(user, user.enabled === false)}>
+                          {user.enabled === false ? <Check className="ic" /> : <Ban className="ic" />}{user.enabled === false ? t("adminBulkEnable") : t("adminBulkDisable")}</MenuAction>
+                        <MenuAction danger disabled={user.id === currentUserID} onClick={() => { setDeleteError(""); setDeleting(user); }}><Trash2 className="ic" />{user.id === currentUserID ? t("cannotDeleteCurrentUser") : t("deleteUser")}</MenuAction>
+                      </ActionMenu>
+                    </td>
+                  </tr>
+                );
+              })}</tbody>
+            </table></div>
+            <footer className="ad-pager">
+              <span className="muted tnum">{t("recordsRange", { total: sorted.length, start: pageIndex * PAGE + 1, end: pageIndex * PAGE + rows.length })}</span><span className="grow" />
+              <button className="icon-btn sm" aria-label={t("previousRunsPage")} disabled={pageIndex === 0} onClick={() => setPage(pageIndex - 1)}><ChevronLeft className="ic" /></button>
+              {Array.from({ length: pages }, (_, i) => <button key={i} className="ad-pg" aria-current={i === pageIndex} onClick={() => setPage(i)}>{i + 1}</button>)}
+              <button className="icon-btn sm" aria-label={t("nextRunsPage")} disabled={pageIndex >= pages - 1} onClick={() => setPage(pageIndex + 1)}><ChevronRight className="ic" /></button>
+            </footer>
+          </> : <Empty icon={<Search className="ic" />} title={t("adminNoUsersMatch")} desc={t("adminNoUsersMatchHint")}
+            action={filtered ? <button className="btn secondary sm" onClick={() => { setQuery(""); setRoleFilter("all"); setPage(0); }}>{t("clearFilters")}</button> : undefined} />}
+        </>}
+      </Card>
+      {editor && (
+        <Drawer title={editor.id ? t("editUser") : t("addUser")} sub={editor.id ? editor.username : undefined} onClose={() => { if (!busy) setEditor(null); }}
+          footer={<footer className="ad-df"><span className="grow" />
+            <button type="button" className="btn ghost" disabled={busy} onClick={() => setEditor(null)}>{t("cancel")}</button>
+            <button type="submit" form="user-editor" className={`btn primary${busy ? " btn-progress" : ""}`} disabled={busy}>{busy ? t("savingEllipsis") : t("save")}</button></footer>}>
+          <form id="user-editor" className="ad-stack-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
             <Field title={t("account")}>
-              <input
-                required
-                readOnly={Boolean(editor.id)}
-                value={editor.username ?? ""}
-                onChange={(event) =>
-                  setEditor({ ...editor, username: event.target.value })
-                }
-              />
+              <input className="input mono" required readOnly={Boolean(editor.id)} autoComplete="off" value={editor.username ?? ""} onChange={(event) => setEditor({ ...editor, username: event.target.value })} />
             </Field>
             <Field title={t("displayName")}>
-              <input
-                value={editor.display_name ?? ""}
-                onChange={(event) =>
-                  setEditor({ ...editor, display_name: event.target.value })
-                }
-              />
+              <input className="input" value={editor.display_name ?? ""} onChange={(event) => setEditor({ ...editor, display_name: event.target.value })} />
             </Field>
             <Field title={editor.id ? t("newPassword") : t("password")}>
-              <input
-                type="password"
-                required={!editor.id}
-                value={editor.password ?? ""}
-                autoComplete="new-password"
-                onChange={(event) =>
-                  setEditor({ ...editor, password: event.target.value })
-                }
-              />
+              <input className="input" type="password" required={!editor.id} value={editor.password ?? ""} autoComplete="new-password" onChange={(event) => setEditor({ ...editor, password: event.target.value })} />
             </Field>
-            <Field title={t("role")}>
-              <SelectField
-                value={editor.role ?? "user"}
-                options={[
-                  { value: "user", label: t("userRole") },
-                  { value: "admin", label: t("administrator") },
-                ]}
-                onChange={(role) =>
-                  setEditor({ ...editor, role: role as User["role"] })
-                }
-              />
-            </Field>
-            <Toggle
-              title={t("enable")}
-              value={editor.enabled ?? true}
-              onChange={(enabled) => setEditor({ ...editor, enabled })}
-            />
+            <div className="ad-field"><span className="field-label">{t("role")}</span>
+              <Seg value={(editor.role ?? "user") as "user" | "admin"} onChange={(role) => setEditor({ ...editor, role })} options={[{ v: "user", l: t("userRole") }, { v: "admin", l: t("administrator") }]} /></div>
+            <Toggle title={t("enable")} value={editor.enabled ?? true} onChange={(enabled) => setEditor({ ...editor, enabled })} />
             <ErrorNotice error={error} />
           </form>
-        </Modal>
+        </Drawer>
       )}
       {deleting && (
-        <Modal
-          className="ochi-admin-modal"
-          title={t("deleteUserQuestion")}
-          onClose={() => setDeleting(null)}
-          dismissible={!busy}
-          size="small"
-          footer={
-            <div className="modal-actions">
-              <button
-                className="secondary-button"
-                disabled={busy}
-                onClick={() => setDeleting(null)}
-              >
-                {t("cancel")}</button>
-              <button
-                className="danger-button"
-                disabled={busy}
-                aria-busy={busy}
-                onClick={() => void removeUser()}
-              >
-                {busy && <LoaderCircle className="spin" size={15} />}
-                {busy ? t("deletingEllipsis") : t("delete")}</button>
-            </div>
-          }
-        >
-          <p>{deleting.display_name || deleting.username}</p>
-          <p className="settings-note">{t("deleteUserDescription")}</p>
+        <Modal title={t("deleteUserQuestion")} onClose={() => setDeleting(null)} dismissible={!busy} size="small" className="ad-danger-m"
+          footer={<div className="modal-actions">
+            <button className="btn ghost" disabled={busy} onClick={() => setDeleting(null)}>{t("cancel")}</button>
+            <button className={`btn danger${busy ? " btn-progress" : ""}`} disabled={busy || !confirmMatches(typed, deleting.username)} aria-busy={busy} onClick={() => void removeUser()}>
+              {busy ? t("deletingEllipsis") : t("delete")}</button>
+          </div>}>
+          <p><b>{deleting.display_name || deleting.username}</b></p>
+          <div className="ad-alert"><TriangleAlert className="ic" /><div>{t("deleteUserDescription")}</div></div>
+          <TypedConfirm name={deleting.username} value={typed} onChange={setTyped} disabled={busy} />
           <ErrorNotice error={deleteError} />
         </Modal>
       )}
@@ -300,18 +302,17 @@ export function SystemPage() {
   }
   if (loading)
     return (
-      <div className="panel-loading">
-        <LoaderCircle className="spin" size={22} />
-      </div>
+      <AdminSkeleton />
     );
   return (
     <>
-      <div className="admin-page-heading">
-        <h2>{t("system")}</h2>
-      </div>
+      <AdminHeader actions={<button type="submit" form="system-settings" className={`btn primary${busy ? " btn-progress" : ""}`} disabled={busy || debugBusy}>
+        <Check className="ic" />{busy ? t("savingEllipsis") : t("save")}</button>} />
       <ErrorNotice error={error} notice={notice} />
+      <UpdateCard />
       <form
-        className="admin-form system-form"
+        id="system-settings"
+        className="ad-stack-form"
         onSubmit={(event) => {
           event.preventDefault();
           if (busy || debugBusy) return;
@@ -329,8 +330,8 @@ export function SystemPage() {
             .finally(() => setBusy(false));
         }}
       >
-        <section className="settings-card">
-          <h3>{t("auxiliaryModels")}</h3>
+        <Card>
+          <CardHead title={t("auxiliaryModels")} />
           {[
             {
               key: "compaction_model_id",
@@ -385,11 +386,12 @@ export function SystemPage() {
               />
             </Field>
           ))}
-        </section>
-        <section className="settings-card">
-          <h3>Agent</h3>
+        </Card>
+        <Card>
+          <CardHead title={"Agent"} />
           <Field title={t("additionalInstructions")}>
             <textarea
+              className="textarea"
               rows={14}
               placeholder={t("optional")}
               value={String(settings.system_prompt ?? "")}
@@ -400,6 +402,7 @@ export function SystemPage() {
           </Field>
           <Field title={t("maxToolRounds")}>
             <input
+              className="input"
               type="number"
               min={1}
               max={200}
@@ -412,24 +415,19 @@ export function SystemPage() {
               }
             />
           </Field>
-        </section>
-        <section className="settings-card">
-          <h3>{t("diagnostics")}</h3>
+        </Card>
+        <Card>
+          <CardHead title={t("diagnostics")} />
           <Toggle
             title={t("debugMode")}
             value={debugMode}
             disabled={busy || debugBusy}
             onChange={(debug_mode) => void saveDebugMode(debug_mode)}
           />
-          <p className="settings-note">
+          <p className="field-hint">
             {t("debugModeHint")}{debugBusy ? t("savingEllipsis") : t("debugImmediateHint")}{t("debugHistoryHint")}</p>
-        </section>
-        <div className="form-footer">
-          <button className="primary-button" disabled={busy || debugBusy}>
-            {busy && <LoaderCircle className="spin" size={15} />}{t("save")}</button>
-        </div>
+        </Card>
       </form>
-      <UpdateCard />
     </>
   );
 }
@@ -445,6 +443,8 @@ export function WorkspacesPage() {
     action: "rebuild" | "delete";
   } | null>(null);
   const [confirmError, setConfirmError] = useState("");
+  const [typed, setTyped] = useState("");
+  useEffect(() => setTyped(""), [confirm]);
   const refresh = useCallback(async () => {
     try {
       const [values, accounts] = await Promise.all([
@@ -488,75 +488,57 @@ export function WorkspacesPage() {
       ? t("pluginControlWorkspace")
       : users.find((user) => user.id === item.user_id)?.display_name || item.user_id;
   }
+  const running = items.filter((item) => item.running).length;
+  const outdated = items.filter((item) => item.update_available).length;
   return (
     <>
-      <div className="admin-page-heading">
-        <h2>{t("workspaces")}</h2>
-        <button
-          className="icon-button"
-          aria-label={t("refresh")}
-          onClick={() => void refresh()}
-        >
-          <RefreshCw size={18} />
-        </button>
-      </div>
+      <AdminHeader actions={<button className="btn secondary" disabled={loading} onClick={() => { setLoading(true); void refresh(); }}><RefreshCw className={`ic${loading ? " ic-turn" : ""}`} />{t("refresh")}</button>} />
       <ErrorNotice error={error} />
       {loading ? (
-        <div className="panel-loading">
-          <LoaderCircle className="spin" size={22} />
+        <Card flush><SkeletonRows rows={3} /></Card>
+      ) : items.length ? <>
+        <div className="ad-stats">
+          <Stat label={t("running")} value={`${running} / ${items.length}`} sub={t("workspaceContainers")} tone={running ? "success" : undefined} />
+          <Stat label={t("workspaceImageUpdateAvailable")} value={outdated} sub={t("workspaceRebuildToApply")} tone={outdated ? "warn" : undefined} />
         </div>
-      ) : (
-        <div className="workspace-list">
-          {items.map((item) => (
-            <article key={item.user_id}>
-              <span className="integration-icon"><Cpu size={18} /></span>
-              <div className="workspace-row-main">
-                <strong>
-                  {workspaceName(item)}
-                </strong>
-                <span>{item.image}</span>
-                <small>{item.container}</small>
-                {item.kind === "control" && <small>{t("pluginControlDescription")}</small>}
-                {item.update_available && <small>{t("workspaceImageUpdateAvailable")}</small>}
-              </div>
-              <span className={`admin-state${item.running ? " is-enabled" : ""}`}>
-                <i />{item.running ? t("running") : !item.state || item.state === "not_created" ? t("notStarted") : item.state}
-              </span>
-              <div className="workspace-row-actions">
-                <button
-                  className="secondary-button"
-                  disabled={Boolean(busy)}
-                  onClick={() =>
-                    void action(item, item.running ? "stop" : "start")
-                  }
-                >
-                  {item.running ? t("stop") : t("startAction")}
-                </button>
-                <button className="secondary-button" disabled={Boolean(busy)}
-                  onClick={() => {
-                    setConfirmError("");
-                    setConfirm({ workspace: item, action: "rebuild" });
-                  }}>{t("rebuild")}</button>
-                {item.kind !== "control" && (
-                  <button className="icon-button admin-delete-action"
-                    aria-label={t("deleteWorkspaceNamed", { name: workspaceName(item) })}
-                    title={t("deleteWorkspace")} disabled={Boolean(busy)}
-                    onClick={() => {
-                      setConfirmError("");
-                      setConfirm({ workspace: item, action: "delete" });
-                    }}>
-                    <Trash2 size={16} />
-                  </button>
-                )}
-              </div>
-            </article>
-          ))}
-          {!items.length && <div className="empty-page">{t("noWorkspaces")}</div>}
+        <div className="ad-wsgrid">
+          {items.map((item) => {
+            const state = item.running ? "running" : !item.state || item.state === "not_created" ? "stopped" : item.state === "error" || item.state === "dead" ? "error" : "stopped";
+            const pending = busy === item.user_id;
+            const name = workspaceName(item);
+            return (
+              <Card key={item.user_id} className="ad-ws" data-st={pending ? "pending" : state}>
+                <div className="ad-ws-h">
+                  <Who name={name} sub={item.container} mono />
+                  <span className="grow" />
+                  {pending ? <Pill tone="warn"><i className="dot-live" aria-hidden="true" />{t("working")}</Pill>
+                    : <Pill tone={state === "running" ? "success" : state === "error" ? "danger" : "neutral"}><i className="dot" data-tone={state === "running" ? "success" : state === "error" ? "danger" : ""} />
+                      {item.running ? t("running") : !item.state || item.state === "not_created" ? t("notStarted") : item.state}</Pill>}
+                </div>
+                {item.kind === "control" && <p className="muted ad-ws-note">{t("pluginControlDescription")}</p>}
+                <div className="ad-ws-meta">
+                  <span className="mono" title={item.image}><Container className="ic" />{item.image}</span>
+                  {item.update_available ? <Pill tone="warn">{t("workspaceImageUpdateAvailable")}</Pill> : null}
+                </div>
+                <div className="ad-ws-act">
+                  <button className="btn sm secondary" disabled={Boolean(busy)} onClick={() => void action(item, item.running ? "stop" : "start")}>
+                    {item.running ? <CircleStop className="ic" /> : <Play className="ic" />}{item.running ? t("stop") : t("startAction")}</button>
+                  <button className="btn sm secondary" disabled={Boolean(busy)} onClick={() => { setConfirmError(""); setConfirm({ workspace: item, action: "rebuild" }); }}>
+                    <RotateCw className="ic" />{t("rebuild")}</button>
+                  <span className="grow" />
+                  {item.kind !== "control" && (
+                    <button className="btn sm danger-ghost" aria-label={t("deleteWorkspaceNamed", { name })} title={t("deleteWorkspace")} disabled={Boolean(busy)}
+                      onClick={() => { setConfirmError(""); setConfirm({ workspace: item, action: "delete" }); }}><Trash2 className="ic" />{t("delete")}</button>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
         </div>
-      )}
+      </> : !error && <Card><Empty icon={<Container className="ic" />} title={t("noWorkspaces")} /></Card>}
       {confirm && (
         <Modal
-          className="ochi-admin-modal"
+          className={confirm.action === "delete" ? "ad-danger-m" : ""}
           title={confirm.action === "delete" ? t("deleteWorkspaceQuestion") : t("rebuildWorkspaceQuestion")}
           onClose={() => setConfirm(null)}
           dismissible={!busy}
@@ -564,28 +546,30 @@ export function WorkspacesPage() {
           footer={
             <div className="modal-actions">
               <button
-                className="secondary-button"
+                className="btn secondary"
                 disabled={Boolean(busy)}
                 onClick={() => setConfirm(null)}
               >
                 {t("cancel")}</button>
               <button
-                className={confirm.action === "delete" ? "danger-button" : "primary-button"}
-                disabled={Boolean(busy)}
+                className={`${confirm.action === "delete" ? "btn danger" : "btn primary"}${busy ? " btn-progress" : ""}`}
+                disabled={Boolean(busy) || (confirm.action === "delete" && !confirmMatches(typed, workspaceName(confirm.workspace)))}
                 aria-busy={Boolean(busy)}
                 onClick={() => void action(confirm.workspace, confirm.action)}
               >
-                {busy && <LoaderCircle className="spin" size={15} />}
                 {confirm.action === "delete"
                   ? busy ? t("deletingEllipsis") : t("delete")
-                  : t("rebuild")}</button>
+                  : busy ? t("rebuildingEllipsis") : t("rebuild")}</button>
             </div>
           }
         >
           <p>
             {workspaceName(confirm.workspace)}
           </p>
-          {confirm.action === "delete" && <p className="settings-note">{t("deleteWorkspaceDescription")}</p>}
+          {confirm.action === "delete" && <>
+            <div className="ad-alert"><TriangleAlert className="ic" /><div>{t("deleteWorkspaceDescription")}</div></div>
+            <TypedConfirm name={workspaceName(confirm.workspace)} value={typed} onChange={setTyped} disabled={Boolean(busy)} />
+          </>}
           <ErrorNotice error={confirmError} />
         </Modal>
       )}
@@ -602,16 +586,30 @@ function formatDuration(milliseconds?: number | null) {
 function formatTokens(tokens?: number | null) {
   return tokens == null ? "—" : tokens.toLocaleString(getLocale());
 }
+function runTone(status: string): Tone {
+  return status === "completed" ? "success" : status === "failed" || status === "interrupted" ? "danger"
+    : status === "cancelled" || status === "cancelling" ? "neutral" : status === "waiting_user" || status === "waiting_resource" ? "warn" : "accent";
+}
 function RunStatusBadge({ run }: { run: Pick<AdminRun, "status" | "error" | "error_code"> }) {
   useAdminI18n();
   const error = translateError(run.error_code) ?? run.error;
-  return <span className={`run-status run-status-${run.status}`} title={error || undefined}>
-    <i />{statusLabel(run.status)}{error && <CircleAlert size={12} />}
-  </span>;
+  return <Pill tone={runTone(run.status)}>{statusLabel(run.status)}{error && <CircleAlert className="ic" />}</Pill>;
+}
+function RunStatusIcon({ status }: { status: string }) {
+  const tone = runTone(status);
+  const Icon = tone === "success" ? CircleCheck : tone === "danger" ? CircleX : tone === "warn" ? Clock : tone === "accent" ? CirclePlay : CircleSlash;
+  return <span className="ad-sic" data-tone={tone === "neutral" ? "" : tone}><Icon className={`ic${tone === "accent" ? " ic-pulse" : ""}`} /></span>;
+}
+function ago(value: string) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
+  const rtf = new Intl.RelativeTimeFormat(getLocale(), { numeric: "auto" });
+  if (minutes < 60) return rtf.format(-minutes, "minute");
+  if (minutes < 1440) return rtf.format(-Math.round(minutes / 60), "hour");
+  return rtf.format(-Math.round(minutes / 1440), "day");
 }
 function ReadOnlySteps({ steps }: { steps: Step[] }) {
   useAdminI18n();
-  return <div className="admin-readonly-steps">{steps.map(step => {
+  return <div className="ad-ro-steps">{steps.map(step => {
     const scope = ["command", "url", "path", "query"].map(key => step.arguments?.[key]).find(value => typeof value === "string") as string | undefined;
     let result: Record<string, unknown> | null = null;
     try {
@@ -649,7 +647,6 @@ export function RunsPage({ currentUserID, onNavigate }: { currentUserID: string;
   const [detailError, setDetailError] = useState("");
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailTab, setDetailTab] = useState("result");
-  const [view, setView] = useState("records");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -702,103 +699,82 @@ export function RunsPage({ currentUserID, onNavigate }: { currentUserID: string;
   }, [selected?.run_id, detailRevision]);
   function selectRun(run: AdminRun) { setDetailTab("result"); setSelected(run); }
   const current = detail ?? selected;
+  const rows = page?.items ?? [];
+  const usage = stats?.models ?? [];
+  const failures = stats ? stats.failed + stats.interrupted : 0;
+  const rate = stats && stats.runs ? Math.round(((stats.runs - failures) / stats.runs) * 1000) / 10 : null;
   return <>
-    <div className="admin-page-heading">
-      <h2>{t("runRecords")}</h2>
-      <div className="toolbar-actions">
-        <SelectField label={t("statisticsRange")} value={period} options={dateOptions()} onChange={value => { setPeriod(value); setOffset(0); }} />
-        <button className="icon-button" aria-label={t("refreshRuns")} disabled={loading} onClick={() => setRevision(value => value + 1)}>
-          <RefreshCw size={16} className={loading ? "spin" : undefined} />
-        </button>
-      </div>
-    </div>
+    <AdminHeader
+      actions={<button className="btn secondary" aria-label={t("refreshRuns")} disabled={loading} onClick={() => setRevision(value => value + 1)}><RefreshCw className={`ic${loading ? " ic-turn" : ""}`} />{t("refresh")}</button>}
+      toolbar={<>
+        <div className="search-field"><Search className="ic" /><input className="input" type="search" aria-label={t("searchRuns")} value={query} onChange={event => setQuery(event.target.value)} placeholder={t("searchRunsPlaceholder")} /></div>
+        <MenuSelect label={t("runStatus")} value={status} options={statusOptions().map(o => ({ v: o.value, l: o.label }))} onChange={value => { setStatus(value); setOffset(0); }} />
+        <MenuSelect label={t("filterModel")} value={model} options={[{ v: "", l: t("allModels") }, ...models.map(item => ({ v: item.id, l: item.name }))]} onChange={value => { setModel(value); setOffset(0); }} />
+        <MenuSelect label={t("filterUser")} value={account} options={[{ v: "", l: t("allUsers") }, ...users.map(item => ({ v: item.id, l: item.display_name || item.username }))]} onChange={value => { setAccount(value); setOffset(0); }} />
+        <span className="grow" />
+        <Seg small label={t("statisticsRange")} value={period} onChange={value => { setPeriod(value); setOffset(0); }} options={dateOptions().map(o => ({ v: o.value, l: o.label }))} />
+      </>} />
     <ErrorNotice error={error} />
-    <div className="run-view-tabs" role="tablist" aria-label={t("runView")}>
-      {[{ id: "records", label: t("records") }, { id: "overview", label: t("overview") }].map(tab =>
-        <button key={tab.id} id={`run-tab-${tab.id}`} role="tab" aria-selected={view === tab.id} aria-controls="run-view" className={view === tab.id ? "selected" : ""} onClick={() => setView(tab.id)}>{tab.label}</button>,
-      )}
-      <span className="run-period-label">{stats ? `${new Date(stats.from).toLocaleDateString(getLocale())} — ${new Date(stats.to).toLocaleDateString(getLocale())}` : ""}</span>
+    <div className="ad-stats" aria-busy={loading}>
+      <Stat label={t("runs")} value={stats?.runs.toLocaleString(getLocale()) ?? "—"} sub={stats ? t("runsCompletedActive", { completed: stats.completed, active: stats.active }) : undefined} />
+      <Stat label={t("successRate")} value={rate == null ? "—" : `${rate}%`} sub={stats ? t("runsFailedInterrupted", { failed: stats.failed, interrupted: stats.interrupted }) : undefined} tone={rate != null && rate >= 95 ? "success" : rate != null ? "warn" : undefined} />
+      <Stat label={t("averageDuration")} value={formatDuration(stats?.average_duration_ms)} sub={stats ? t("cancelledCount", { count: stats.cancelled }) : undefined} />
+      <Stat label={t("tokenUsage")} value={stats?.usage_reported_runs ? formatTokens(stats.total_tokens) : "—"} sub={stats?.usage_reported_runs ? `${t("inputTokens")} ${formatTokens(stats.prompt_tokens)} · ${t("outputTokens")} ${formatTokens(stats.completion_tokens)}` : undefined} />
     </div>
-    <div className={`run-summary-strip ${loading ? "is-updating" : ""}`} data-view={view} aria-busy={loading}>
-      <div><span>{t("runs")}</span><strong>{stats?.runs.toLocaleString(getLocale()) ?? "—"}</strong><small>{stats ? t("runsCompletedActive", { completed: stats.completed, active: stats.active }) : ""}</small></div>
-      <div><span>{t("issues")}</span><strong className={stats && stats.failed + stats.interrupted ? "danger" : ""}>{stats ? (stats.failed + stats.interrupted).toLocaleString(getLocale()) : "—"}</strong><small>{stats ? t("runsFailedInterrupted", { failed: stats.failed, interrupted: stats.interrupted }) : ""}</small></div>
-      <div><span>{t("inputTokens")}</span><strong>{stats?.usage_reported_runs ? formatTokens(stats.prompt_tokens) : "—"}</strong><small>{stats?.usage_reported_runs ? t("usageCount", { count: stats.usage_reported_runs }) : ""}</small></div>
-      <div><span>{t("outputTokens")}</span><strong>{stats?.usage_reported_runs ? formatTokens(stats.completion_tokens) : "—"}</strong><small>{stats?.usage_reported_runs ? t("totalTokensCount", { count: formatTokens(stats.total_tokens) }) : ""}</small></div>
-      <div><span>{t("cachedTokens")}</span><strong>{formatTokens(stats?.cached_tokens)}</strong></div>
-      <div><span>{t("averageDuration")}</span><strong>{formatDuration(stats?.average_duration_ms)}</strong><small>{stats ? t("cancelledCount", { count: stats.cancelled }) : ""}</small></div>
-    </div>
-    <div className="runs-filterbar">
-      <label className="search-input"><Search size={15} /><input aria-label={t("searchRuns")} value={query} onChange={event => setQuery(event.target.value)} placeholder={t("searchRunsPlaceholder")} /></label>
-      <SelectField label={t("runStatus")} value={status} options={statusOptions()} onChange={value => { setStatus(value); setOffset(0); }} />
-      <SelectField label={t("filterModel")} value={model} options={[{ value: "", label: t("allModels") }, ...models.map(item => ({ value: item.id, label: item.name }))]} onChange={value => { setModel(value); setOffset(0); }} />
-      <SelectField label={t("filterUser")} value={account} options={[{ value: "", label: t("allUsers") }, ...users.map(item => ({ value: item.id, label: item.display_name || item.username }))]} onChange={value => { setAccount(value); setOffset(0); }} />
-    </div>
-    <section id="run-view" role="tabpanel" aria-labelledby={`run-tab-${view}`}>
-    {view === "records" ? <>
-      <div className={`admin-table-wrap runs-table-wrap ${loading ? "is-updating" : ""}`} aria-busy={loading}>
-        <table className="admin-table runs-table">
-          <thead><tr><th>{t("taskUser")}</th><th>{t("model")}</th><th>{t("status")}</th><th className="numeric">{t("duration")}</th><th className="numeric">Tokens</th><th>{t("start")}</th><th><span className="sr-only">{t("details")}</span></th></tr></thead>
-          <tbody>{page?.items.map(run => <tr key={run.run_id}>
-            <td className="runs-cell-task"><button className="run-task-link" onClick={() => selectRun(run)} title={run.prompt || run.session_title}>
-              <strong>{run.prompt || run.session_title || t("newChat")}</strong>
-              <small className="run-task-user" title={run.username}>{run.display_name || run.username || "—"}{run.prompt && run.prompt !== run.session_title ? ` · ${run.session_title}` : ""}</small>
-            </button></td>
-            <td className="runs-cell-model" title={[run.model_name, run.provider_name, run.effort].filter(Boolean).join(" · ")}><span className="table-model-name" title={run.model_name}>{run.model_name || "—"}</span><small className="table-secondary">{[run.provider_name, run.effort].filter(Boolean).join(" · ")}</small></td>
-            <td className="runs-cell-status"><RunStatusBadge run={run} /></td>
-            <td className="numeric runs-cell-duration" data-label={t("duration")}>{formatDuration(run.duration_ms)}</td>
-            <td className="numeric runs-cell-tokens" data-label="Tokens"
-              title={t("usageSummary", { input: formatTokens(run.usage?.prompt_tokens), output: formatTokens(run.usage?.completion_tokens), cached: formatTokens(run.usage?.cached_tokens) })}>
-              {run.usage?.total_tokens ? formatTokens(run.usage.total_tokens) : "—"}
-              <small className="table-secondary">{run.step_count} {t("toolCallsSuffix")}</small>
-            </td>
-            <td className="table-date runs-cell-time" title={new Date(run.created_at).toLocaleString(getLocale())}>
-              <span>{new Date(run.created_at).toLocaleDateString(getLocale(), { month: "short", day: "numeric" })}</span>
-              <small>{new Date(run.created_at).toLocaleTimeString(getLocale(), { hour: "2-digit", minute: "2-digit", hour12: false })}</small>
-              <span className="run-responsive-user" title={[run.username, run.session_title].filter(Boolean).join(" · ")}>{run.display_name || run.username || "—"}{run.prompt && run.prompt !== run.session_title ? ` · ${run.session_title}` : ""}</span>
-            </td>
-            <td className="runs-cell-action"><button className="icon-button" aria-label={t("viewRunNamed", { name: run.prompt || run.session_title })} title={t("runDetails")} onClick={() => selectRun(run)}><ArrowUpRight size={16} /></button></td>
-          </tr>)}</tbody>
-        </table>
-        {!page?.items.length && <div className="table-empty">{loading ? <LoaderCircle className="spin" size={18} /> : t("noRecords")}</div>}
-      </div>
-      <div className="table-pagination">
-        <span>{page ? t("recordsRange", { total: page.total, start: page.total ? Math.min(offset + 1, page.total) : 0, end: Math.min(offset + limit, page.total) }) : ""}</span>
-        <div><button className="icon-button" aria-label={t("previousRunsPage")} disabled={loading || offset === 0} onClick={() => setOffset(value => Math.max(0, value - limit))}><ChevronLeft size={16} /></button><span>{Math.floor(offset / limit) + 1} / {Math.max(1, Math.ceil((page?.total ?? 0) / limit))}</span><button className="icon-button" aria-label={t("nextRunsPage")} disabled={loading || !page || offset + limit >= page.total} onClick={() => setOffset(value => value + limit)}><ChevronRight size={16} /></button></div>
-      </div>
-    </> : <div className="admin-table-wrap" aria-busy={loading}>
-      <table className="admin-table usage-model-table"><thead><tr><th>{t("modelProvider")}</th><th className="numeric">{t("runs")}</th><th className="numeric">{t("issues")}</th><th className="numeric">Tokens</th><th className="numeric">{t("cache")}</th></tr></thead>
-        <tbody>{stats?.models.map(item => <tr key={`${item.model_id}:${item.model_name}`}>
-          <td className="usage-cell-name"><strong>{item.model_name || "—"}</strong><small className="table-secondary">{item.provider_name || "—"}</small></td>
-          <td className="numeric" data-label={t("runs")}>{formatTokens(item.runs)}</td>
-          <td className={`numeric ${item.failed ? "danger" : ""}`} data-label={t("issues")}>{item.failed}</td>
-          <td className="numeric" data-label="Tokens" title={t("inputOutputSummary", { input: formatTokens(item.prompt_tokens), output: formatTokens(item.completion_tokens) })}>{item.total_tokens ? formatTokens(item.total_tokens) : "—"}</td>
-          <td className="numeric" data-label={t("cache")}>{formatTokens(item.cached_tokens)}</td>
+    {usage.length > 0 && <Card flush>
+      <div className="ad-tscroll"><table className="ad-table usage-model-table"><thead><tr><th>{t("modelProvider")}</th><th className="r">{t("runs")}</th><th className="r">{t("issues")}</th><th className="r">Tokens</th><th className="r ad-hide-s">{t("cache")}</th></tr></thead>
+        <tbody>{usage.map(item => <tr key={`${item.model_id}:${item.model_name}`}>
+          <td><b>{item.model_name || "—"}</b><br /><small>{item.provider_name || "—"}</small></td>
+          <td className="r tnum">{formatTokens(item.runs)}</td>
+          <td className="r tnum" style={item.failed ? { color: "var(--danger)" } : undefined}>{item.failed}</td>
+          <td className="r tnum" title={t("inputOutputSummary", { input: formatTokens(item.prompt_tokens), output: formatTokens(item.completion_tokens) })}>{item.total_tokens ? formatTokens(item.total_tokens) : "—"}</td>
+          <td className="r tnum ad-hide-s">{formatTokens(item.cached_tokens)}</td>
         </tr>)}</tbody>
-      </table>{!stats?.models.length && <div className="table-empty">{loading ? <LoaderCircle className="spin" size={18} /> : t("noRecords")}</div>}
-    </div>}
-    </section>
-    {selected && current && <Modal className="ochi-admin-modal" title={t("runDetails")} size="large" onClose={() => setSelected(null)} footer={<div className="modal-actions">
-      {current.user_id === currentUserID && <button className="secondary-button" onClick={() => onNavigate(`/c/${current.session_id}`)}>{t("openConversation")}<ArrowUpRight size={14} /></button>}
-      <button className="secondary-button" disabled={detailLoading} onClick={() => setDetailRevision(value => value + 1)}><RefreshCw size={14} className={detailLoading ? "spin" : undefined} />{t("refresh")}</button>
-    </div>}>
-      <div className="run-detail-heading"><strong>{current.session_title || t("newChat")}</strong><RunStatusBadge run={current} /></div>
-      <div className="run-detail-meta"><span>{current.display_name || current.username}</span><span>{current.model_name}{current.effort ? ` · ${current.effort}` : ""}</span><span>{new Date(current.created_at).toLocaleString(getLocale(), { hour12: false })}</span><span>{formatDuration(current.duration_ms)}</span></div>
-      <div className="run-detail-tabs" role="tablist" aria-label={t("runDetails")}>
-        {[{ id: "result", title: t("content") }, { id: "tools", title: t("toolCount", { count: current.step_count }) }, { id: "metadata", title: t("data") }, { id: "requests", title: t("requestDiagnostics") }].map(tab => <button key={tab.id} role="tab" aria-selected={detailTab === tab.id} aria-controls="run-detail-content" className={detailTab === tab.id ? "selected" : ""} onClick={() => setDetailTab(tab.id)}>{tab.title}</button>)}
-      </div>
+      </table></div>
+    </Card>}
+    <Card flush aria-busy={loading}>
+      {loading && !rows.length ? <SkeletonRows rows={6} /> : rows.length ? <>
+        <div className="ad-runs">{rows.map((run, index) => (
+          <button type="button" className="ad-run" key={run.run_id} style={{ "--i": Math.min(index, 12) } as CSSProperties} onClick={() => selectRun(run)}
+            aria-label={t("viewRunNamed", { name: run.prompt || run.session_title })}>
+            <RunStatusIcon status={run.status} />
+            <div className="ad-run-t"><b>{run.prompt || run.session_title || t("newChat")}</b><small>{[run.model_name, run.display_name || run.username].filter(Boolean).join(" · ")}</small></div>
+            <span className="ad-run-m tnum ad-hide-s" title={t("usageSummary", { input: formatTokens(run.usage?.prompt_tokens), output: formatTokens(run.usage?.completion_tokens), cached: formatTokens(run.usage?.cached_tokens) })}>
+              {run.usage?.total_tokens ? formatTokens(run.usage.total_tokens) : "—"}</span>
+            <span className="ad-run-m tnum ad-hide-s"><Wrench className="ic" />{run.step_count}</span>
+            <span className="ad-run-m tnum">{formatDuration(run.duration_ms)}</span>
+            <span className="ad-run-ago muted ad-hide-s" title={new Date(run.created_at).toLocaleString(getLocale())}>{ago(run.created_at)}</span>
+            <ChevronRight className="ic ad-go" />
+          </button>
+        ))}</div>
+        <footer className="ad-pager">
+          <span className="muted tnum">{page ? t("recordsRange", { total: page.total, start: page.total ? Math.min(offset + 1, page.total) : 0, end: Math.min(offset + limit, page.total) }) : ""}</span><span className="grow" />
+          <button className="icon-btn sm" aria-label={t("previousRunsPage")} disabled={loading || offset === 0} onClick={() => setOffset(value => Math.max(0, value - limit))}><ChevronLeft className="ic" /></button>
+          <span className="tnum muted">{Math.floor(offset / limit) + 1} / {Math.max(1, Math.ceil((page?.total ?? 0) / limit))}</span>
+          <button className="icon-btn sm" aria-label={t("nextRunsPage")} disabled={loading || !page || offset + limit >= page.total} onClick={() => setOffset(value => value + limit)}><ChevronRight className="ic" /></button>
+        </footer>
+      </> : <Empty icon={<History className="ic" />} title={t("noRecords")} desc={t("runsEmptyHint")} />}
+    </Card>
+    {selected && current && <Drawer wide title={current.prompt || current.session_title || t("newChat")} sub={[current.model_name, current.display_name || current.username, new Date(current.created_at).toLocaleString(getLocale(), { hour12: false })].filter(Boolean).join(" · ")} onClose={() => setSelected(null)}
+      footer={<footer className="ad-df">
+        <RunStatusBadge run={current} /><span className="muted tnum">{formatDuration(current.duration_ms)}</span><span className="grow" />
+        {current.user_id === currentUserID && <button className="btn sm secondary" onClick={() => onNavigate(`/c/${current.session_id}`)}>{t("openConversation")}<ArrowUpRight className="ic" /></button>}
+        <button className="btn sm secondary" disabled={detailLoading} onClick={() => setDetailRevision(value => value + 1)}><RefreshCw className={`ic${detailLoading ? " ic-turn" : ""}`} />{t("refresh")}</button>
+      </footer>}>
+      <Seg small label={t("runDetails")} value={detailTab} onChange={setDetailTab} options={[{ v: "result", l: t("content") }, { v: "tools", l: t("toolCount", { count: current.step_count }) }, { v: "metadata", l: t("data") }, { v: "requests", l: t("requestDiagnostics") }]} />
       <ErrorNotice error={detailError} />
-      {detailLoading ? <div className="run-detail-loading"><LoaderCircle size={18} className="spin" /></div> : detail && <div id="run-detail-content" role="tabpanel" className="run-detail-content">
+      {detailLoading ? <SkeletonRows rows={3} /> : detail && <div id="run-detail-content" role="tabpanel" className="ad-detail-content">
         {detailTab === "result" ? <>
-          <div className="run-prompt-text">{detail.prompt}</div>
-          {(detail.error_code || detail.error) && <pre className="run-error-output">{translateError(detail.error_code) ?? detail.error}</pre>}
+          <div className="ad-prompt">{detail.prompt}</div>
+          {(detail.error_code || detail.error) && <div className="ad-alert"><CircleAlert className="ic" /><div>{translateError(detail.error_code) ?? detail.error}</div></div>}
           {publicReply(detail) && <div className="markdown-body"><Suspense fallback={<div>{publicReply(detail)}</div>}><MarkdownContent content={publicReply(detail)} isStreaming={false} /></Suspense></div>}
-          {detail.artifacts.length > 0 && (detail.user_id === currentUserID ? <FileCards files={detail.artifacts} /> : <ul className="run-artifact-names">{detail.artifacts.map(file => <li key={file.id}>{file.name}</li>)}</ul>)}
-        </> : detailTab === "tools" ? (detail.items.flatMap((item) => item.step ? [item.step] : []).length ? detail.user_id === currentUserID ? <StepList steps={detail.items.flatMap((item) => item.step ? [item.step] : [])} /> : <ReadOnlySteps steps={detail.items.flatMap((item) => item.step ? [item.step] : [])} /> : <div className="table-empty">{t("noToolCalls")}</div>) : detailTab === "requests" ? <RequestDiagnostics key={`${detail.run_id}:${detailRevision}`} runID={detail.run_id} /> : <dl className="run-data-facts">
+          {detail.artifacts.length > 0 && (detail.user_id === currentUserID ? <FileCards files={detail.artifacts} /> : <ul className="ad-artifact-names">{detail.artifacts.map(file => <li key={file.id}>{file.name}</li>)}</ul>)}
+        </> : detailTab === "tools" ? (detail.items.flatMap((item) => item.step ? [item.step] : []).length ? detail.user_id === currentUserID ? <StepList steps={detail.items.flatMap((item) => item.step ? [item.step] : [])} /> : <ReadOnlySteps steps={detail.items.flatMap((item) => item.step ? [item.step] : [])} /> : <Empty icon={<Wrench className="ic" />} title={t("noToolCalls")} />) : detailTab === "requests" ? <RequestDiagnostics embedded key={`${detail.run_id}:${detailRevision}`} runID={detail.run_id} /> : <dl className="ad-facts">
           {[
             [t("users"), detail.display_name || detail.username], [t("provider"), detail.provider_name || "—"], [t("inputTokens"), formatTokens(detail.usage?.prompt_tokens)], [t("outputTokens"), formatTokens(detail.usage?.completion_tokens)], [t("cachedTokens"), formatTokens(detail.usage?.cached_tokens)], [t("totalDuration"), formatDuration(detail.duration_ms)], [t("update"), new Date(detail.updated_at).toLocaleString(getLocale(), { hour12: false })], [t("files"), String(detail.artifact_count)], [t("runID"), detail.run_id], [t("sessionID"), detail.session_id], [t("userID"), detail.user_id], ...(detail.resource ? [[t("resource"), detail.resource]] : []), ...(detail.archived ? [[t("version"), t("archivedVersion")]] : []),
           ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
         </dl>}
       </div>}
-    </Modal>}
+    </Drawer>}
   </>;
 }

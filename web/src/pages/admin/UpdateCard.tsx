@@ -1,6 +1,6 @@
 import { t, useAdminI18n, getLocale, formatNumber, translateError, type AdminMessageKey } from "./i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, CircleAlert, Download, LoaderCircle, RefreshCw, RotateCcw } from "lucide-react";
+import { Check, CircleAlert, Download, Power, RefreshCw, RotateCcw } from "lucide-react";
 import { Modal } from "../../components/Modal";
 import { adminApi } from "../../lib/api";
 import type { ApiError, UpdateBuild, UpdateState } from "../../lib/types";
@@ -197,6 +197,19 @@ function shortRevision(revision: string) {
   return !revision || revision === "unknown" ? t("localBuild") : revision.slice(0, 8);
 }
 
+/** The active phase shows the icon of what is happening: refresh turns itself, the rest pulse. */
+export function updatePhaseIcon(action: UpdateAction | null | undefined, phase: UpdateState["phase"] | undefined, restarting: boolean) {
+  if (restarting) return { Icon: Power, turn: false };
+  if (action === "rollback") return { Icon: RotateCcw, turn: false };
+  if (phase === "downloading" || action === "apply") return { Icon: Download, turn: false };
+  return { Icon: RefreshCw, turn: true };
+}
+
+function UpdatePhaseIcon({ action, phase, restarting }: { action: UpdateAction | null | undefined; phase: UpdateState["phase"] | undefined; restarting: boolean }) {
+  const { Icon, turn } = updatePhaseIcon(action, phase, restarting);
+  return <Icon size={15} className={turn ? "ic-turn" : "ic-pulse"} aria-hidden="true" />;
+}
+
 function buildLabel(build: UpdateBuild) {
   return `${build.version || t("developmentBuild")} · ${shortRevision(build.revision)}`;
 }
@@ -243,15 +256,15 @@ export function UpdateCard() {
     <section className="settings-card update-card" aria-labelledby="update-card-heading">
       <div className="update-card-heading">
         <h3 id="update-card-heading">{t("softwareUpdate")}</h3>
-        {state && <button type="button" className="secondary-button" disabled={active || Boolean(state.pending)}
+        {state && <button type="button" className={`btn secondary${checking ? " btn-progress" : ""}`} disabled={active || Boolean(state.pending)}
           onClick={() => void control.perform("check")}>
-          {checking ? <LoaderCircle size={15} className="spin" /> : <RefreshCw size={15} />}
+          <RefreshCw size={15} className={checking ? "ic-turn" : undefined} />
           {t("checkUpdates")}</button>}
       </div>
       {!state ? (
         error ? <div className="update-card-error" role="alert"><span>{error}</span>
-          <button type="button" className="text-button" onClick={control.retry}>{t("retry")}</button></div>
-          : <div className="update-card-loading" role="status"><LoaderCircle size={17} className="spin" />{t("loadingBuild")}</div>
+          <button type="button" className="btn ghost sm" onClick={control.retry}>{t("retry")}</button></div>
+          : <div className="update-card-loading" role="status" aria-busy="true"><span className="sr-only">{t("loadingBuild")}</span><span className="skel update-skel" aria-hidden="true" /></div>
       ) : (
         <>
           <div className="update-build-current">
@@ -264,7 +277,7 @@ export function UpdateCard() {
             <strong>{buildLabel((state.pending ?? state.latest)!)}</strong>
           </div>}
           <div className={`update-card-status${confirmedRevision ? " is-complete" : ""}`} role="status" aria-live="polite">
-            {active ? <LoaderCircle className="spin" size={16} /> : confirmedRevision ? <Check size={16} /> : state.phase === "failed" || state.blocked_reason ? <CircleAlert size={16} /> : null}
+            {active ? <UpdatePhaseIcon action={action} phase={state.phase} restarting={restarting} /> : confirmedRevision ? <Check size={16} /> : state.phase === "failed" || state.blocked_reason ? <CircleAlert size={16} /> : null}
             <span>{restartExpired ? t("restartNotConfirmed") : status}</span>
           </div>
           {downloading && <div className="update-download">
@@ -277,14 +290,14 @@ export function UpdateCard() {
           {!state.supported && <p className="settings-note">{translateError(state.unsupported_reason_code) ?? state.unsupported_reason ?? t("onlineUpdateUnsupported")}</p>}
           {state.blocked_reason && <p className="update-card-warning">{translateError(state.blocked_reason_code) ?? state.blocked_reason}</p>}
           {(error || stateError) && <div className="update-card-error" role="alert"><span>{error || stateError}</span>
-            {restartExpired && <button type="button" className="text-button" onClick={control.retry}>{t("keepChecking")}</button>}
-            {!restartExpired && error && (isActive(state.phase) || restartIntent) && <button type="button" className="text-button" onClick={control.retry}>{t("checkAgain")}</button>}
+            {restartExpired && <button type="button" className="btn ghost sm" onClick={control.retry}>{t("keepChecking")}</button>}
+            {!restartExpired && error && (isActive(state.phase) || restartIntent) && <button type="button" className="btn ghost sm" onClick={control.retry}>{t("checkAgain")}</button>}
           </div>}
           <div className="update-card-actions">
-            {canApply && <button type="button" className="primary-button" onClick={() => void control.perform("apply")}><Download size={15} />{t("downloadUpdate")}</button>}
-            {ready && !restarting && <button type="button" className="primary-button" disabled={active || !state.supported} onClick={() => setConfirm("restart")}><RefreshCw size={15} />{t("restartAndApply")}</button>}
-            {confirmedRevision && <button type="button" className="secondary-button" onClick={() => window.location.reload()}>{t("refreshPage")}</button>}
-            {state.backup && !state.pending && <button type="button" className="text-button" disabled={active || !state.supported}
+            {canApply && <button type="button" className="btn primary" onClick={() => void control.perform("apply")}><Download size={15} />{t("downloadUpdate")}</button>}
+            {ready && !restarting && <button type="button" className="btn primary" disabled={active || !state.supported} onClick={() => setConfirm("restart")}><RefreshCw size={15} />{t("restartAndApply")}</button>}
+            {confirmedRevision && <button type="button" className="btn secondary" onClick={() => window.location.reload()}>{t("refreshPage")}</button>}
+            {state.backup && !state.pending && <button type="button" className="btn ghost sm" disabled={active || !state.supported}
               onClick={() => setConfirm("rollback")}><RotateCcw size={14} />{t("restoreBackup")}<code>{shortRevision(state.backup.revision)}</code></button>}
             {state.checked_at && !active && <span className="update-checked">{t("lastChecked", { date: dateLabel(state.checked_at) })}</span>}
           </div>
@@ -293,8 +306,8 @@ export function UpdateCard() {
       )}
       {confirm && <Modal className="ochi-admin-modal" size="small" title={confirm === "restart" ? t("applyUpdateQuestion") : t("restoreBackupQuestion")}
         onClose={() => setConfirm(null)} footer={<div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={() => setConfirm(null)}>{t("cancel")}</button>
-          <button type="button" className="primary-button" disabled={active} onClick={() => {
+          <button type="button" className="btn secondary" onClick={() => setConfirm(null)}>{t("cancel")}</button>
+          <button type="button" className="btn primary" disabled={active} onClick={() => {
             const command = confirm;
             setConfirm(null);
             void control.perform(command);
