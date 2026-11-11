@@ -1,108 +1,140 @@
-import { t, useAdminI18n } from "../pages/admin/i18n";
-import { lazy, Suspense } from "react";
-import {
-  Activity,
-  ArrowLeft,
-  Bug,
-  Cpu,
-  LoaderCircle,
-  Plug,
-  Puzzle,
-  Search,
-  Settings2,
-  Users,
-} from "lucide-react";
-import {
-  UsersPage,
-  SystemPage,
-  WorkspacesPage,
-  RunsPage,
-} from "../pages/admin/SystemPages";
+import { t, useAdminI18n, type AdminMessageKey } from "../pages/admin/i18n";
+import { Fragment, lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowLeft, Bug, Check, ChevronsUpDown, Container, Globe, History, Puzzle, Settings, Sparkles, Users, type LucideIcon } from "lucide-react";
+import { UsersPage, SystemPage, WorkspacesPage, RunsPage } from "../pages/admin/SystemPages";
 import { DebugPage } from "../pages/admin/RequestDiagnostics";
+import { AdminSlotContext, Pill, SkeletonRows, type AdminSlots } from "../pages/admin/ui";
+import { ActionMenu, MenuAction } from "./ui/Menu";
+import { adminApi } from "../lib/api";
 const ProvidersPage = lazy(() => import("../pages/admin/ProvidersPage"));
 const SearchPage = lazy(() => import("../pages/admin/SearchPage"));
 const PluginsPage = lazy(() => import("../pages/admin/PluginsPage"));
-function adminTabs() { return [
-  { id: "providers", title: t("modelProviders"), icon: Plug },
-  { id: "search", title: t("webSearch"), icon: Search },
-  { id: "plugins", title: t("plugins"), icon: Puzzle },
-  { id: "users", title: t("users"), icon: Users },
-  { id: "workspaces", title: t("workspaces"), icon: Cpu },
-  { id: "runs", title: t("runRecords"), icon: Activity },
-  { id: "debug", title: t("requestDiagnostics"), icon: Bug },
-  { id: "settings", title: t("system"), icon: Settings2 },
-]; }
-export default function AdminPanel({
-  section,
-  onNavigate,
-  onBack,
-  currentUserID,
-}: {
+
+type Section = { id: string; title: string; icon: LucideIcon; group: string; desc: string };
+/** Nav order and grouping follow the lab; `settings` keeps the existing /admin/settings route for the System page. */
+function sections(): Section[] {
+  const models = t("adminGroupModels"), org = t("adminGroupOrganization"), ops = t("adminGroupOperations");
+  return [
+    { id: "providers", title: t("modelProviders"), icon: Sparkles, group: models, desc: t("adminDesc.providers") },
+    { id: "search", title: t("webSearch"), icon: Globe, group: models, desc: t("adminDesc.search") },
+    { id: "plugins", title: t("plugins"), icon: Puzzle, group: models, desc: t("adminDesc.plugins") },
+    { id: "users", title: t("users"), icon: Users, group: org, desc: t("adminDesc.users") },
+    { id: "workspaces", title: t("workspaces"), icon: Container, group: org, desc: t("adminDesc.workspaces") },
+    { id: "runs", title: t("runRecords"), icon: History, group: ops, desc: t("adminDesc.runs") },
+    { id: "debug", title: t("requestDiagnostics"), icon: Bug, group: ops, desc: t("adminDesc.debug") },
+    { id: "settings", title: t("system"), icon: Settings, group: ops, desc: t("adminDesc.system") },
+  ];
+}
+const activeTab = (section: string) => (section === "skills" || section === "mcp" ? "plugins" : section);
+
+export default function AdminPanel({ section, onNavigate, onBack, currentUserID }: {
   section: string;
   onNavigate: (path: string) => void;
   onBack: () => void;
   currentUserID: string;
 }) {
   useAdminI18n();
+  const list = sections();
+  const active = activeTab(section);
+  const current = list.find((item) => item.id === active) ?? list[0];
+  const nav = useRef<HTMLElement>(null);
+  const indicator = useRef<HTMLElement>(null);
+  const [slots, setSlots] = useState<AdminSlots>({ actions: null, toolbar: null });
+  const [build, setBuild] = useState<{ version: string; available: boolean } | null>(null);
+  const placed = useRef(false);
+
+  // The footer shows the running version; a failed lookup simply leaves it out.
+  useEffect(() => {
+    const controller = new AbortController();
+    adminApi.updates(controller.signal)
+      .then((state) => { if (!controller.signal.aborted) setBuild({ version: state.current.version, available: state.available }); })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
+
+  // The active-row indicator springs between rows. The first placement skips the transition so it does not fly in from the top.
+  useLayoutEffect(() => {
+    const element = nav.current, thumb = indicator.current;
+    if (!element || !thumb) return;
+    const place = (animate: boolean) => {
+      const target = element.querySelector<HTMLElement>('[aria-current="page"]');
+      if (!target) { thumb.style.opacity = "0"; return; }
+      if (!animate) thumb.style.transition = "none";
+      thumb.style.height = `${target.offsetHeight}px`;
+      thumb.style.translate = `0 ${target.offsetTop}px`;
+      thumb.style.opacity = "1";
+      if (!animate) requestAnimationFrame(() => requestAnimationFrame(() => { thumb.style.transition = ""; }));
+    };
+    place(placed.current);
+    placed.current = true;
+    const observer = new ResizeObserver(() => place(false));
+    element.querySelectorAll(".ad-nitem").forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
+  }, [active, list.length]);
+
+  let lastGroup = "";
   return (
-    <main className="admin-app">
-      <aside className="admin-sidebar">
-        <header>
-          <button
-            className="icon-button"
-            onClick={onBack}
-            aria-label={t("backToChat")}
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div className="admin-brand">
-            <h1>Ochi</h1>
-            <span>{t("adminConsole")}</span>
-          </div>
-        </header>
-        <nav aria-label={t("adminNavigation")}>
-          {adminTabs().map((item) => (
-            <button
-              key={item.id}
-              className={`${section === item.id || (item.id === "plugins" && (section === "skills" || section === "mcp")) ? "selected" : ""}${item.id === "users" ? " admin-nav-group-start" : ""}`}
-              aria-current={section === item.id || (item.id === "plugins" && (section === "skills" || section === "mcp")) ? "page" : undefined}
-              onClick={() => onNavigate(`/admin/${item.id}`)}
-            >
-              <item.icon size={18} />
-              <span>{item.title}</span>
-            </button>
-          ))}
+    <div className="ad-root" data-sec={current.id}>
+      <aside className="ad-nav">
+        <div className="ad-brand"><img className="ad-mark" src="/favicon-48.png" alt="" /><div><b>Ochi</b><small>{t("adminConsole")}</small></div></div>
+        <button type="button" className="ad-back" onClick={onBack}><ArrowLeft className="ic" />{t("backToChat")}</button>
+        <nav className="ad-nlist" ref={nav} aria-label={t("adminNavigation")}>
+          <i className="ad-nind" ref={indicator} aria-hidden="true" style={{ opacity: 0 }} />
+          {list.map((item) => {
+            const header = item.group !== lastGroup ? <div className="ad-ngroup" aria-hidden="true">{item.group}</div> : null;
+            lastGroup = item.group;
+            return (
+              <Fragment key={item.id}>
+                {header}
+                <button type="button" className="ad-nitem" aria-current={item.id === current.id ? "page" : undefined}
+                  onClick={() => onNavigate(`/admin/${item.id}`)}>
+                  <item.icon className="ic" /><span>{item.title}</span>
+                </button>
+              </Fragment>
+            );
+          })}
         </nav>
+        {build && (
+          <footer className="ad-nfoot">
+            <span className="mono" title={t("adminVersion")}>v{build.version.replace(/^v/, "")}</span>
+            {build.available && <Pill tone="accent">{t("adminUpdateAvailable")}</Pill>}
+          </footer>
+        )}
       </aside>
-      <section className="admin-workspace">
-        <div className="admin-content">
-        <Suspense
-          fallback={
-            <div className="panel-loading">
-              <LoaderCircle className="spin" size={22} />
-            </div>
-          }
-        >
-          {section === "search" ? (
-            <SearchPage />
-          ) : section === "plugins" || section === "skills" || section === "mcp" ? (
-            <PluginsPage section={section} onNavigate={onNavigate} />
-          ) : section === "users" ? (
-            <UsersPage currentUserID={currentUserID} />
-          ) : section === "settings" ? (
-            <SystemPage />
-          ) : section === "workspaces" ? (
-            <WorkspacesPage />
-          ) : section === "runs" ? (
-            <RunsPage currentUserID={currentUserID} onNavigate={onNavigate} />
-          ) : section === "debug" ? (
-            <DebugPage />
-          ) : (
-            <ProvidersPage />
-          )}
-        </Suspense>
+      <main className="ad-main">
+        <div className="ad-topbar">
+          <button type="button" className="icon-btn" aria-label={t("backToChat")} onClick={onBack}><ArrowLeft className="ic" /></button>
+          <ActionMenu label={t("adminSwitchSection")} className="ad-picker" align="start" side="bottom"
+            trigger={<><current.icon className="ic" /><b>{current.title}</b><ChevronsUpDown className="ic" /></>}>
+            {list.map((item) => (
+              <MenuAction key={item.id} onClick={() => onNavigate(`/admin/${item.id}`)}>
+                <item.icon className="ic" /><span>{item.title}</span>{item.id === current.id ? <Check className="ic tick" style={{ opacity: 1 }} /> : null}
+              </MenuAction>
+            ))}
+          </ActionMenu>
         </div>
-      </section>
-    </main>
+        <header className="ad-head">
+          <div className="ad-head-t"><h1>{current.title}</h1><p>{current.desc}</p></div>
+          <div className="ad-head-a" ref={(element) => { if (element !== slots.actions) setSlots((previous) => ({ ...previous, actions: element })); }} />
+          <div className="ad-toolbar" ref={(element) => { if (element !== slots.toolbar) setSlots((previous) => ({ ...previous, toolbar: element })); }} />
+        </header>
+        <div className="ad-body ad-stagger" key={current.id}>
+          <AdminSlotContext.Provider value={slots}>
+            <Suspense fallback={<SkeletonRows rows={5} />}>
+              {section === "search" ? <SearchPage />
+                : section === "plugins" || section === "skills" || section === "mcp" ? <PluginsPage section={section} onNavigate={onNavigate} />
+                : section === "users" ? <UsersPage currentUserID={currentUserID} />
+                : section === "settings" ? <SystemPage />
+                : section === "workspaces" ? <WorkspacesPage />
+                : section === "runs" ? <RunsPage currentUserID={currentUserID} onNavigate={onNavigate} />
+                : section === "debug" ? <DebugPage />
+                : <ProvidersPage />}
+            </Suspense>
+          </AdminSlotContext.Provider>
+        </div>
+      </main>
+    </div>
   );
 }
+
+export type { AdminMessageKey };
