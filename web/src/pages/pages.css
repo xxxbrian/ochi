@@ -1,4 +1,10 @@
 /* Shared page shell only. Project and Tasks own their feature layouts. */
+.chat-header { display: flex; align-items: center; gap: 4px; height: calc(52px * var(--density)); padding: 0 12px; flex: none; }
+.header-title { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1; }
+.chat-header h1 { font: 550 var(--fs-ui)/1.3 var(--font-ui); margin: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-actions { display: flex; align-items: center; gap: 4px; }
+.mobile-menu { display: none; }
+.app-shell[data-compact="true"] .mobile-menu { display: inline-grid; }
 .workspace-page {
     flex: 1;
     min-width: 0;

@@ -26,11 +26,11 @@
     flex-wrap: wrap;
     gap: 4px 12px;
     color: var(--muted);
-    font-size: 13px;
+    font-size: var(--font-size-meta);
     margin-top: 8px;
     line-height: 20px;
 }
-.ochi-tasks__timing > span { font-size: 12px; }
+.ochi-tasks__timing > span { font-size: var(--font-size-caption); }
 .ochi-tasks__detail-actions {
     display: flex;
     align-items: center;
@@ -42,7 +42,7 @@
     align-items: center;
     gap: 4px;
     color: var(--muted);
-    font-size: 13px;
+    font-size: var(--font-size-meta);
     white-space: nowrap;
 }
 .ochi-tasks__delete:hover { color: var(--danger); }
@@ -50,7 +50,7 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     line-height: 1.7;
-    font-size: 16px;
+    font-size: var(--font-size-body);
     margin-bottom: 12px;
     border-left: 2px solid var(--line);
     padding: 4px 0 4px 12px;
@@ -61,14 +61,14 @@
     flex-wrap: wrap;
     gap: 4px 16px;
     color: var(--muted);
-    font-size: 13px;
+    font-size: var(--font-size-meta);
 }
 .ochi-tasks__facts .text-button {
     display: inline-flex;
     align-items: center;
     min-height: 32px;
     padding-inline: 0;
-    font-size: 13px;
+    font-size: var(--font-size-meta);
 }
 .ochi-tasks__section-heading {
     display: flex;
@@ -78,12 +78,12 @@
 }
 .ochi-tasks__section-heading h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: var(--font-size-body);
     font-weight: 550;
     line-height: 24px;
 }
 .ochi-tasks__section-heading > span {
-    font-size: 13px;
+    font-size: var(--font-size-meta);
     color: var(--muted);
 }
 .ochi-executions { border-top: 1px solid var(--line); }
@@ -98,7 +98,7 @@
     border-bottom: 1px solid var(--line);
     background: transparent;
     text-align: left;
-    font-size: 13px;
+    font-size: var(--font-size-meta);
     line-height: 20px;
 }
 .ochi-execution:hover { background: var(--hover); }
@@ -120,7 +120,7 @@
 .ochi-execution__preview.is-error { color: var(--danger); }
 .ochi-execution__duration { text-align: right; }
 .ochi-tasks__output {
-    font-size: 16px;
+    font-size: var(--font-size-body);
     line-height: 1.7;
 }
 @container ochi-tasks (max-width: 740px) {

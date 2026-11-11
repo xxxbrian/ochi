@@ -13,7 +13,6 @@ import {
   ArrowUpRight,
   CalendarClock,
   Clock3,
-  LoaderCircle,
   Pencil,
   Play,
   Plus,
@@ -40,6 +39,7 @@ import { WaitingInputCard } from "../components/WaitingInputCard";
 import { SessionSearch } from "../components/SessionSearch";
 import { scheduleInstant, scheduleWallTime } from "../lib/scheduling";
 import "./tasks.css";
+import { SkelRows } from "../components/ui/Loading";
 const MarkdownContent = lazy(() => import("../components/MarkdownContent"));
 function weekdayNames() {
   return Array.from({ length: 7 }, (_, day) => new Intl.DateTimeFormat(getLocale(), { weekday: "short", timeZone: "UTC" }).format(new Date(Date.UTC(2024, 0, day + 1))));
@@ -116,9 +116,6 @@ function TaskToggle({
         disabled={updating}
         onChange={(event) => onChange(task, event.target.checked)}
       />
-      {updating && (
-        <LoaderCircle size={17} className="spin" aria-hidden="true" />
-      )}
     </label>
   );
 }
@@ -434,9 +431,7 @@ export default function TasksPage({
             </p>
           )}
           {loading || (routeMismatch && !error) ? (
-            <div className="panel-loading">
-              <LoaderCircle className="spin" size={22} />
-            </div>
+            <SkelRows count={taskId ? 3 : 5} />
           ) : routeMismatch ? null : taskId && task ? (
             executionId && execution ? (
               <>
@@ -514,12 +509,12 @@ export default function TasksPage({
                         onChange={(item, enabled) => void toggleTask(item, enabled)} />
                     </div>
                     <button
-                      className="secondary-button"
+                      className={`secondary-button${runningId === task.id ? " btn-progress" : ""}`}
                       disabled={busy || Boolean(updating[task.id])}
                       onClick={() => void run(task.id)}
                     >
-                      {runningId === task.id ? <LoaderCircle size={15} className="spin" /> : <Play size={15} />}
-                      {t("tasks.run")}
+                      <Play size={15} />
+                      {runningId === task.id ? t("tasks.starting") : t("tasks.run")}
                     </button>
                     <button className="secondary-button" disabled={busy || Boolean(updating[task.id])}
                       onClick={() => { setError(""); setEditing(task); }}
@@ -637,7 +632,7 @@ export default function TasksPage({
                       <MobileTaskTiming task={item} />
                       <span className="ochi-task-row__recent">
                         <span className={`ochi-task-status is-${item.last_status}`}>
-                          {openingId === item.id ? <LoaderCircle size={14} className="spin" /> : <span aria-hidden="true" />}
+                          <span aria-hidden="true" className={openingId === item.id ? "is-opening" : undefined} />
                           {statusLabel(item.last_status)}
                           <ArrowUpRight size={14} />
                         </span>
@@ -647,9 +642,9 @@ export default function TasksPage({
                       <MobileTaskTiming task={item} /><span>{t("tasks.notRun")}</span>
                     </span>}
                     <div className="ochi-task-row__actions">
-                      <button className="icon-button" aria-label={t("tasks.runName", { name: item.name })}
+                      <button className={`icon-button${runningId === item.id ? " btn-progress" : ""}`} aria-label={t("tasks.runName", { name: item.name })}
                         title={t("tasks.runNow")} disabled={busy || Boolean(updating[item.id])} onClick={() => void run(item.id)}>
-                        {runningId === item.id ? <LoaderCircle size={16} className="spin" /> : <Play size={16} />}
+                        <Play size={16} />
                       </button>
                       <button className="icon-button" aria-label={t("tasks.editName", { name: item.name })}
                         title={t("tasks.edit")} disabled={busy || Boolean(updating[item.id])}

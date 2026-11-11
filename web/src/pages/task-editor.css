@@ -7,10 +7,10 @@
     flex: 1;
     min-width: 0;
     min-height: 36px;
-    border-radius: var(--radius-control, 8px);
+    border-radius: var(--radius-field);
     background: var(--paper);
     color: var(--muted);
-    font-size: 14px;
+    font-size: var(--font-size-ui);
 }
 .ochi-task-editor .weekday-picker button:hover {
     background: var(--hover);

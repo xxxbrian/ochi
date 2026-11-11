@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Folder,
   FolderOpen,
-  LoaderCircle,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -22,6 +21,7 @@ import { MobileMenuButton } from "../components/Sidebar";
 import { ActionMenu, MenuAction } from "../components/ui/Menu";
 import { statusLabel } from "../lib/router";
 import "./project.css";
+import { LoadingDots, SkelRows } from "../components/ui/Loading";
 
 export default function ProjectsPage({
   projectId,
@@ -153,8 +153,12 @@ export default function ProjectsPage({
         <div className="page-column ochi-projects__column">
           {error && <p className="form-error">{error}</p>}
           {loading ? (
-            <div className="panel-loading">
-              <LoaderCircle className="spin" size={22} />
+            <div className="ochi-projects__loading" role="status" aria-label={t("status.loading")}>
+              <div className="ochi-projects__intro" aria-hidden="true">
+                <span className="skel circle" style={{ width: 25, height: 25 }} />
+                <span className="skel" style={{ width: 180, height: 22 }} />
+              </div>
+              <SkelRows count={4} />
             </div>
           ) : projectId && project ? (
             <>
@@ -198,8 +202,8 @@ export default function ProjectsPage({
                 </div>
               </div>
               <div className="ochi-projects__sessions" aria-busy={searchLoading}>
-                {searchLoading && <span className="ochi-projects__search-loading"><LoaderCircle size={15} className="spin" /></span>}
-                {sessions.map((session) => (
+                {searchLoading && <SkelRows count={Math.min(Math.max(sessions.length, 2), 5)} />}
+                {!searchLoading && sessions.map((session) => (
                   <button
                     key={session.id}
                     onClick={() => onNavigate(`/c/${session.id}`)}
@@ -225,7 +229,7 @@ export default function ProjectsPage({
                     setCursor(page.next_cursor);
                   }).catch((reason: Error) => { if (token === generation.current) setError(reason.message); })
                     .finally(() => { if (token === generation.current) setMoreLoading(false); });
-                }}>{moreLoading ? <LoaderCircle size={15} className="spin" /> : t("sidebar.earlier")}</button>}
+                }}>{moreLoading ? <LoadingDots label={t("status.loading")} /> : t("sidebar.earlier")}</button>}
               </div>
             </>
           ) : (
