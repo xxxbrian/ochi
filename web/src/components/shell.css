@@ -1,0 +1,54 @@
+/* Application grid, top bar and the empty-state hero (Design Lab shell.css). */
+.app-shell { position: relative; display: flex; height: 100dvh; background: var(--backdrop); overflow: hidden; isolation: isolate; }
+.app-main { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--canvas); z-index: 1; }
+
+/* paper canvas (default): the sidebar sits on the page and the content is a raised sheet; data-canvas="flat" opts out */
+:root:not([data-canvas="flat"]) .app-shell:not([data-compact="true"]) { padding: 8px; gap: 8px; }
+:root:not([data-canvas="flat"]) .app-shell:not([data-compact="true"]) .app-sidebar { background: transparent; border-right: 0; border-radius: var(--r-lg); }
+:root:not([data-canvas="flat"]) .app-shell:not([data-compact="true"]) :is(.app-main, .computer-dock, .workspace-page) { border-radius: var(--r-xl); box-shadow: var(--sh-sheet); overflow: hidden; border: 0; }
+
+/* Switching destinations fades/raises the new view; the chat view is not remounted per conversation, so this only plays on a real switch. */
+.app-shell > .app-main > .view-chat, .app-shell > .workspace-page > * { animation: view-in var(--dur-2) var(--ease) both; }
+@keyframes view-in { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+
+/* top bar */
+.topbar { display: flex; align-items: center; gap: 4px; height: calc(52px * var(--density)); padding: 0 12px; flex: none; position: relative; z-index: 3; }
+.topbar .title-btn { display: inline-flex; align-items: center; gap: 4px; height: var(--row-h); padding: 0 8px; border-radius: var(--r-md); font-weight: 550; max-width: 46ch; min-width: 0; transition: background var(--dur-1); }
+.topbar .title-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar .title-btn:hover, .topbar .title-btn[data-popup-open] { background: var(--hover); }
+.topbar .title-btn .ic { color: var(--muted); width: 14px; }
+.topbar h1 { font: inherit; display: contents; }
+.top-crumb { display: inline-flex; align-items: center; gap: 6px; height: var(--row-h); padding: 0 8px; border-radius: var(--r-md); color: var(--muted); max-width: 22ch; min-width: 0; }
+.top-crumb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-crumb:hover { background: var(--hover); color: var(--ink); }
+.top-crumb-sep { color: var(--subtle); width: 13px; height: 13px; }
+.top-status { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; }
+.top-status[data-tone="danger"] { color: var(--danger); }
+.mobile-new-chat { display: none; }
+.app-shell[data-compact="true"] .mobile-new-chat { display: inline-grid; }
+.view-chat { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* hero */
+.hero { flex: none; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 0 20px 28px; animation: fade var(--dur-4); }
+.view-chat[data-empty="true"] .hero { display: flex; }
+.view-chat[data-empty="true"] .messages-region { display: none; }
+.view-chat[data-empty="true"] { justify-content: center; }
+.hero-title { font: 600 clamp(26px, 3.4vw, 34px)/1.15 var(--font-ui); letter-spacing: -0.03em; text-align: center; }
+.hero-sub { margin-top: 8px; color: var(--muted); font-size: calc(var(--fs-ui) + 1px); text-align: center; }
+.suggests { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 24px; max-width: 640px; }
+.suggest {
+    display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 13px 0 11px; border-radius: var(--r-pill); box-shadow: 0 0 0 1px var(--line-strong);
+    color: var(--ink-2); font-size: var(--fs-sm); font-weight: 500; transition: background var(--dur-1), transform var(--dur-2) var(--ease), color var(--dur-1);
+}
+.suggest .ic { color: var(--muted); width: 14px; }
+.suggest:hover { background: var(--hover); color: var(--ink); transform: translateY(-1px); }
+
+/* inline error banner above the composer */
+.inline-error { position: absolute; left: 50%; bottom: 128px; translate: -50% 0; z-index: 5; display: flex; align-items: center; gap: 8px; max-width: min(var(--thread-w), calc(100% - 40px)); padding: 8px 8px 8px 14px; border-radius: var(--r-md); background: var(--danger-soft); color: var(--danger); box-shadow: 0 0 0 1px var(--danger-line); font-size: var(--fs-sm); }
+.view-chat[data-empty="true"] .inline-error { position: relative; left: auto; bottom: auto; translate: none; margin: 0 auto 10px; }
+
+/* compact (narrow) */
+.app-shell[data-compact="true"] .composer-wrap { padding: 0 10px 10px; }
+.app-shell[data-compact="true"] .thread { width: calc(100% - 28px); }
+.app-shell[data-compact="true"] .user-tools { display: none; }
+.app-shell[data-compact="true"] .computer-dock { position: absolute; inset: 0; width: 100%; max-width: 100%; z-index: 15; border: 0; border-radius: 0; flex: none; }

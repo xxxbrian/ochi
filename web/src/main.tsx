@@ -5,6 +5,7 @@ import './styles.css'
 import './components/ui/ui.css'
 import './pages/pages.css'
 import './pages/admin/admin.css'
+import './lib/appearance'
 import App from './App'
 import { ComputerPanel } from './components/ComputerPanel'
 

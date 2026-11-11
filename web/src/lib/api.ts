@@ -244,6 +244,7 @@ export const api = {
     body.append("file", file);
     return request<Artifact>("/api/files", { method: "POST", body });
   },
+  files: (signal?: AbortSignal) => request<Artifact[]>("/api/files", { signal }),
   computerState: () => request<ComputerState>("/api/computer/state"),
   computerControl: (
     enabled: boolean,

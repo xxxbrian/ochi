@@ -1,6 +1,6 @@
 import { t, useI18n } from "../lib/i18n";
 import { type FormEvent, useState } from "react";
-import { ArrowRight, LoaderCircle } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { api } from "../lib/api";
 import type { User } from "../lib/types";
 
@@ -53,18 +53,12 @@ export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
           </div>
         )}
         <button
-          className="primary-button login-submit"
+          className={`primary-button login-submit${busy ? " btn-progress" : ""}`}
           type="submit"
           disabled={busy || !username.trim() || !password}
         >
-          {busy ? (
-            <LoaderCircle size={19} className="spin" />
-          ) : (
-            <>
-              <span>{t("login.signIn")}</span>
-              <ArrowRight size={18} />
-            </>
-          )}
+          <span>{busy ? t("login.signingIn") : t("login.signIn")}</span>
+          <ArrowRight size={18} />
         </button>
       </form>
     </main>

@@ -1,13 +1,20 @@
-import { t, useI18n, setLanguage, getLanguage, type LanguagePreference } from "./lib/i18n";
+import { t, useI18n, setLanguage, type LanguagePreference } from "./lib/i18n";
 import {
   lazy,
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import { Check, ChevronRight, Folder, LoaderCircle, SquarePen, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Download, Folder, PanelLeft, Pin, PinOff, Search, Settings, SquarePen, X } from "lucide-react";
+import { usePinnedSessions } from "./lib/pinnedSessions";
+import { exportTranscript } from "./lib/exportTranscript";
+import { ActionMenu, MenuAction } from "./components/ui/Menu";
+import { ToastHost, toast } from "./components/ui/Toast";
+import { releaseMemoryOwner } from "./components/settings/memoryStore";
+import { EmptyHero } from "./components/EmptyHero";
 import { api, isActiveStatus } from "./lib/api";
 import { preferredChatModel } from "./lib/modelSelection";
 import type {
@@ -20,15 +27,20 @@ import type {
   User,
 } from "./lib/types";
 import { useConversation } from "./hooks/useConversation";
+import { PreferencesProvider, useAccountPreferences } from "./hooks/useAccountPreferences";
 import { LoginScreen } from "./components/LoginScreen";
-import { Sidebar, MobileMenuButton } from "./components/Sidebar";
+import { Sidebar, MobileMenuButton, modKey, type PaletteCommand } from "./components/Sidebar";
 import { MessageList } from "./components/MessageList";
 import { Composer } from "./components/Composer";
 import { RunInstructionStatus } from "./components/RunInstructionStatus";
 import { ComputerPanel } from "./components/ComputerPanel";
+import { ArtifactDock } from "./components/ArtifactDock";
+import { closeArtifact, setArtifactOwner, useArtifactDock } from "./lib/artifactDock";
 import { Modal } from "./components/Modal";
 import { QueueTray } from "./components/QueueTray";
 import { useRouter } from "./lib/router";
+import "./components/shell.css";
+import { LoadingDots, SkelRows } from "./components/ui/Loading";
 
 const AdminPanel = lazy(() => import("./components/AdminPanel"));
 const UserSettings = lazy(() => import("./components/UserSettings"));
@@ -86,6 +98,13 @@ function olderSession(next: Session, current: Session) {
 export default function App() {
   useI18n();
   const [user, setUser] = useState<User | null>(null);
+  const { owner: preferencesOwner, preferences } = useAccountPreferences(user?.id ?? "");
+  const preferencesOwnerRef = useRef(preferencesOwner);
+  preferencesOwnerRef.current = preferencesOwner;
+  useLayoutEffect(() => {
+    setArtifactOwner(user?.id ?? null);
+    return () => setArtifactOwner(null);
+  }, [user?.id]);
   const [authChecked, setAuthChecked] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionCursor, setSessionCursor] = useState<string>();
@@ -95,6 +114,16 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [compact, setCompact] = useState(() => typeof window !== "undefined" && Boolean(window.matchMedia?.("(max-width: 719px)").matches));
+  useEffect(() => {
+    const query = window.matchMedia?.("(max-width: 719px)");
+    if (!query) return;
+    const update = () => setCompact(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  const pins = usePinnedSessions(user?.id ?? "");
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -105,12 +134,15 @@ export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [budget, setBudget] = useState<number | undefined>();
   const [reasoningEnabled, setReasoningEnabled] = useState(true);
-  const [computerDefault, setComputerDefault] = useState(false);
+  const computerDefault = preferences?.computer_default ?? false;
   const [draftComputerEnabled, setDraftComputerEnabled] = useState(false);
   const [projectComputerDrafts, setProjectComputerDrafts] = useState<Record<string, boolean>>({});
   const [computerUpdating, setComputerUpdating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [computerOpen, setComputerOpen] = useState(false);
+  // The right-hand dock holds one panel: opening a file replaces the desktop view.
+  const openArtifactFile = useArtifactDock().file;
+  useEffect(() => { if (openArtifactFile) setComputerOpen(false); }, [openArtifactFile]);
   const [revision, setRevision] = useState<{
     message: Message;
     kind: "edit" | "retry";
@@ -120,17 +152,18 @@ export default function App() {
   const userRef = useRef<User | null>(null);
   const selectedRef = useRef<string | null>(null);
   const modelsRef = useRef<Model[]>([]);
-  const preferredModelRef = useRef("");
-  const confirmedModelRef = useRef("");
-  const modelPreferenceWrites = useRef(Promise.resolve());
-  const modelPreferenceRevision = useRef(0);
-  const modelPreferenceOwner = useRef<object | null>(null);
-  const languagePreferenceWrites = useRef(Promise.resolve());
-  const languagePreferenceRevision = useRef(0);
-  const confirmedLanguageRef = useRef<LanguagePreference>(getLanguage());
+  const modelSelectionRevision = useRef(0);
   const selectionGeneration = useRef(0);
   userRef.current = user;
   modelsRef.current = models;
+  const signIn = useCallback((current: User) => {
+    const previous = userRef.current;
+    if (previous && previous.id !== current.id) {
+      releaseMemoryOwner(previous.id);
+      preferencesOwnerRef.current.deactivate();
+    }
+    setUser(current);
+  }, []);
   const replaceSessions = useCallback(
     (page: SessionPage, reset = false) => {
       const list = page.items;
@@ -153,9 +186,8 @@ export default function App() {
   }, [user, route.kind, navigate]);
 
   const expired = useCallback(() => {
-    modelPreferenceOwner.current = null;
-    preferredModelRef.current = "";
-    confirmedModelRef.current = "";
+    if (userRef.current) releaseMemoryOwner(userRef.current.id);
+    preferencesOwnerRef.current.deactivate();
     selectionGeneration.current += 1;
     selectedRef.current = null;
     setSelectedId(null);
@@ -167,9 +199,10 @@ export default function App() {
     setSessionsLoadingMore(false);
     setCreating(false);
     setBootstrapLoading(false);
-    setComputerDefault(false);
     setDraftComputerEnabled(false);
+    setComputerUpdating(false);
     setComputerOpen(false);
+    setSettingsOpen(false);
     setRevision(null);
     setError("");
   }, []);
@@ -190,15 +223,28 @@ export default function App() {
   const selectedModelOwner = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!selected || selectedModelOwner.current === selected.id) return;
-    selectedModelOwner.current = selected.id;
-    const chosen = modelsRef.current.find((model) => model.id === selected.model_id)
-      ?? preferredChatModel(modelsRef.current, preferredModelRef.current);
+    const chosen = models.find((model) => model.id === selected.model_id)
+      ?? preferredChatModel(models, preferencesOwner.getSnapshot().preferences?.preferred_model_id ?? "");
     if (!chosen) return;
+    selectedModelOwner.current = selected.id;
     setModelId(chosen.id);
     setBudget(selected.effort?.startsWith("budget:") ? Number(selected.effort.slice(7)) : chosen.reasoning_budget_default);
     setReasoningEnabled(selected.effort !== "off");
     setEffort(chosen.efforts?.includes(selected.effort ?? "") ? selected.effort ?? "" : chosen.default_effort ?? "");
-  }, [selected]);
+  }, [selected, models, preferencesOwner]);
+  useEffect(() => {
+    if (preferences) setLanguage(preferences.language);
+  }, [preferences?.language]);
+  useEffect(() => {
+    if (!preferences || selectedRef.current) return;
+    setDraftComputerEnabled(preferences.computer_default);
+    const chosen = preferredChatModel(models, preferences.preferred_model_id);
+    if (!chosen || chosen.id === modelId) return;
+    setModelId(chosen.id);
+    setEffort(chosen.default_effort ?? "");
+    setBudget(chosen.reasoning_budget_default);
+    setReasoningEnabled(true);
+  }, [preferences?.preferred_model_id, preferences?.computer_default, models, modelId]);
   const computerEnabled = selectedId
     ? Boolean(selected?.computer_enabled)
     : draftComputerEnabled;
@@ -223,7 +269,7 @@ export default function App() {
     api
       .me()
       .then((current) => {
-        if (!cancelled) setUser(current);
+        if (!cancelled) signIn(current);
       })
       .catch((reason: unknown) => {
         if (
@@ -246,13 +292,6 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (!user) return;
-    const preferenceOwner = {};
-    modelPreferenceOwner.current = preferenceOwner;
-    modelPreferenceWrites.current = Promise.resolve();
-    languagePreferenceWrites.current = Promise.resolve();
-    languagePreferenceRevision.current = 0;
-    preferredModelRef.current = "";
-    confirmedModelRef.current = "";
     railGeneration.current += 1;
     let cancelled = false;
     setBootstrapLoading(true);
@@ -260,24 +299,19 @@ export default function App() {
       api.sessionsPage(),
       api.models(),
       api.projects(),
-      api.preferences(),
+      preferencesOwner.load(),
     ])
-      .then(([list, available, allProjects, preferences]) => {
+      .then(([list, available, allProjects]) => {
         if (cancelled) return;
+        const preferences = preferencesOwner.getSnapshot().preferences;
+        if (!preferences) return;
         modelsRef.current = available ?? [];
         setModels(available ?? []);
         setProjects(allProjects ?? []);
         replaceSessions(list, true);
-        if (languagePreferenceRevision.current === 0) {
-          confirmedLanguageRef.current = preferences.language;
-          setLanguage(preferences.language);
-        }
-        setComputerDefault(preferences.computer_default);
         setDraftComputerEnabled(preferences.computer_default);
-        preferredModelRef.current = preferences.preferred_model_id;
-        confirmedModelRef.current = preferences.preferred_model_id;
         const defaultModel = preferredChatModel(available ?? [], preferences.preferred_model_id);
-        if (defaultModel) {
+        if (defaultModel && !selectedRef.current) {
           setModelId(defaultModel.id);
           setEffort(defaultModel.default_effort ?? "");
         }
@@ -312,27 +346,14 @@ export default function App() {
     return () => {
       cancelled = true;
       clearInterval(poll);
-      if (modelPreferenceOwner.current === preferenceOwner) modelPreferenceOwner.current = null;
     };
-  }, [user, selectSession, navigate, replaceSessions]);
+  }, [user, selectSession, navigate, replaceSessions, preferencesOwner]);
   const changeLanguage = useCallback(async (next: LanguagePreference) => {
-    const owner = modelPreferenceOwner.current;
-    if (!owner) return;
-    const revision = ++languagePreferenceRevision.current;
-    setLanguage(next);
-    const write = languagePreferenceWrites.current.then(async () => {
-      if (modelPreferenceOwner.current !== owner) return;
-      try {
-        const preferences = await api.updatePreferences({ language: next });
-        if (modelPreferenceOwner.current === owner) confirmedLanguageRef.current = preferences.language;
-      } catch (reason) {
-        if (modelPreferenceOwner.current !== owner) return;
-        if (languagePreferenceRevision.current === revision) setLanguage(confirmedLanguageRef.current);
-        throw reason;
-      }
-    });
-    languagePreferenceWrites.current = write.catch(() => undefined);
-    await write;
+    const owner = preferencesOwnerRef.current;
+    try { await owner.update({ language: next }); }
+    catch (reason) {
+      if (preferencesOwnerRef.current === owner) throw reason;
+    }
   }, []);
   useEffect(() => {
     setDrawerOpen(false);
@@ -343,8 +364,8 @@ export default function App() {
       selectionGeneration.current += 1;
       selectedRef.current = null;
       setSelectedId(null);
-          setDraftComputerEnabled(computerDefault);
-      const chosen = preferredChatModel(modelsRef.current, preferredModelRef.current);
+      setDraftComputerEnabled(computerDefault);
+      const chosen = preferredChatModel(modelsRef.current, preferencesOwner.getSnapshot().preferences?.preferred_model_id ?? "");
       setModelId(chosen?.id ?? "");
       setEffort(chosen?.default_effort ?? "");
       setBudget(chosen?.reasoning_budget_default);
@@ -359,7 +380,18 @@ export default function App() {
     selectSession,
     loading,
     computerDefault,
+    preferencesOwner,
   ]);
+  useEffect(() => {
+    const keys = (event: globalThis.KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "k") { event.preventDefault(); setSearchOpen(true); }
+      else if (key === "b") { event.preventDefault(); toggleSidebar(); }
+    };
+    document.addEventListener("keydown", keys);
+    return () => document.removeEventListener("keydown", keys);
+  });
   useEffect(() => {
     if (!drawerOpen) return;
     const close = (event: KeyboardEvent) => {
@@ -369,6 +401,10 @@ export default function App() {
     return () => document.removeEventListener("keydown", close);
   }, [drawerOpen]);
 
+  function toggleSidebar() {
+    if (compact) setDrawerOpen((value) => !value);
+    else setCollapsed((value) => !value);
+  }
   const newConversation = useCallback(() => {
     if (posting) return;
     selectionGeneration.current += 1;
@@ -381,7 +417,7 @@ export default function App() {
     setDrawerOpen(false);
     setRevision(null);
     setDraftComputerEnabled(computerDefault);
-    const chosen = preferredChatModel(modelsRef.current, preferredModelRef.current);
+    const chosen = preferredChatModel(modelsRef.current, preferencesOwner.getSnapshot().preferences?.preferred_model_id ?? "");
     setModelId(chosen?.id ?? "");
     setEffort(chosen?.default_effort ?? "");
     setBudget(chosen?.reasoning_budget_default);
@@ -393,6 +429,7 @@ export default function App() {
     user,
     navigate,
     computerDefault,
+    preferencesOwner,
   ]);
 
   const sendMessage = useCallback(async (content: string, files: Artifact[] = [], now = false, projectId?: string) => {
@@ -454,32 +491,34 @@ export default function App() {
   const changeModel = useCallback(
     async (id: string) => {
       const next = models.find((model) => model.id === id);
-      const owner = modelPreferenceOwner.current;
-      if (!next || !owner) return;
+      const owner = preferencesOwnerRef.current;
+      if (!next || !userRef.current) return;
       const nextEffort = next.efforts?.includes(effort)
         ? effort
         : (next.default_effort ?? "");
-      const sessionID = route.kind === "chat" && !isActiveStatus(snapshotRef.current?.status) ? selectedRef.current : null;
-      const revision = ++modelPreferenceRevision.current;
-      preferredModelRef.current = id;
+      const selectedAtChange = selectedRef.current;
+      const sessionID = route.kind === "chat" && !isActiveStatus(snapshotRef.current?.status) ? selectedAtChange : null;
+      const revision = ++modelSelectionRevision.current;
       setModelId(id);
       setBudget(next.reasoning_budget_default);
       setReasoningEnabled(true);
       setEffort(nextEffort);
-      const write = modelPreferenceWrites.current.catch(() => undefined).then(async () => {
-        if (modelPreferenceOwner.current !== owner) return;
-        const saved = await api.updatePreferences({ preferred_model_id: id });
-        if (modelPreferenceOwner.current !== owner) return;
-        confirmedModelRef.current = saved.preferred_model_id;
-        if (modelPreferenceRevision.current === revision) preferredModelRef.current = saved.preferred_model_id;
-        if (sessionID && selectedRef.current === sessionID) await controller.updateSession({ model_id: id, effort: nextEffort });
-      });
-      modelPreferenceWrites.current = write;
       try {
-        await write;
+        const saved = await owner.update({ preferred_model_id: id });
+        if (!saved || preferencesOwnerRef.current !== owner) return;
+        if (sessionID && selectedRef.current === sessionID && modelSelectionRevision.current === revision)
+          await controller.updateSession({ model_id: id, effort: nextEffort });
       } catch (reason) {
-        if (modelPreferenceOwner.current !== owner) return;
-        if (modelPreferenceRevision.current === revision) preferredModelRef.current = confirmedModelRef.current;
+        if (preferencesOwnerRef.current !== owner) return;
+        if (modelSelectionRevision.current === revision && selectedRef.current === selectedAtChange) {
+          const session = controller.getSnapshot().session;
+          const fallback = selectedAtChange ? modelsRef.current.find((model) => model.id === session?.model_id) : undefined;
+          const restored = fallback ?? preferredChatModel(modelsRef.current, owner.getSnapshot().preferences?.preferred_model_id ?? "");
+          setModelId(restored?.id ?? "");
+          setEffort(selectedAtChange && session?.effort ? session.effort : restored?.default_effort ?? "");
+          setBudget(selectedAtChange && session?.effort?.startsWith("budget:") ? Number(session.effort.slice(7)) : restored?.reasoning_budget_default);
+          setReasoningEnabled(!selectedAtChange || session?.effort !== "off");
+        }
         setError(errorText(reason, t("error.rememberModel")));
       }
     },
@@ -499,28 +538,23 @@ export default function App() {
       if (computerUpdating || loading || posting) return;
       const id = selectedRef.current;
       const actor = userRef.current?.id;
+      const owner = preferencesOwnerRef.current;
       const token = selectionGeneration.current;
       setComputerUpdating(true);
       setError("");
       try {
         if (id) {
-          const updated = await controller.updateSession({ computer_enabled: enabled, remember_computer_default: !computerOnce });
+          const updated = await controller.updateSession({ computer_enabled: enabled, remember_computer_default: false });
           if (!updated || userRef.current?.id !== actor || token !== selectionGeneration.current) return;
-          if (!updated.project_id && !computerOnce) setComputerDefault(enabled);
+          if (!updated.project_id && !computerOnce) await owner.update({ computer_default: enabled });
         } else {
-          const preferences = await api.updatePreferences({
-            computer_default: enabled,
-          });
-          if (userRef.current?.id !== actor) return;
-          setComputerDefault(preferences.computer_default);
-          if (!selectedRef.current)
-            setDraftComputerEnabled(preferences.computer_default);
+          await owner.update({ computer_default: enabled });
         }
       } catch (reason) {
-        if (userRef.current?.id === actor)
+        if (userRef.current?.id === actor && preferencesOwnerRef.current === owner)
           setError(errorText(reason, t("error.save")));
       } finally {
-        setComputerUpdating(false);
+        if (preferencesOwnerRef.current === owner) setComputerUpdating(false);
       }
     },
     [
@@ -529,7 +563,7 @@ export default function App() {
       loading,
       posting,
       controller,
-      ],
+    ],
   );
   const resumeRun = useCallback(async (runId: string, answer: string) => {
     if (snapshotRef.current?.run_id === runId) await controller.resume(answer);
@@ -590,7 +624,7 @@ export default function App() {
       const available = await api.models();
       setModels(available ?? []);
       if (!available?.some((model) => model.id === modelId)) {
-        const chosen = preferredChatModel(available ?? [], preferredModelRef.current);
+        const chosen = preferredChatModel(available ?? [], preferencesOwner.getSnapshot().preferences?.preferred_model_id ?? "");
         setModelId(chosen?.id ?? "");
         setEffort(chosen?.default_effort ?? "");
       }
@@ -615,15 +649,15 @@ export default function App() {
   if (!authChecked)
     return (
       <div className="splash">
-        <LoaderCircle className="spin" size={24} />
+        <LoadingDots label={t("status.loading")} />
       </div>
     );
   if (!user)
     return (
       <LoginScreen
         onLogin={(current) => {
-              setError("");
-          setUser(current);
+          setError("");
+          signIn(current);
         }}
       />
     );
@@ -639,7 +673,7 @@ export default function App() {
       <Suspense
         fallback={
           <div className="splash">
-            <LoaderCircle className="spin" />
+            <LoadingDots label={t("status.loading")} />
           </div>
         }
       >
@@ -679,8 +713,22 @@ export default function App() {
                 : snapshot?.status === "interrupted"
                   ? t("status.interrupted")
                   : "";
+  const expanded = compact ? drawerOpen : !collapsed;
+  const searchCommands: PaletteCommand[] = [
+    { id: "new", icon: <SquarePen className="ic" />, label: t("chat.newConversation"), run: newConversation },
+    { id: "settings", icon: <Settings className="ic" />, label: t("settings.title"), run: () => setSettingsOpen(true) },
+    { id: "sidebar", icon: <PanelLeft className="ic" />, label: expanded ? t("sidebar.collapse") : t("sidebar.expand"), hint: `${modKey}B`, run: toggleSidebar },
+    ...(user.role === "admin" ? [{ id: "admin", icon: <Check className="ic" />, label: t("sidebar.admin"), run: () => navigate("/admin/providers") }] : []),
+  ];
+  const selectedPinned = Boolean(selectedId && pins.pinned.includes(selectedId));
+  async function exportSelected() {
+    if (!selectedId) return;
+    try { await exportTranscript(selectedId, selected?.title || t("chat.newConversation")); toast(t("sidebar.exported"), { icon: "check" }); }
+    catch (reason) { toast(reason instanceof Error ? reason.message : t("sidebar.exportFailed"), { icon: "info" }); }
+  }
+  const crumbProject = selected?.project_id ? projects.find((item) => item.id === selected.project_id) : undefined;
   return (
-    <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
+    <div className="app-shell" data-sb={expanded} data-rail={!compact && collapsed} data-compact={compact}>
       <Sidebar
         sessions={sessions}
         moreAvailable={Boolean(sessionCursor)}
@@ -688,42 +736,37 @@ export default function App() {
         onLoadMore={() => void loadMoreSessions()}
         selectedId={route.kind === "chat" ? selectedId : null}
         user={user}
-        open={drawerOpen}
-        collapsed={collapsed}
+        expanded={expanded}
+        compact={compact}
         disabled={posting}
-        onClose={() => setDrawerOpen(false)}
-        onCollapse={() => setCollapsed((value) => !value)}
+        pinned={pins.pinned}
+        onToggle={toggleSidebar}
+        onPin={pins.toggle}
         onCreate={newConversation}
         onSelect={(id) => {
           if (!posting) void selectSession(id);
         }}
         onRename={renameSession}
-        onDelete={deleteSession}
+        onDelete={async (id) => { await deleteSession(id); pins.forget(id); }}
         onLogout={logout}
         onSettings={() => setSettingsOpen(true)}
-        onComputer={() => setComputerOpen(true)}
-        onAdmin={() => {
-          navigate("/admin/providers");
-        }}
-        projects={projects}
-        selectedProjectId={
-          route.kind === "projects"
-            ? route.id
-            : route.kind === "chat" ? selected?.project_id : undefined
-        }
-        onProjects={() => navigate("/projects")}
-        onProject={(id) => navigate(`/projects/${id}`)}
-        onSchedules={() => {
-          navigate("/tasks");
-          setDrawerOpen(false);
-        }}
+        onComputer={() => { if (computerOpen) { setComputerOpen(false); return; } closeArtifact(); setComputerOpen(true); setDrawerOpen(false); }}
+        computerActive={computerOpen}
+        newActive={route.kind === "chat" && !selectedId}
+        onAdmin={() => navigate("/admin/providers")}
+        projectsActive={route.kind === "projects"}
+        tasksActive={route.kind === "tasks"}
+        onProjects={() => { navigate("/projects"); setComputerOpen(false); setDrawerOpen(false); }}
+        onSchedules={() => { navigate("/tasks"); setComputerOpen(false); setDrawerOpen(false); }}
+        searchOpen={searchOpen}
+        onSearchOpenChange={setSearchOpen}
+        searchCommands={searchCommands}
       />
+      {compact && <div className="sb-scrim" data-open={drawerOpen} onClick={() => setDrawerOpen(false)} />}
       {route.kind === "projects" ? (
         <Suspense
           fallback={
-            <div className="panel-loading">
-              <LoaderCircle className="spin" />
-            </div>
+            <div className="panel-loading"><SkelRows count={5} /></div>
           }
         >
           <ProjectsPage
@@ -760,9 +803,7 @@ export default function App() {
       ) : route.kind === "tasks" ? (
         <Suspense
           fallback={
-            <div className="panel-loading">
-              <LoaderCircle className="spin" />
-            </div>
+            <div className="panel-loading"><SkelRows count={5} /></div>
           }
         >
           <TasksPage
@@ -776,55 +817,58 @@ export default function App() {
           />
         </Suspense>
       ) : (
-        <main className={`chat-shell ochi-chat ${empty ? "is-empty" : ""}`}>
-          <header className="chat-header">
-            <div className="header-title">
+        <main className="app-main">
+          <section className="view-chat" data-empty={empty}>
+            <header className="topbar">
               <MobileMenuButton onClick={() => setDrawerOpen(true)} />
-              {selected?.project_id && (
-                <button
-                  className="header-project chat-project-crumb"
-                  onClick={() => navigate(`/projects/${selected.project_id}`)}
-                >
-                  <Folder size={14} />
-                  {
-                    projects.find((item) => item.id === selected.project_id)
-                      ?.name
-                  }
-                </button>
+              {crumbProject && (
+                <>
+                  <button className="top-crumb" onClick={() => navigate(`/projects/${crumbProject.id}`)}>
+                    <Folder className="ic" /><span>{crumbProject.name}</span>
+                  </button>
+                  <ChevronRight className="top-crumb-sep" />
+                </>
               )}
-              {selected?.project_id && <ChevronRight className="chat-crumb-chevron" size={13} />}
-              {!empty && <h1>{selected?.title || t("chat.newConversation")}</h1>}
-            </div>
-            <div className="header-actions">
-              <span className={`status-text ${snapshot?.status === "completed" ? "status-completed" : ""}`} role="status" aria-live="polite">
-                {snapshot?.status === "completed" && <Check size={13} />}
+              {!empty && (selectedId ? (
+                <ActionMenu className="title-btn" align="start" label={t("chat.manage", { name: selected?.title || t("chat.newConversation") })}
+                  trigger={<><h1><span>{selected?.title || t("chat.newConversation")}</span></h1><ChevronDown className="ic" /></>}>
+                  <MenuAction onClick={() => { pins.toggle(selectedId); toast(selectedPinned ? t("sidebar.unpinned") : t("sidebar.pinnedToast")); }}>
+                    {selectedPinned ? <PinOff className="ic" /> : <Pin className="ic" />}{selectedPinned ? t("sidebar.unpin") : t("sidebar.pin")}
+                  </MenuAction>
+                  <MenuAction onClick={() => void exportSelected()}><Download className="ic" />{t("sidebar.export")}</MenuAction>
+                </ActionMenu>
+              ) : <h1 className="title-btn"><span>{t("chat.newConversation")}</span></h1>)}
+              <span className="grow" />
+              <span className="top-status" data-tone={snapshot?.status === "failed" ? "danger" : undefined} role="status" aria-live="polite">
+                {snapshot?.status === "completed" && <Check className="ic" />}
                 {statusText}
               </span>
-              <button
-                className="icon-button mobile-new-chat"
-                aria-label={t("chat.newConversation")}
-                onClick={newConversation}
-              >
-                <SquarePen size={19} />
+              <button className="icon-btn mobile-new-chat" aria-label={t("chat.newConversation")} onClick={newConversation}>
+                <SquarePen className="ic" />
               </button>
-            </div>
-          </header>
-          {loading ? (
-            <div className="chat-loading">
-              <LoaderCircle className="spin" size={21} aria-label={t("status.loading")} />
-            </div>
-          ) : (
-            <MessageList
-              messages={messages}
-              snapshot={snapshot}
-              sessionId={selectedId}
-              onLoadOlder={olderAvailable ? loadOlder : undefined}
-              olderLoading={olderLoading}
-              onRetry={!busy ? requestRetry : undefined}
-              onEdit={!busy ? requestEdit : undefined}
-              onResume={resumeRun}
-            />
-          )}
+            </header>
+            {loading ? (
+              <div className="chat-loading" role="status" aria-label={t("status.loading")}>
+                <div className="chat-skel" aria-hidden="true">
+                  <span className="skel block chat-skel-user" />
+                  <span className="skel line" style={{ width: "92%" }} />
+                  <span className="skel line" style={{ width: "78%" }} />
+                  <span className="skel line" style={{ width: "54%" }} />
+                </div>
+              </div>
+            ) : (
+              <MessageList
+                messages={messages}
+                snapshot={snapshot}
+                sessionId={selectedId}
+                onLoadOlder={olderAvailable ? loadOlder : undefined}
+                olderLoading={olderLoading}
+                onRetry={!busy ? requestRetry : undefined}
+                onEdit={!busy ? requestEdit : undefined}
+                onResume={resumeRun}
+              />
+            )}
+            {empty && <EmptyHero name={user.display_name || user.username} />}
           {error && (
             <div className="inline-error" role="alert">
               <span>{error}</span>
@@ -837,7 +881,7 @@ export default function App() {
               </button>
             </div>
           )}
-          <div className={`composer-wrap ${empty ? "composer-home" : ""}`}>
+          <div className="composer-wrap"><div className="composer-in">
             <QueueTray
               items={queue}
               onCancel={async (id) => {
@@ -882,23 +926,26 @@ export default function App() {
               onModel={changeModel}
               onEffort={changeEffort}
             />
-          </div>
+          </div></div>
+          </section>
         </main>
       )}
+      <ArtifactDock />
+      {computerOpen && <ComputerPanel onClose={() => setComputerOpen(false)} />}
+      <ToastHost key={user.id} />
       {settingsOpen && (
         <Suspense fallback={null}>
-          <UserSettings
-            onLanguage={changeLanguage}
-            projects={projects}
-            onNavigate={navigate}
-            onClose={() => setSettingsOpen(false)}
-          />
+          <PreferencesProvider value={preferencesOwner}>
+            <UserSettings
+              user={user}
+              onLogout={logout}
+              onLanguage={changeLanguage}
+              projects={projects}
+              onNavigate={navigate}
+              onClose={() => setSettingsOpen(false)}
+            />
+          </PreferencesProvider>
         </Suspense>
-      )}
-      {computerOpen && (
-        <ComputerPanel
-          onClose={() => setComputerOpen(false)}
-        />
       )}
       {revision && (
         <Modal
@@ -915,17 +962,13 @@ export default function App() {
                 {t("common.cancel")}
               </button>
               <button
-                className="primary-button"
+                className={`primary-button${posting ? " btn-progress" : ""}`}
                 onClick={() => void revise()}
                 disabled={
                   posting || (revision.kind === "edit" && !revisionText.trim())
                 }
               >
-                {posting ? (
-                  <LoaderCircle className="spin" size={16} />
-                ) : (
-                  t("chat.rerun")
-                )}
+                {t("chat.rerun")}
               </button>
             </>
           }
