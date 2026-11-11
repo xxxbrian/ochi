@@ -14,7 +14,9 @@ pnpm test
 
 Node 22+ and pnpm are required. The dev server proxies API requests to
 `VITE_DEV_API_TARGET`; do not put credentials in client environment variables.
-Production Nginx serves History API routes and proxies HTTP, SSE and WebSocket.
+The production build is embedded in the Go executable, which serves the Web
+app, History API routes, HTTP API, SSE and WebSocket endpoints. An external
+reverse proxy may provide HTTPS for the installation.
 
 ## Source Ownership
 
