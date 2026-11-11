@@ -120,14 +120,14 @@ test("actual Web summaries show queue progress, count only executed work and do 
   const load = createLoader(require("typescript"), require, {
     [path.join(root, "web/src/lib/i18n.ts")]: i18n.web,
     [path.join(root, "shared/i18n/process.ts")]: i18n.process,
-    [path.join(root, "web/src/components/ThinkingDetails.tsx")]: { OchiActivityMark: () => null },
-    [path.join(root, "web/src/components/ProcessTimeline.tsx")]: { ProcessTimeline: () => null },
-    [path.join(root, "web/src/components/ProcessElapsed.tsx")]: { ProcessElapsed: () => React.createElement("span", null, "Run elapsed") },
-    [path.join(root, "web/src/components/ProcessSteps.tsx")]: { StepList: () => null },
+    [path.join(root, "web/src/components/process.css")]: {},
+    [path.join(root, "web/src/components/ProcessSteps.tsx")]: {
+      Collapse: () => null, hueStyle: () => ({}), toolIcon: () => null, ThinkingRow: () => null, ToolRow: () => null, ToolGroup: () => null, ProgressRow: () => null, RunningBars: () => null,
+    },
   });
-  const { ProcessSummary } = load(path.join(root, "web/src/components/ProcessDetails.tsx"));
+  const { ProcessTimeline: ProcessSummary } = load(path.join(root, "web/src/components/ProcessTimeline.tsx"));
   const executed = entry(1, step({}, { name: "exec", status: "completed" }));
-  const props = { timeline: [executed, entry(2)], active: true, status: "waiting_resource", resource: "desktop:fixture" };
+  const props = { renderBody: () => null, timeline: [executed, entry(2)], active: true, status: "waiting_resource", resource: "desktop:fixture" };
   const render = (patch = {}) => renderToStaticMarkup(React.createElement(ProcessSummary, { ...props, ...patch }));
   const waiting = render();
   assert.match(waiting, /Waiting for computer/);
@@ -141,8 +141,8 @@ test("actual Web summaries show queue progress, count only executed work and do 
   const paused = entry(2, step(output({ status: "paused" }), { status: "completed", outcome: "not_executed" }));
   const resumedModel = render({ timeline: [executed, paused], status: "running" });
   assert.doesNotMatch(resumedModel, /Waiting for computer|requests ahead/);
-  assert.match(resumedModel, /Completed 1 step/);
+  assert.doesNotMatch(resumedModel, /Waited/);
   const complete = render({ timeline: [executed, paused, entry(3, step({ status: "acquired", resource: "desktop", executed: false }, { status: "completed", outcome: "not_executed" }))], status: "completed", active: false });
-  assert.match(complete, /1 step/);
-  assert.doesNotMatch(complete, /3 steps/);
+  assert.match(complete, /1 tool call\b/);
+  assert.doesNotMatch(complete, /[23] tool calls/);
 });
