@@ -3,10 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
+  CircleAlert,
   FileCode2,
+  Link,
   Folder,
   GitBranch,
-  LoaderCircle,
   MoreHorizontal,
   Pencil,
   Plug,
@@ -15,6 +16,8 @@ import {
   Terminal,
   Trash2,
   Upload,
+  WandSparkles,
+  Wrench,
   Zap,
 } from "lucide-react";
 import { adminApi, api } from "../../lib/api";
@@ -25,13 +28,13 @@ import { ActionMenu, MenuAction } from "../../components/ui/Menu";
 import {
   ErrorNotice,
   Field,
-  InlineSwitch,
   KeyValueEditor,
   keyRows,
   rowsObject,
   Toggle,
   type KeyValue,
 } from "./Fields";
+import { Card, CardHead, Collapse, Disclosure, Empty, Pill, SkeletonRows, StatusDot, Switch } from "./ui";
 
 type SkillDraft = Partial<Skill> & {
   ref?: string;
@@ -182,90 +185,49 @@ export function SkillsPage() {
   }
   return (
     <>
-      <div className="admin-page-heading">
-        <h2>{t("skillComponents")}</h2>
-        <button className="primary-button" onClick={() => void edit()}>
-          <Plus size={16} />
-          {t("installSkill")}</button>
-      </div>
-      <ErrorNotice error={error} notice={notice} />
-      {loading ? (
-        <div className="panel-loading">
-          <LoaderCircle className="spin" size={22} />
-        </div>
-      ) : (
-        <div className="integration-list">
-          {items.map((skill) => (
-            <article key={skill.id}>
-              <span className="integration-icon">
-                <FileCode2 size={18} />
-              </span>
-              <button
-                className="integration-main"
-                onClick={() => void edit(skill)}
-              >
-                <span className="integration-name-line">
-                  <strong>{skill.name}</strong>
-                  <small title={skill.source}>
-                    {[
-                      skill.version ? `v${skill.version}` : "",
-                      skill.source === "inline" ? "SKILL.md" : skill.source?.startsWith("http") || skill.source?.startsWith("git") ? "Git" : t("archive"),
-                    ].filter(Boolean).join(" · ")}
-                  </small>
-                </span>
-                <p>{skill.description}</p>
-              </button>
-              <InlineSwitch
-                title={t("enableNamed", { name: skill.name })}
-                value={skill.enabled}
-                updating={busy === skill.id}
-                onChange={(enabled) => {
-                  setBusy(skill.id);
-                  void adminApi
-                    .save<Skill>(
-                      "skills",
-                      { id: skill.id, enabled },
-                      true,
-                    )
-                    .then(() => refresh())
-                    .catch((reason: Error) => setError(reason.message))
-                    .finally(() => setBusy(""));
-                }}
-              />
-              <ActionMenu
-                trigger={<MoreHorizontal size={18} />}
-                label={t("skillActions")}
-              >
-                <MenuAction onClick={() => void edit(skill)}>
-                  <Pencil size={15} />
-                  {t("details")}</MenuAction>
-                <MenuAction onClick={() => void test(skill)}>
-                  <Check size={15} />
-                  {t("validate")}</MenuAction>
-                <MenuAction
-                  onClick={() => {
-                    setInstall(skill);
-                    setCommand("");
-                    setResult("");
-                  }}
-                >
-                  <Terminal size={15} />
-                  {t("installDependencies")}</MenuAction>
-                {(skill.source?.startsWith("http") ||
-                  skill.source?.startsWith("git")) && (
-                  <MenuAction onClick={() => void update(skill)}>
-                    <RefreshCw size={15} />
-                    {t("update")}</MenuAction>
-                )}
-                <MenuAction danger onClick={() => setDeleting(skill)}>
-                  <Trash2 size={15} />
-                  {t("delete")}</MenuAction>
-              </ActionMenu>
-            </article>
-          ))}
-          {!items.length && <div className="empty-page">{t("noSkills")}</div>}
-        </div>
-      )}
+      <Card>
+        <CardHead title={t("skillComponents")} desc={t("skillsCardHint", { count: items.length })}
+          right={<button className="btn primary sm" onClick={() => void edit()}><Plus className="ic" />{t("installSkill")}</button>} />
+        <ErrorNotice error={error} notice={notice} />
+        {loading ? (
+          <div className="ad-plist"><SkeletonRows rows={2} /></div>
+        ) : items.length ? (
+          <div className="ad-plist">
+            {items.map((skill) => {
+              const kind = skill.source === "inline" ? "SKILL.md" : skill.source?.startsWith("http") || skill.source?.startsWith("git") ? "Git" : t("archive");
+              return (
+                <div className="ad-prow" key={skill.id}>
+                  <div className="ad-prow-h">
+                    <span className="ad-tile"><WandSparkles className="ic" /></span>
+                    <button type="button" className="ad-prow-t ad-rowbtn" onClick={() => void edit(skill)}>
+                      <b>{skill.name}</b><small>{skill.description}</small>
+                    </button>
+                    <span className="ad-pcol"><Pill tone="accent">{[skill.version ? `v${skill.version}` : "", kind].filter(Boolean).join(" · ")}</Pill></span>
+                    <span className="ad-pcol"><StatusDot tone={skill.enabled ? "success" : ""}>{skill.enabled ? t("ready") : t("disabled")}</StatusDot></span>
+                    <Switch on={skill.enabled} label={t("enableNamed", { name: skill.name })} busy={busy === skill.id}
+                      onChange={(enabled) => {
+                        setBusy(skill.id);
+                        void adminApi.save<Skill>("skills", { id: skill.id, enabled }, true)
+                          .then(() => refresh())
+                          .catch((reason: Error) => setError(reason.message))
+                          .finally(() => setBusy(""));
+                      }} />
+                    <ActionMenu trigger={<MoreHorizontal className="ic" />} label={t("skillActions")} className="icon-btn sm">
+                      <MenuAction onClick={() => void edit(skill)}><Pencil className="ic" />{t("details")}</MenuAction>
+                      <MenuAction onClick={() => void test(skill)}><Check className="ic" />{t("validate")}</MenuAction>
+                      <MenuAction onClick={() => { setInstall(skill); setCommand(""); setResult(""); }}><Terminal className="ic" />{t("installDependencies")}</MenuAction>
+                      {(skill.source?.startsWith("http") || skill.source?.startsWith("git")) && (
+                        <MenuAction onClick={() => void update(skill)}><RefreshCw className="ic" />{t("update")}</MenuAction>
+                      )}
+                      <MenuAction danger onClick={() => setDeleting(skill)}><Trash2 className="ic" />{t("delete")}</MenuAction>
+                    </ActionMenu>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : <Empty icon={<WandSparkles className="ic" />} title={t("noSkills")} />}
+      </Card>
       {editor && (
         <Modal
           className="ochi-admin-modal"
@@ -276,17 +238,17 @@ export function SkillsPage() {
             <div className="modal-actions">
               <button
                 type="button"
-                className="secondary-button"
+                className="btn secondary"
                 onClick={() => setEditor(null)}
               >
                 {t("cancel")}</button>
               <button
                 type="submit"
                 form="skill-editor"
-                className="primary-button"
+                className={`btn primary${busy === "save" ? " btn-progress" : ""}`}
                 disabled={busy === "save" || busy === "upload"}
               >
-                {t("save")}</button>
+                {busy === "save" ? t("savingEllipsis") : t("save")}</button>
             </div>
           }
         >
@@ -340,7 +302,7 @@ export function SkillsPage() {
                     }
                   />
                 </Field>
-                <div className="form-grid">
+                <div className="ad-grid2">
                   <Field title={t("branchOrVersion")}>
                     <input
                       value={editor.ref ?? ""}
@@ -372,22 +334,18 @@ export function SkillsPage() {
                 <span>{uploadName || editor.source || ""}</span>
                 <button
                   type="button"
-                  className="secondary-button"
+                  className={`btn secondary${busy === "upload" ? " btn-progress" : ""}`}
                   disabled={busy === "upload"}
                   onClick={() => uploadInput.current?.click()}
                 >
-                  {busy === "upload" ? (
-                    <LoaderCircle className="spin" size={16} />
-                  ) : (
-                    t("chooseArchive")
-                  )}
+                  {busy === "upload" ? t("uploadingEllipsis") : t("chooseArchive")}
                 </button>
               </div>
             ) : null}
             {(sourceType === "inline" || editor.id) && (
               <Field title="SKILL.md">
                 <textarea
-                  className="code-input"
+                  className="input mono"
                   rows={13}
                   value={editor.content ?? ""}
                   onChange={(event) =>
@@ -432,15 +390,11 @@ export function SkillsPage() {
               <button
                 type="submit"
                 form="skill-install"
-                className="primary-button"
+                className={`btn primary${busy === "install" ? " btn-progress" : ""}`}
                 disabled={busy === "install" || !command.trim()}
               >
-                {busy === "install" ? (
-                  <LoaderCircle className="spin" size={15} />
-                ) : (
-                  <Terminal size={15} />
-                )}
-                {t("execute")}</button>
+                <Terminal size={15} />
+                {busy === "install" ? t("installingEllipsis") : t("execute")}</button>
             </div>
           }
         >
@@ -471,7 +425,7 @@ export function SkillsPage() {
             <Field title={t("command")}>
               <textarea
                 rows={4}
-                className="code-input"
+                className="input mono"
                 value={command}
                 onChange={(event) => setCommand(event.target.value)}
               />
@@ -490,12 +444,12 @@ export function SkillsPage() {
           footer={
             <div className="modal-actions">
               <button
-                className="secondary-button"
+                className="btn secondary"
                 onClick={() => setDeleting(null)}
               >
                 {t("cancel")}</button>
               <button
-                className="danger-button"
+                className={`btn danger${busy === "delete" ? " btn-progress" : ""}`}
                 disabled={busy === "delete"}
                 onClick={() => {
                   setBusy("delete");
@@ -509,7 +463,7 @@ export function SkillsPage() {
                     .finally(() => setBusy(""));
                 }}
               >
-                {t("delete")}</button>
+                {busy === "delete" ? t("deletingEllipsis") : t("delete")}</button>
             </div>
           }
         >
@@ -535,6 +489,7 @@ export function MCPPage() {
   const [importing, setImporting] = useState(false);
   const [json, setJson] = useState("");
   const [testTools, setTestTools] = useState<MCPServer | null>(null);
+  const [openRows, setOpenRows] = useState<Record<string, boolean>>({});
   const [deleting, setDeleting] = useState<MCPServer | null>(null);
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -649,87 +604,63 @@ export function MCPPage() {
   }
   return (
     <>
-      <div className="admin-page-heading">
-        <h2>{t("mcpComponents")}</h2>
-        <div className="toolbar-actions">
-          <button
-            className="secondary-button"
-            onClick={() => {
-              setImporting(true);
-              setJson("");
-              setError("");
-            }}
-          >
-            {t("importJSON")}</button>
-          <button className="primary-button" onClick={() => edit()}>
-            <Plus size={16} />
-            {t("addMCP")}</button>
-        </div>
-      </div>
-      <ErrorNotice error={error} notice={notice} />
-      {loading ? (
-        <div className="panel-loading">
-          <LoaderCircle className="spin" size={22} />
-        </div>
-      ) : (
-        <div className="integration-list">
-          {items.map((server) => (
-            <article key={server.id}>
-              <span className="integration-icon">
-                <Plug size={18} />
-              </span>
-              <button className="integration-main" onClick={() => edit(server)}>
-                <span className="integration-name-line">
-                  <strong>{server.name}</strong>
-                  <small className={server.error ? "danger" : ""} title={server.error || undefined}>
-                    {server.error ? t("connectionFailed") : server.status === "connected" ? t("toolsCount", { count: server.tools?.length ?? 0 }) : server.transport === "http" ? "HTTP" : "Stdio"}
-                  </small>
-                </span>
-                <p className="integration-command">
-                  {server.transport === "http"
-                    ? server.url
-                    : [server.command, ...(server.args ?? [])].join(" ")}
-                </p>
-              </button>
-              <InlineSwitch
-                title={t("enableNamed", { name: server.name })}
-                value={server.enabled}
-                updating={busy === server.id}
-                onChange={(enabled) => {
-                  setBusy(server.id);
-                  void adminApi
-                    .save<MCPServer>(
-                      "mcp",
-                      { id: server.id, enabled },
-                      true,
-                    )
-                    .then(() => refresh())
-                    .catch((reason: Error) => setError(reason.message))
-                    .finally(() => setBusy(""));
-                }}
-              />
-              <ActionMenu
-                trigger={<MoreHorizontal size={18} />}
-                label={t("mcpActions")}
-              >
-                <MenuAction onClick={() => edit(server)}>
-                  <Pencil size={15} />
-                  {t("edit")}</MenuAction>
-                <MenuAction onClick={() => void test(server)}>
-                  <Zap size={15} />
-                  {t("testConnection")}</MenuAction>
-                <MenuAction onClick={() => setTestTools(server)}>
-                  <Plug size={15} />
-                  {t("tools")}</MenuAction>
-                <MenuAction danger onClick={() => setDeleting(server)}>
-                  <Trash2 size={15} />
-                  {t("delete")}</MenuAction>
-              </ActionMenu>
-            </article>
-          ))}
-          {!items.length && <div className="empty-page">{t("noMCP")}</div>}
-        </div>
-      )}
+      <Card>
+        <CardHead title={t("mcpComponents")} desc={t("mcpCardHint", { count: items.length })}
+          right={<>
+            <button className="btn secondary sm" onClick={() => { setImporting(true); setJson(""); setError(""); }}><Link className="ic" />{t("importJSON")}</button>
+            <button className="btn primary sm" onClick={() => edit()}><Plus className="ic" />{t("addMCP")}</button>
+          </>} />
+        <ErrorNotice error={error} notice={notice} />
+        {loading ? (
+          <div className="ad-plist"><SkeletonRows rows={2} /></div>
+        ) : items.length ? (
+          <div className="ad-plist">
+            {items.map((server) => {
+              const tools = (server.tools ?? []) as { name?: string; description?: string; inputSchema?: unknown }[];
+              const expanded = Boolean(openRows[server.id]);
+              const tone = server.error ? "danger" : server.status === "connected" ? "success" : "";
+              return (
+                <div className="ad-prow" key={server.id} data-open={expanded}>
+                  <div className="ad-prow-h">
+                    <span className="ad-tile"><Plug className="ic" /></span>
+                    <button type="button" className="ad-prow-t ad-rowbtn" onClick={() => edit(server)}>
+                      <b>{server.name}</b>
+                      <small className="mono">{server.transport === "http" ? server.url : [server.command, ...(server.args ?? [])].join(" ")}</small>
+                    </button>
+                    <span className="ad-pcol"><Pill>{server.transport === "http" ? "http" : "stdio"}</Pill></span>
+                    <span className="ad-pcol"><StatusDot tone={tone}>{server.error ? t("connectionFailed") : server.status === "connected" ? t("connected") : t("disabled")}</StatusDot></span>
+                    <Disclosure open={expanded} onClick={() => setOpenRows((current) => ({ ...current, [server.id]: !expanded }))}>{t("toolsCount", { count: tools.length })}</Disclosure>
+                    <Switch on={server.enabled} label={t("enableNamed", { name: server.name })} busy={busy === server.id}
+                      onChange={(enabled) => {
+                        setBusy(server.id);
+                        void adminApi.save<MCPServer>("mcp", { id: server.id, enabled }, true)
+                          .then(() => refresh())
+                          .catch((reason: Error) => setError(reason.message))
+                          .finally(() => setBusy(""));
+                      }} />
+                    <ActionMenu trigger={<MoreHorizontal className="ic" />} label={t("mcpActions")} className="icon-btn sm">
+                      <MenuAction onClick={() => edit(server)}><Pencil className="ic" />{t("edit")}</MenuAction>
+                      <MenuAction onClick={() => void test(server)}><Zap className="ic" />{t("testConnection")}</MenuAction>
+                      <MenuAction danger onClick={() => setDeleting(server)}><Trash2 className="ic" />{t("delete")}</MenuAction>
+                    </ActionMenu>
+                  </div>
+                  <Collapse open={expanded}>
+                    <div className="ad-tools">
+                      {server.error ? <div className="ad-alert"><CircleAlert className="ic" /><div>{server.error}</div></div> : null}
+                      {tools.length ? tools.map((tool, index) => (
+                        <div key={index}>
+                          <div className="ad-tool"><code className="mono">{tool.name}</code><span>{tool.description}</span></div>
+                          {tool.inputSchema ? <details className="ad-schema"><summary>{t("arguments")}</summary><pre className="ad-code">{JSON.stringify(tool.inputSchema, null, 2)}</pre></details> : null}
+                        </div>
+                      )) : server.error ? null : <Empty icon={<Wrench className="ic" />} title={t("noTools")} />}
+                    </div>
+                  </Collapse>
+                </div>
+              );
+            })}
+          </div>
+        ) : <Empty icon={<Plug className="ic" />} title={t("noMCP")} />}
+      </Card>
       {editor && (
         <Modal
           className="ochi-admin-modal"
@@ -740,17 +671,17 @@ export function MCPPage() {
             <div className="modal-actions">
               <button
                 type="button"
-                className="secondary-button"
+                className="btn secondary"
                 onClick={() => setEditor(null)}
               >
                 {t("cancel")}</button>
               <button
                 type="submit"
                 form="mcp-editor"
-                className="primary-button"
+                className={`btn primary${busy === "save" ? " btn-progress" : ""}`}
                 disabled={busy === "save"}
               >
-                {t("save")}</button>
+                {busy === "save" ? t("savingEllipsis") : t("save")}</button>
             </div>
           }
         >
@@ -762,7 +693,7 @@ export function MCPPage() {
               void save();
             }}
           >
-            <div className="form-grid">
+            <div className="ad-grid2">
               <Field title={t("name")}>
                 <input
                   required
@@ -841,7 +772,7 @@ export function MCPPage() {
                         />
                         <button
                           type="button"
-                          className="icon-button"
+                          className="icon-btn"
                           aria-label={t("deleteArgument")}
                           onClick={() =>
                             setArgs(args.filter((_, i) => i !== index))
@@ -853,7 +784,7 @@ export function MCPPage() {
                     ))}
                     <button
                       type="button"
-                      className="text-button"
+                      className="btn ghost sm"
                       onClick={() => setArgs([...args, ""])}
                     >
                       <Plus size={14} />
@@ -895,7 +826,7 @@ export function MCPPage() {
           footer={
             <div className="modal-actions">
               <button
-                className="primary-button"
+                className="btn primary"
                 disabled={!json.trim()}
                 onClick={importJSON}
               >
@@ -904,7 +835,7 @@ export function MCPPage() {
           }
         >
           <textarea
-            className="field-input code-input"
+            className="input input mono"
             rows={13}
             value={json}
             onChange={(event) => setJson(event.target.value)}
@@ -954,12 +885,12 @@ export function MCPPage() {
           footer={
             <div className="modal-actions">
               <button
-                className="secondary-button"
+                className="btn secondary"
                 onClick={() => setDeleting(null)}
               >
                 {t("cancel")}</button>
               <button
-                className="danger-button"
+                className={`btn danger${busy === "delete" ? " btn-progress" : ""}`}
                 disabled={busy === "delete"}
                 onClick={() => {
                   setBusy("delete");
@@ -973,7 +904,7 @@ export function MCPPage() {
                     .finally(() => setBusy(""));
                 }}
               >
-                {t("delete")}</button>
+                {busy === "delete" ? t("deletingEllipsis") : t("delete")}</button>
             </div>
           }
         >

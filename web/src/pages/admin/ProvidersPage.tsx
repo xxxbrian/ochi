@@ -3,9 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
   ChevronRight,
+  CircleCheck,
+  CircleX,
+  Sparkles,
   Cpu,
   Database,
-  LoaderCircle,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -39,7 +41,10 @@ import {
   rowsObject,
   Toggle,
   type KeyValue,
+  AdminSkeleton,
 } from "./Fields";
+import { AdminHeader, Card, Collapse, Disclosure, Empty, Pill, Seg, StatusDot, Switch } from "./ui";
+import { CopyButton } from "./CopyButton";
 
 type ProviderDraft = Partial<Provider> & {
   api_key?: string;
@@ -69,7 +74,6 @@ export default function ProvidersPage() {
   useAdminI18n();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [models, setModels] = useState<Model[]>([]);
-  const [selected, setSelected] = useState("");
   const [query, setQuery] = useState("");
   const [onlyEnabled, setOnlyEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -104,6 +108,8 @@ export default function ProvidersPage() {
   const [modelOrder, setModelOrder] = useState<string[] | null>(null);
   const [defaultModel, setDefaultModel] = useState("");
   const [orderError, setOrderError] = useState("");
+  const [results, setResults] = useState<Record<string, { ok: boolean; text: string; ms?: number }>>({});
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -113,11 +119,7 @@ export default function ProvidersPage() {
       ]);
       setProviders(list ?? []);
       setModels(available ?? []);
-      setSelected((current) =>
-        list.some((item) => item.id === current)
-          ? current
-          : (list[0]?.id ?? ""),
-      );
+      setOpen((current) => (Object.keys(current).length || !list[0] ? current : { [list[0].id]: true }));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t("loadFailed"));
     } finally {
@@ -127,7 +129,6 @@ export default function ProvidersPage() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-  const provider = providers.find((item) => item.id === selected);
   function editModelOrder() {
     const published = models.filter((model) => model.enabled && model.available !== false &&
       (!model.kind || model.kind === "chat") && providers.some((item) => item.id === model.provider_id && item.enabled));
@@ -148,17 +149,11 @@ export default function ProvidersPage() {
       setOrderError(reason instanceof Error ? reason.message : t("saveFailed"));
     } finally { setBusy(""); }
   }
-  const filtered = useMemo(
-    () =>
-      models.filter(
-        (model) =>
-          model.provider_id === selected &&
-          (!onlyEnabled || model.enabled) &&
-          `${model.name} ${model.model}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
-      ),
-    [models, selected, query, onlyEnabled],
+  const modelsOf = useCallback(
+    (providerId: string) => models.filter((model) =>
+      model.provider_id === providerId && (!onlyEnabled || model.enabled) &&
+      `${model.name} ${model.model}`.toLowerCase().includes(query.toLowerCase())),
+    [models, query, onlyEnabled],
   );
   function editProvider(value?: Provider) {
     setHeaders(
@@ -181,8 +176,8 @@ export default function ProvidersPage() {
           },
     );
   }
-  function editModel(value?: Model) {
-    const next = value ?? modelDraft(selected);
+  function editModel(value?: Model, providerId = "") {
+    const next = value ?? modelDraft(providerId);
     setModelEditor({ ...next });
     setModelOriginal({ ...next });
     setModelTouched(false);
@@ -217,8 +212,24 @@ export default function ProvidersPage() {
       );
       setProviderEditor(null);
       await refresh();
-      setSelected(saved.id);
+      setOpen((current) => ({ ...current, [saved.id]: true }));
       setNotice(saved.sync_error ? t("savedWithError", { error: translateError(saved.sync_error_code) ?? saved.sync_error }) : saved.imported ? t("modelsSaved", { count: saved.imported }) : t("saved"));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("saveFailed"));
+    } finally {
+      setBusy("");
+    }
+  }
+  async function setProviderEnabled(item: Provider, enabled: boolean) {
+    setBusy(`enable:${item.id}`);
+    setError("");
+    try {
+      const saved = await adminApi.save<Provider>("providers", {
+        id: item.id, name: item.name, base_url: item.base_url, protocol: item.protocol, enabled,
+        timeout_seconds: item.timeout_seconds, discover_models: item.discover_models, allow_no_key: item.allow_no_key,
+        catalog_provider_id: item.catalog_provider_id, api_key: "", api_key_action: "keep", headers: {}, clear_headers: [],
+      }, true);
+      setProviders((current) => current.map((entry) => (entry.id === item.id ? { ...entry, ...saved } : entry)));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t("saveFailed"));
     } finally {
@@ -285,27 +296,29 @@ export default function ProvidersPage() {
     setBusy(id);
     setError("");
     setNotice("");
+    const started = performance.now();
+    if (kind === "providers") setResults((current) => { const { [id]: _drop, ...rest } = current; return rest; });
     try {
       const value = await adminApi.test(kind, id, options);
       if (!value.ok) throw new Error(translateError(value.error_code, value.error_params) ?? value.error ?? t("connectionFailed"));
-      setNotice(
-        kind === "providers"
-          ? value.models ? t("connectionModelCount", { count: value.models.length }) : t("connectionSucceeded")
-          : t(value.parameter_accepted ? "modelAvailableWithParams" : "modelAvailable"),
-      );
-      if (kind === "models") await refresh();
+      if (kind === "providers") setResults((current) => ({ ...current, [id]: { ok: true, text: value.models ? t("connectionModelCount", { count: value.models.length }) : t("connectionSucceeded"), ms: Math.round(performance.now() - started) } }));
+      if (kind === "models") {
+        setNotice(t(value.parameter_accepted ? "modelAvailableWithParams" : "modelAvailable"));
+        await refresh();
+      }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("testFailed"));
+      const text = reason instanceof Error ? reason.message : t("testFailed");
+      if (kind === "providers") setResults((current) => ({ ...current, [id]: { ok: false, text } }));
+      else setError(text);
     } finally {
       setBusy("");
     }
   }
-  async function sync() {
-    if (!provider) return;
-    setBusy("sync");
+  async function sync(target: Provider) {
+    setBusy(`sync:${target.id}`);
     setError("");
     try {
-      const result = await adminApi.syncProvider(provider.id);
+      const result = await adminApi.syncProvider(target.id);
       await refresh();
       setNotice(
         t(result.unavailable ? "syncResultUnavailable" : "syncResult", { count: result.imported, unavailable: result.unavailable ?? 0 }),
@@ -316,12 +329,11 @@ export default function ProvidersPage() {
       setBusy("");
     }
   }
-  async function refreshMetadata() {
-    if (!provider) return;
-    setBusy("metadata");
+  async function refreshMetadata(target: Provider) {
+    setBusy(`metadata:${target.id}`);
     setError("");
     try {
-      const result = await adminApi.refreshMetadata(provider.id);
+      const result = await adminApi.refreshMetadata(target.id);
       await refresh();
       setNotice(t(result.unmatched ? "modelMatchStatus" : "modelMatches", { count: result.matched, unmatched: result.unmatched ?? 0 }));
     } catch (reason) {
@@ -340,9 +352,9 @@ export default function ProvidersPage() {
         editModel(value);
         await refresh();
       } else {
-        const value = await adminApi.resolveMetadata(selected, modelEditor.model);
+        const value = await adminApi.resolveMetadata(modelEditor.provider_id, modelEditor.model);
         if (!value.matched || !value.model) throw new Error(t("modelNotInCatalog"));
-        const next = { ...modelEditor, ...value.model, id: "", provider_id: selected, model: modelEditor.model, enabled: modelEditor.enabled, is_default: modelEditor.is_default };
+        const next = { ...modelEditor, ...value.model, id: "", provider_id: modelEditor.provider_id, model: modelEditor.model, enabled: modelEditor.enabled, is_default: modelEditor.is_default };
         setModelEditor(next);
         setModelOriginal(next);
         setEffortsText(value.model.efforts?.join(", ") ?? "");
@@ -361,11 +373,11 @@ export default function ProvidersPage() {
     let disposed = false;
     const timer = setTimeout(() => {
       setMatching(true);
-      void adminApi.resolveMetadata(selected, modelEditor.model).then((value) => {
+      void adminApi.resolveMetadata(modelEditor.provider_id, modelEditor.model).then((value) => {
         if (disposed) return;
         setMatchStatus(value.matched ? "models.dev" : t("notListed"));
         if (!value.model || modelTouched) return;
-        const next = { ...modelEditor, ...value.model, id: "", provider_id: selected, model: modelEditor.model, enabled: modelEditor.enabled, is_default: modelEditor.is_default };
+        const next = { ...modelEditor, ...value.model, id: "", provider_id: modelEditor.provider_id, model: modelEditor.model, enabled: modelEditor.enabled, is_default: modelEditor.is_default };
         setModelEditor((current) => current ? { ...current, ...next, name: current.name && current.name !== current.model ? current.name : value.model!.name } : current);
         setModelOriginal(next);
         setEffortsText(value.model.efforts?.join(", ") ?? "");
@@ -373,7 +385,7 @@ export default function ProvidersPage() {
       }).catch(() => { if (!disposed) setMatchStatus(t("catalogUnavailable")); }).finally(() => { if (!disposed) setMatching(false); });
     }, 500);
     return () => { disposed = true; clearTimeout(timer); };
-  }, [modelEditor?.id, modelEditor?.model, selected, modelTouched]);
+  }, [modelEditor?.id, modelEditor?.model, modelEditor?.provider_id, modelTouched]);
   async function publish(model: Model, enabled: boolean) {
     setBusy(model.id);
     try {
@@ -396,7 +408,7 @@ export default function ProvidersPage() {
     setCatalogModels([]);
     setCatalogQuery("");
     setCatalogProvider(
-      model.catalog_provider_id ?? provider?.catalog_provider_id ?? "",
+      model.catalog_provider_id ?? providers.find((item) => item.id === model.provider_id)?.catalog_provider_id ?? "",
     );
     try {
       setCatalogProviders(await adminApi.catalogProviders());
@@ -426,24 +438,17 @@ export default function ProvidersPage() {
   }, [catalogFor, catalogProvider, catalogQuery]);
   return (
     <>
-      <div className="admin-page-heading">
-        <h2>{t("modelProviders")}</h2>
-        <div className="toolbar-actions">
-          <button className="secondary-button" onClick={editModelOrder} disabled={loading}>
-            <ListOrdered size={16} />
-            {t("orderAndDefault")}</button>
-          <button className="primary-button" onClick={() => editProvider()}>
-            <Plus size={16} />
-            {t("addProvider")}</button>
-        </div>
-      </div>
+      <AdminHeader actions={<>
+        <button className="btn secondary" onClick={editModelOrder} disabled={loading}><ListOrdered className="ic" />{t("orderAndDefault")}</button>
+        <button className="btn primary" onClick={() => editProvider()}><Plus className="ic" />{t("addProvider")}</button>
+      </>} />
       <ErrorNotice error={error} notice={notice} />
-      {modelOrder && <Modal title={t("orderAndDefault")} onClose={() => { if (busy !== "model-order") setModelOrder(null); }}
+      {modelOrder && <Modal title={t("orderAndDefault")} dismissible={busy !== "model-order"} onClose={() => setModelOrder(null)}
         bodyClassName="model-order-body"
         footer={<>
-          <button className="secondary-button" onClick={() => setModelOrder(null)} disabled={busy === "model-order"}>{t("cancel")}</button>
-          <button className="primary-button" onClick={() => void saveModelOrder()} disabled={busy === "model-order"}>
-            {busy === "model-order" && <LoaderCircle size={15} className="spin" />}{t("save")}</button>
+          <button className="btn secondary" onClick={() => setModelOrder(null)} disabled={busy === "model-order"}>{t("cancel")}</button>
+          <button className={`btn primary${busy === "model-order" ? " btn-progress" : ""}`} onClick={() => void saveModelOrder()} disabled={busy === "model-order"}>
+            {busy === "model-order" ? t("savingEllipsis") : t("save")}</button>
         </>}>
         <p className="model-order-hint">{t("modelOrderHint")}</p>
         <ErrorNotice error={orderError} />
@@ -461,11 +466,11 @@ export default function ProvidersPage() {
                 {defaultModel === id && <span className="model-default">{t("default")}</span>}
               </label>
               <div className="model-order-actions">
-                <button className="icon-button" aria-label={t("moveToTopNamed", { name })} title={t("moveToTop")} disabled={!index || busy === "model-order"}
+                <button className="icon-btn" aria-label={t("moveToTopNamed", { name })} title={t("moveToTop")} disabled={!index || busy === "model-order"}
                   onClick={() => setModelOrder([id, ...modelOrder.filter((item) => item !== id)])}><ArrowUpToLine size={15} /></button>
-                <button className="icon-button" aria-label={t("moveUpNamed", { name })} title={t("moveUp")} disabled={!index || busy === "model-order"}
+                <button className="icon-btn" aria-label={t("moveUpNamed", { name })} title={t("moveUp")} disabled={!index || busy === "model-order"}
                   onClick={() => setModelOrder(moveModel(modelOrder, id, -1))}><ArrowUp size={15} /></button>
-                <button className="icon-button" aria-label={t("moveDownNamed", { name })} title={t("moveDown")} disabled={index === modelOrder.length - 1 || busy === "model-order"}
+                <button className="icon-btn" aria-label={t("moveDownNamed", { name })} title={t("moveDown")} disabled={index === modelOrder.length - 1 || busy === "model-order"}
                   onClick={() => setModelOrder(moveModel(modelOrder, id, 1))}><ArrowDown size={15} /></button>
               </div>
             </li>;
@@ -474,230 +479,102 @@ export default function ProvidersPage() {
         {!modelOrder.length && <div className="empty-page">{t("noEnabledChatModels")}</div>}
       </Modal>}
       {loading && !providers.length ? (
-        <div className="panel-loading">
-          <LoaderCircle className="spin" size={22} />
-        </div>
-      ) : (
-        <div className="provider-layout">
-          <nav className="provider-rail">
-            {providers.map((item) => (
-              <button
-                className={selected === item.id ? "selected" : ""}
-                key={item.id}
-                title={item.name}
-                onClick={() => {
-                  setSelected(item.id);
-                  setError("");
-                  setNotice("");
-                }}
-              >
-                <span className="provider-avatar">
-                  <BrandIcon src={item.icon} size={21} />
-                </span>
-                <span>
-                  <span>{item.name}</span>
-                  <small>{t("enabledModelCount", {
-                    count: models.filter((model) => model.provider_id === item.id && model.enabled).length,
-                  })}</small>
-                </span>
-                {!item.enabled && <span className="connection-dot" />}
-                <ChevronRight size={14} />
+        <AdminSkeleton rows={4} />
+      ) : !providers.length ? (
+        <Card><Empty icon={<Sparkles className="ic" />} title={t("noProviders")} action={<button className="btn secondary sm" onClick={() => editProvider()}><Plus className="ic" />{t("addProvider")}</button>} /></Card>
+      ) : providers.map((item) => {
+        const own = models.filter((model) => model.provider_id === item.id);
+        const shown = modelsOf(item.id);
+        const enabledCount = own.filter((model) => model.enabled).length;
+        const expanded = Boolean(open[item.id]);
+        const result = results[item.id];
+        const ready = item.has_api_key || item.allow_no_key;
+        return (
+          <Card key={item.id} className="ad-prov" data-off={!item.enabled}>
+            <div className="ad-prov-top">
+              <span className="ad-logo"><BrandIcon src={item.icon} size={20} /></span>
+              <div className="ad-prov-name"><h3>{item.name}</h3><span>{item.protocol === "openai-responses" ? "Responses" : item.protocol === "anthropic" ? "Anthropic Messages" : "Chat Completions"}</span></div>
+              <StatusDot tone={!item.enabled ? "" : ready ? "success" : "warn"}>{!item.enabled ? t("disabled") : ready ? t("enabled") : t("noKey")}</StatusDot>
+              <span className="grow" />
+              <button type="button" className="icon-btn" aria-label={`${t("editProvider")}: ${item.name}`} title={t("editProvider")} onClick={() => editProvider(item)}><Settings2 className="ic" /></button>
+              <ActionMenu trigger={<MoreHorizontal className="ic" />} label={t("providerActions")}>
+                <MenuAction onClick={() => void test("providers", item.id)}><Zap className="ic" />{t("testConnection")}</MenuAction>
+                <MenuAction danger onClick={() => setDeleting({ kind: "providers", id: item.id, name: item.name })}><Trash2 className="ic" />{t("deleteProvider")}</MenuAction>
+              </ActionMenu>
+              <Switch on={item.enabled} label={`${t("enableNamed", { name: item.name })}`} busy={busy === `enable:${item.id}`} onChange={(next) => void setProviderEnabled(item, next)} />
+            </div>
+            <dl className="ad-kv">
+              <div><dt>{t("serviceURL")}</dt><dd><code className="mono">{item.base_url}</code><CopyButton text={item.base_url} /></dd></div>
+              <div><dt>{t("apiKey")}</dt><dd><code className="mono">{item.has_api_key ? "••••••••••••" : "—"}</code><span className="muted">{item.has_api_key ? t("keyConfigured") : t("noKey")}</span></dd></div>
+              <div><dt>{t("models")}</dt><dd className="muted tnum">{t("enabledModelCount", { count: enabledCount })}</dd></div>
+            </dl>
+            <div className="ad-prov-foot">
+              <button type="button" className={`btn secondary sm${busy === item.id ? " btn-progress" : ""}`} disabled={busy === item.id} onClick={() => void test("providers", item.id)}>
+                <span className="ad-btn-in"><Zap className="ic" />{busy === item.id ? t("testingEllipsis") : t("testConnection")}</span>
               </button>
-            ))}
-            {!providers.length && <div className="empty-page">{t("noProviders")}</div>}
-          </nav>
-          {provider && (
-            <section className="provider-detail">
-              <header className="provider-heading">
-                <div>
-                  <h3>{provider.name}</h3>
-                  <a href={provider.base_url} target="_blank" rel="noreferrer">
-                    {provider.base_url}
-                  </a>
+              {result && <span className="ad-result" data-tone={result.ok ? "success" : "danger"}>
+                {result.ok ? <CircleCheck className="ic" /> : <CircleX className="ic" />}{result.text}{result.ms ? <b className="tnum">{result.ms} ms</b> : null}
+              </span>}
+              <span className="grow" />
+              <Disclosure open={expanded} onClick={() => setOpen((current) => ({ ...current, [item.id]: !expanded }))}>{enabledCount}/{own.length} {t("models").toLowerCase()}</Disclosure>
+            </div>
+            <Collapse open={expanded}>
+              <div className="ad-inset">
+                <div className="ad-toolbar ad-mtools">
+                  <div className="search-field"><Search className="ic" /><input className="input" aria-label={t("searchModels")} placeholder={t("searchModels")} value={query} onChange={(event) => setQuery(event.target.value)} /></div>
+                  <Seg small value={onlyEnabled ? "on" : "all"} onChange={(next) => setOnlyEnabled(next === "on")} options={[{ v: "all", l: t("all") }, { v: "on", l: t("enabled") }]} />
+                  <span className="grow" />
+                  <button type="button" className="btn secondary sm" disabled={busy === `sync:${item.id}` || item.discover_models === false} onClick={() => void sync(item)}>
+                    <RefreshCw className={`ic${busy === `sync:${item.id}` ? " ic-turn" : ""}`} />{busy === `sync:${item.id}` ? t("syncingEllipsis") : t("sync")}</button>
+                  <button type="button" className={`btn secondary sm${busy === `metadata:${item.id}` ? " btn-progress" : ""}`} title={t("updateModelMetadata")} disabled={busy === `metadata:${item.id}`} onClick={() => void refreshMetadata(item)}>
+                    <Database className="ic" />{busy === `metadata:${item.id}` ? t("updatingMetadata") : t("updateMetadata")}</button>
+                  <button type="button" className="icon-btn sm" aria-label={t("customModel")} title={t("customModel")} onClick={() => editModel(undefined, item.id)}><Plus className="ic" /></button>
                 </div>
-                <div className="toolbar-actions">
-                  <button
-                    className="secondary-button provider-settings-action"
-                    aria-label={t("editProvider")}
-                    title={t("editProvider")}
-                    onClick={() => editProvider(provider)}
-                  >
-                    <Settings2 size={16} />
-                    <span>{t("settings")}</span>
-                  </button>
-                  <button className="icon-button" title={t("testConnection")} aria-label={t("testProviderConnection")}
-                    disabled={busy === provider.id} onClick={() => void test("providers", provider.id)}>
-                    <Zap size={16} />
-                  </button>
-                  <ActionMenu
-                    trigger={<MoreHorizontal size={19} />}
-                    label={t("providerActions")}
-                  >
-                    <MenuAction
-                      onClick={() => void test("providers", provider.id)}
-                    >
-                      <Zap size={15} />
-                      {t("testConnection")}</MenuAction>
-                    <MenuAction
-                      danger
-                      onClick={() =>
-                        setDeleting({
-                          kind: "providers",
-                          id: provider.id,
-                          name: provider.name,
-                        })
-                      }
-                    >
-                      <Trash2 size={15} />
-                      {t("deleteProvider")}</MenuAction>
-                  </ActionMenu>
-                </div>
-              </header>
-              <div className="provider-overview">
-                <span className={`admin-state${provider.enabled ? " is-enabled" : ""}`}>
-                  <i />{provider.enabled ? t("enabled") : t("disabled")}
-                </span>
-                <span>{provider.protocol === "openai-responses" ? "Responses" : "Chat Completions"}</span>
-                <span>{provider.has_api_key ? t("keyConfigured") : t("noKey")}</span>
+                {shown.length ? (
+                  <div className="ad-tscroll"><table className="ad-table ad-models">
+                    <thead><tr><th>{t("models")}</th><th className="ad-hide-s">{t("capabilities")}</th><th className="r ad-hide-s">{t("contextWindow")}</th><th className="c">{t("enabled")}</th><th className="c" /></tr></thead>
+                    <tbody>{shown.map((model) => {
+                      const reasoning = model.reasoning_kind && !["none", "unknown"].includes(model.reasoning_kind);
+                      return (
+                        <tr key={model.id}>
+                          <td>
+                            <button type="button" className="ad-modelname" aria-label={model.name || model.model} onClick={() => editModel(model)}>
+                              <b>{model.name || model.model}{model.is_default && <Pill tone="accent">{t("default")}</Pill>}</b>
+                              <code className="mono">{model.model}</code>
+                              {model.available === false && <small className="danger">{t("remoteUnavailable")}</small>}
+                            </button>
+                          </td>
+                          <td className="ad-hide-s"><span className="ad-caps">
+                            {model.kind === "image" || model.supports_image_generation ? <Pill tone="accent">{t("imageGeneration")}</Pill> : null}
+                            {model.kind === "embedding" ? <Pill>{t("embeddingModel")}</Pill> : null}
+                            {model.metadata_known?.supports_vision && model.supports_vision ? <Pill tone="accent">{t("imageUnderstanding")}</Pill> : null}
+                            {reasoning ? <Pill tone="success">{t("reasoning")}</Pill> : null}
+                            {model.metadata_known?.supports_tools && model.supports_tools ? <Pill>{t("toolCalling")}</Pill> : null}
+                          </span></td>
+                          <td className="r tnum ad-hide-s">{model.context_window > 0 ? `${Math.round(model.context_window / 1000)}K` : "—"}</td>
+                          <td className="c"><Switch on={model.enabled} label={t("enableNamed", { name: model.name || model.model })} busy={busy === model.id} onChange={(next) => void publish(model, next)} /></td>
+                          <td className="c">
+                            <ActionMenu trigger={<MoreHorizontal className="ic" />} label={t("modelActions")} className="icon-btn sm">
+                              <MenuAction onClick={() => editModel(model)}><Settings2 className="ic" />{t("editCapabilities")}</MenuAction>
+                              <MenuAction onClick={() => void openCatalog(model)}><Database className="ic" />{t("browseCatalog")}</MenuAction>
+                              <MenuAction onClick={() => {
+                                setBusy(model.id);
+                                void adminApi.autoMatchModel(model.id).then(() => refresh()).then(() => setNotice(t("autoMatched"))).catch((reason: Error) => setError(reason.message)).finally(() => setBusy(""));
+                              }}><RefreshCw className="ic" />{t("autoMatch")}</MenuAction>
+                              <MenuAction onClick={() => void test("models", model.id, model.default_effort ? { effort: model.default_effort } : {})}><Zap className="ic" />{t("testModel")}</MenuAction>
+                              <MenuAction danger onClick={() => setDeleting({ kind: "models", id: model.id, name: model.name })}><Trash2 className="ic" />{t("delete")}</MenuAction>
+                            </ActionMenu>
+                          </td>
+                        </tr>
+                      );
+                    })}</tbody>
+                  </table></div>
+                ) : <Empty icon={<Search className="ic" />} title={t("noModels")} />}
               </div>
-              <div className="model-list-toolbar">
-                <div className="search-input">
-                  <Search size={16} />
-                  <input
-                    placeholder={t("searchModels")}
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </div>
-                <label className="filter-check">
-                  <input
-                    type="checkbox"
-                    checked={onlyEnabled}
-                    onChange={(event) => setOnlyEnabled(event.target.checked)}
-                  />
-                  {t("enabled")}</label>
-                <button
-                  className="secondary-button"
-                  disabled={
-                    busy === "sync" || provider.discover_models === false
-                  }
-                  onClick={() => void sync()}
-                >
-                  <RefreshCw
-                    className={busy === "sync" ? "spin" : ""}
-                    size={15}
-                  />
-                  {t("sync")}</button>
-                <button
-                  className="icon-button"
-                  aria-label={t("updateModelMetadata")}
-                  title={t("updateMetadata")}
-                  disabled={busy === "metadata"}
-                  onClick={() => void refreshMetadata()}
-                >
-                  <Database size={16} className={busy === "metadata" ? "spin" : ""} />
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={t("customModel")}
-                  title={t("customModel")}
-                  onClick={() => editModel()}
-                >
-                  <Plus size={18} />
-                </button>
-              </div>
-              <div className="provider-models">
-                {filtered.map((model) => (
-                  <article key={model.id}>
-                    <button
-                      className="model-row-main"
-                      aria-label={model.name || model.model}
-                      onClick={() => editModel(model)}
-                    >
-                      <span className="model-kind-icon">
-                        {(model as Model & { kind?: string }).kind ===
-                        "embedding" ? (
-                          <Database size={18} />
-                        ) : model.kind === "image" ? (
-                          <ImagePlus size={18} />
-                        ) : (
-                          <BrandIcon src={model.icon} size={20} />
-                        )}
-                      </span>
-                      <div>
-                        <span className="model-name-line">
-                          <strong>{model.name || model.model}</strong>
-                          {model.is_default && <span className="model-default">{t("default")}</span>}
-                        </span>
-                        {model.name && model.name !== model.model && (
-                          <small>{model.model}</small>
-                        )}
-                        {model.available === false && (
-                          <small className="danger">{t("remoteUnavailable")}</small>
-                        )}
-                        <span className="model-row-meta">
-                          {model.context_window > 0 && <span className="model-context">{t("contextCount", { count: Math.round(model.context_window / 1000) })}</span>}
-                          <span className="model-capability-icons">
-                            {model.supports_image_generation && <span title={t("imageGeneration")}><ImagePlus size={14} /></span>}
-                            {model.metadata_known?.supports_vision && model.supports_vision && <span title={t("imageUnderstanding")}><Image size={14} /></span>}
-                            {model.metadata_known?.supports_tools && model.supports_tools && <span title={t("toolCalling")}><Wrench size={14} /></span>}
-                            {model.reasoning_kind && !["none", "unknown"].includes(model.reasoning_kind) && <span title={model.efforts?.length ? model.efforts.join(", ") : t("reasoning")}><Brain size={14} /></span>}
-                          </span>
-                        </span>
-                      </div>
-                    </button>
-                    <InlineSwitch title={t("enableNamed", { name: model.name })} value={model.enabled}
-                      updating={busy === model.id} onChange={(enabled) => void publish(model, enabled)} />
-                    <ActionMenu
-                      trigger={<MoreHorizontal size={18} />}
-                      label={t("modelActions")}
-                    >
-                      <MenuAction onClick={() => editModel(model)}>
-                        <Settings2 size={15} />
-                        {t("editCapabilities")}</MenuAction>
-                      <MenuAction onClick={() => void openCatalog(model)}>
-                        <Database size={15} />
-                        {t("browseCatalog")}</MenuAction>
-                      <MenuAction onClick={() => {
-                        setBusy(model.id);
-                        void adminApi.autoMatchModel(model.id).then(() => refresh()).then(() => setNotice(t("autoMatched"))).catch((reason: Error) => setError(reason.message)).finally(() => setBusy(""));
-                      }}>
-                        <RefreshCw size={15} />
-                        {t("autoMatch")}</MenuAction>
-                      <MenuAction
-                        onClick={() =>
-                          void test(
-                            "models",
-                            model.id,
-                            model.default_effort
-                              ? { effort: model.default_effort }
-                              : {},
-                          )
-                        }
-                      >
-                        <Zap size={15} />
-                        {t("testModel")}</MenuAction>
-                      <MenuAction
-                        danger
-                        onClick={() =>
-                          setDeleting({
-                            kind: "models",
-                            id: model.id,
-                            name: model.name,
-                          })
-                        }
-                      >
-                        <Trash2 size={15} />
-                        {t("delete")}</MenuAction>
-                    </ActionMenu>
-                  </article>
-                ))}
-                {!filtered.length && <div className="empty-page">{t("noModels")}</div>}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
+            </Collapse>
+          </Card>
+        );
+      })}
       {providerEditor && (
         <Modal
           className="ochi-admin-modal"
@@ -708,17 +585,17 @@ export default function ProvidersPage() {
             <div className="modal-actions">
               <button
                 type="button"
-                className="secondary-button"
+                className="btn secondary"
                 onClick={() => setProviderEditor(null)}
               >
                 {t("cancel")}</button>
               <button
                 type="submit"
                 form="provider-editor"
-                className="primary-button"
+                className={`btn primary${busy === "save-provider" ? " btn-progress" : ""}`}
                 disabled={busy === "save-provider"}
               >
-                {t("save")}</button>
+                {busy === "save-provider" ? t("savingEllipsis") : t("save")}</button>
             </div>
           }
         >
@@ -768,7 +645,7 @@ export default function ProvidersPage() {
                 }
               />
             </Field>
-            <div className={providerEditor.id ? "form-grid" : ""}>
+            <div className={providerEditor.id ? "ad-grid2" : ""}>
               <Field title="API Key">
                 {providerEditor.id ? (
                   <SelectField
@@ -903,21 +780,21 @@ export default function ProvidersPage() {
             <div className="modal-actions">
               <button
                 type="button"
-                className="secondary-button"
+                className="btn secondary"
                 onClick={() => setModelEditor(null)}
               >
                 {t("cancel")}</button>
               <button
                 type="submit"
                 form="model-editor"
-                className="primary-button"
+                className={`btn primary${busy === "save-model" ? " btn-progress" : ""}`}
                 disabled={
                   busy === "save-model" ||
                   !modelEditor.name.trim() ||
                   !modelEditor.model.trim()
                 }
               >
-                {t("save")}</button>
+                {busy === "save-model" ? t("savingEllipsis") : t("save")}</button>
             </div>
           }
         >
@@ -959,16 +836,16 @@ export default function ProvidersPage() {
             <div className="toolbar-actions">
               <button
                 type="button"
-                className="text-button"
+                className={`btn ghost sm${matching ? " btn-progress" : ""}`}
                 disabled={matching || !modelEditor.model.trim()}
                 onClick={() => void autoMatchModel()}
               >
-                <RefreshCw size={14} className={matching ? "spin" : ""} />
-                {t("autoMatch")}</button>
+                <RefreshCw size={14} className={matching ? "ic-turn" : undefined} />
+                {matching ? t("matchingEllipsis") : t("autoMatch")}</button>
               {modelEditor.id && (
                 <button
                   type="button"
-                  className="text-button"
+                  className="btn ghost sm"
                   onClick={() => void openCatalog(modelEditor)}
                 >
                   <Database size={14} />
@@ -977,7 +854,7 @@ export default function ProvidersPage() {
             </div>
             {modelSection === "basic" ? (
               <section className="model-editor-section">
-                <div className="form-grid">
+                <div className="ad-grid2">
                   <Field title={t("displayName")}>
                     <input
                       required
@@ -1005,7 +882,7 @@ export default function ProvidersPage() {
                     />
                   </Field>
                 </div>
-                <div className="form-grid">
+                <div className="ad-grid2">
                   <Field title={t("type")}>
                     <SelectField
                       value={
@@ -1033,7 +910,7 @@ export default function ProvidersPage() {
                     }
                   />
                 </div>
-                {modelEditor.kind !== "image" && <div className="form-grid">
+                {modelEditor.kind !== "image" && <div className="ad-grid2">
                   <Field title={t("contextWindow")}>
                     <input
                       type="number"
@@ -1062,7 +939,7 @@ export default function ProvidersPage() {
                     />
                   </Field>}
                 </div>}
-                <div className="form-grid">
+                <div className="ad-grid2">
                   {modelEditor.kind !== "image" && modelEditor.kind !== "embedding" && <Toggle
                     title={modelEditor.metadata_known?.supports_tools ? t("toolCalling") : t("toolCallingUnknown")}
                     value={modelEditor.supports_tools}
@@ -1099,7 +976,7 @@ export default function ProvidersPage() {
               </section>
             ) : modelSection === "image" ? (
               <section className="model-editor-section">
-                <div className="form-grid">
+                <div className="ad-grid2">
                   <Field title={t("size")}>
                     <input
                       value={modelEditor.image_config?.size ?? ""}
@@ -1192,7 +1069,7 @@ export default function ProvidersPage() {
                 {["effort", "toggle", "budget"].includes(
                   modelEditor.reasoning_kind ?? "unknown",
                 ) && (
-                  <div className="form-grid">
+                  <div className="ad-grid2">
                     <Field title={t("reasoningParameter")}>
                       <input
                         value={modelEditor.effort_parameter ?? ""}
@@ -1239,7 +1116,7 @@ export default function ProvidersPage() {
                   </Field>
                 )}
                 {modelEditor.reasoning_kind === "budget" && (
-                  <div className="form-grid">
+                  <div className="ad-grid2">
                     {(["min", "max", "default"] as const).map((name) => (
                       <Field title={t(({ min: "budgetMinimum", max: "budgetMaximum", default: "budgetDefault" } as const)[name])} key={name}>
                         <input
@@ -1264,7 +1141,7 @@ export default function ProvidersPage() {
               <section className="model-editor-section">
                 <Field title={t("parameterMapping")}>
                   <textarea
-                    className="code-input"
+                    className="input mono"
                     rows={5}
                     value={mappingText}
                     onChange={(event) => setMappingText(event.target.value)}
@@ -1386,12 +1263,12 @@ export default function ProvidersPage() {
           footer={
             <div className="modal-actions">
               <button
-                className="secondary-button"
+                className="btn secondary"
                 onClick={() => setDeleting(null)}
               >
                 {t("cancel")}</button>
               <button
-                className="danger-button"
+                className={`btn danger${busy === "delete" ? " btn-progress" : ""}`}
                 disabled={busy === "delete"}
                 onClick={() => {
                   setBusy("delete");
@@ -1405,7 +1282,7 @@ export default function ProvidersPage() {
                     .finally(() => setBusy(""));
                 }}
               >
-                {t("delete")}</button>
+                {busy === "delete" ? t("deletingEllipsis") : t("delete")}</button>
             </div>
           }
         >
