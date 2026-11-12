@@ -95,6 +95,9 @@ and the authenticated computer viewer can use WebViews; the chat itself does not
 
 ## Web Shell
 
+- The chat header stays at the top of the canvas independently of the empty
+  conversation's centered content. Short viewports scroll that content without
+  moving the navigation controls out of reach.
 - The user's own message is a solid filled bubble in every look: the accent
   fill with light text in Quiet, the ink fill with inverted text in Mono.
   Copy/edit tools stay reachable while the pointer crosses from the bubble.

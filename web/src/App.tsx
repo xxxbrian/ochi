@@ -818,35 +818,35 @@ export default function App() {
         </Suspense>
       ) : (
         <main className="app-main">
+          <header className="topbar">
+            <MobileMenuButton onClick={() => setDrawerOpen(true)} />
+            {crumbProject && (
+              <>
+                <button className="top-crumb" onClick={() => navigate(`/projects/${crumbProject.id}`)}>
+                  <Folder className="ic" /><span>{crumbProject.name}</span>
+                </button>
+                <ChevronRight className="top-crumb-sep" />
+              </>
+            )}
+            {!empty && (selectedId ? (
+              <ActionMenu className="title-btn" align="start" label={t("chat.manage", { name: selected?.title || t("chat.newConversation") })}
+                trigger={<><h1><span>{selected?.title || t("chat.newConversation")}</span></h1><ChevronDown className="ic" /></>}>
+                <MenuAction onClick={() => { pins.toggle(selectedId); toast(selectedPinned ? t("sidebar.unpinned") : t("sidebar.pinnedToast")); }}>
+                  {selectedPinned ? <PinOff className="ic" /> : <Pin className="ic" />}{selectedPinned ? t("sidebar.unpin") : t("sidebar.pin")}
+                </MenuAction>
+                <MenuAction onClick={() => void exportSelected()}><Download className="ic" />{t("sidebar.export")}</MenuAction>
+              </ActionMenu>
+            ) : <h1 className="title-btn"><span>{t("chat.newConversation")}</span></h1>)}
+            <span className="grow" />
+            <span className="top-status" data-tone={snapshot?.status === "failed" ? "danger" : undefined} role="status" aria-live="polite">
+              {snapshot?.status === "completed" && <Check className="ic" />}
+              {statusText}
+            </span>
+            <button className="icon-btn mobile-new-chat" aria-label={t("chat.newConversation")} onClick={newConversation}>
+              <SquarePen className="ic" />
+            </button>
+          </header>
           <section className="view-chat" data-empty={empty}>
-            <header className="topbar">
-              <MobileMenuButton onClick={() => setDrawerOpen(true)} />
-              {crumbProject && (
-                <>
-                  <button className="top-crumb" onClick={() => navigate(`/projects/${crumbProject.id}`)}>
-                    <Folder className="ic" /><span>{crumbProject.name}</span>
-                  </button>
-                  <ChevronRight className="top-crumb-sep" />
-                </>
-              )}
-              {!empty && (selectedId ? (
-                <ActionMenu className="title-btn" align="start" label={t("chat.manage", { name: selected?.title || t("chat.newConversation") })}
-                  trigger={<><h1><span>{selected?.title || t("chat.newConversation")}</span></h1><ChevronDown className="ic" /></>}>
-                  <MenuAction onClick={() => { pins.toggle(selectedId); toast(selectedPinned ? t("sidebar.unpinned") : t("sidebar.pinnedToast")); }}>
-                    {selectedPinned ? <PinOff className="ic" /> : <Pin className="ic" />}{selectedPinned ? t("sidebar.unpin") : t("sidebar.pin")}
-                  </MenuAction>
-                  <MenuAction onClick={() => void exportSelected()}><Download className="ic" />{t("sidebar.export")}</MenuAction>
-                </ActionMenu>
-              ) : <h1 className="title-btn"><span>{t("chat.newConversation")}</span></h1>)}
-              <span className="grow" />
-              <span className="top-status" data-tone={snapshot?.status === "failed" ? "danger" : undefined} role="status" aria-live="polite">
-                {snapshot?.status === "completed" && <Check className="ic" />}
-                {statusText}
-              </span>
-              <button className="icon-btn mobile-new-chat" aria-label={t("chat.newConversation")} onClick={newConversation}>
-                <SquarePen className="ic" />
-              </button>
-            </header>
             {loading ? (
               <div className="chat-loading" role="status" aria-label={t("status.loading")}>
                 <div className="chat-skel" aria-hidden="true">

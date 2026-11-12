@@ -32,7 +32,7 @@
 .hero { flex: none; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 0 20px 28px; animation: fade var(--dur-4); }
 .view-chat[data-empty="true"] .hero { display: flex; }
 .view-chat[data-empty="true"] .messages-region { display: none; }
-.view-chat[data-empty="true"] { justify-content: center; }
+.view-chat[data-empty="true"] { justify-content: safe center; overflow-y: auto; }
 .hero-title { font: 600 clamp(26px, 3.4vw, 34px)/1.15 var(--font-ui); letter-spacing: -0.03em; text-align: center; }
 .hero-sub { margin-top: 8px; color: var(--muted); font-size: calc(var(--fs-ui) + 1px); text-align: center; }
 .suggests { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 24px; max-width: 640px; }
