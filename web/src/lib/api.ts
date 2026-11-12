@@ -239,10 +239,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ answer }),
     }),
-  upload: (file: File) => {
+  upload: (file: File, signal?: AbortSignal) => {
     const body = new FormData();
     body.append("file", file);
-    return request<Artifact>("/api/files", { method: "POST", body });
+    return request<Artifact>("/api/files", { method: "POST", body, signal });
   },
   files: (signal?: AbortSignal) => request<Artifact[]>("/api/files", { signal }),
   computerState: () => request<ComputerState>("/api/computer/state"),

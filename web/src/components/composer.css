@@ -11,6 +11,14 @@
     box-shadow: var(--sh-composer); padding: 12px 12px 8px 16px; transition: box-shadow var(--dur-3) var(--ease);
 }
 .composer:focus-within { box-shadow: var(--sh-composer-focus); }
+.composer[data-dragging] { outline: 2px solid var(--accent); outline-offset: 3px; }
+.composer-drop-target {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 10px; padding: 16px;
+    background: color-mix(in oklab, var(--raised) 94%, var(--accent)); color: var(--accent);
+    font-size: var(--fs-ui); font-weight: 500; text-align: center;
+}
+.composer-drop-target .ic { width: 22px; height: 22px; }
 .composer textarea {
     display: block; width: 100%; min-height: 26px; max-height: 220px; border: 0; background: none; resize: none; outline: 0;
     font: 400 calc(var(--fs-ui) + 1px)/1.55 var(--font-ui); padding: 2px 0;

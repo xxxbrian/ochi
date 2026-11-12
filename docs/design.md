@@ -46,6 +46,14 @@ payloads are rendered only on expansion. Editing uses the existing composer and
 restores the previous draft on cancel. Starting a new conversation clears that
 view without stopping another run.
 
+The Web composer accepts local file drops and pasted clipboard images through
+the same attachment upload path as the file picker. A drag highlights only the
+composer; text and link drags retain browser behavior. Repeated additions queue
+in order, a failed upload does not discard later files, and changing conversations
+cancels the old composer's uploads. Normal and mixed clipboard text retains its
+native insertion and selection. Attachments never submit a message by themselves.
+Folder drops are excluded; users select individual files.
+
 Thinking and tool calls follow a linear process timeline: a header (indicator
 plus one rolling label for thinking, the running tool and its subject, waiting,
 replying, or the settled summary) above a rail of rows. Interim replies are not

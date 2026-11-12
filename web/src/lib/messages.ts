@@ -197,6 +197,16 @@ export const messages = {
     "zh-CN": "添加文件",
     "zh-TW": "加入檔案"
   },
+  "composer.dropFiles": {
+    "en": "Drop files to attach",
+    "zh-CN": "松开以添加附件",
+    "zh-TW": "放開以加入附件"
+  },
+  "composer.foldersUnsupported": {
+    "en": "Please select individual files instead of folders.",
+    "zh-CN": "请选择单个文件，不支持添加文件夹。",
+    "zh-TW": "請選擇個別檔案，暫不支援加入資料夾。"
+  },
   "composer.chooseModel": {
     "en": "Choose model",
     "zh-CN": "选择模型",

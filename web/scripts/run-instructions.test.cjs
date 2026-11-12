@@ -246,7 +246,10 @@ function composerHarness(native, patch = {}) {
     async press() { const button = find('补充当前任务要求'); (native ? button.props.onPress : button.props.onClick)(); await settle(); },
     async attach() {
       if (native) walk(tree).find((node) => node.type === 'MenuTrigger').props.items.find((entry) => entry.key === 'files').onPress();
-      else walk(tree).find((node) => node.type === 'input' && node.props.type === 'file').props.onChange({ target: { files: [{ name: 'qa.txt' }] } });
+      else {
+        const picker = { files: [{ name: 'qa.txt' }], value: 'qa.txt' };
+        walk(tree).find((node) => node.type === 'input' && node.props.type === 'file').props.onChange({ target: picker, currentTarget: picker });
+      }
       await settle();
     },
     async submit() {
