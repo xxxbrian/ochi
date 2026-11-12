@@ -81,40 +81,40 @@ export default function SearchPage() {
       {busy === "save" ? t("savingEllipsis") : t("save")}</button>} />
     <ErrorNotice error={error} notice={notice} />
     {!settings ? (error ? null : <AdminSkeleton rows={3} />) : <>
-      <form id="search-settings" className="ad-stack-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <form id="search-settings" className="ochi-admin-stack-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <Card>
           <CardHead title={t("searchProvider")} desc={t("searchProviderHint")}
-            right={<label className="ad-inline-switch"><span>{t("enableWebSearch")}</span>
+            right={<label className="ochi-admin-inline-switch"><span>{t("enableWebSearch")}</span>
               <button type="button" className="toggle" role="switch" aria-checked={settings.enabled} aria-label={t("enableWebSearch")}
                 onClick={() => setSettings({ ...settings, enabled: !settings.enabled })}><i /></button></label>} />
-          <div className="ad-pick">
+          <div className="ochi-admin-pick">
             {(Object.keys(providers) as Provider[]).map((id) => (
-              <button type="button" key={id} className="ad-opt" aria-pressed={settings.provider === id} disabled={busy !== null}
+              <button type="button" key={id} className="ochi-admin-opt" aria-pressed={settings.provider === id} disabled={busy !== null}
                 onClick={() => {
                   const returning = id === saved?.provider;
                   setSettings({ ...settings, provider: id, base_url: returning ? saved.base_url : providers[id].baseURL });
                   setKey(""); setResult(null); setNotice("");
                 }}>
-                <span className="ad-glyph" style={{ "--h": hueOf(providers[id].title) } as CSSProperties}>{providers[id].title[0]}</span>
-                <span className="ad-opt-t">
+                <span className="ochi-admin-glyph" style={{ "--h": hueOf(providers[id].title) } as CSSProperties}>{providers[id].title[0]}</span>
+                <span className="ochi-admin-opt-t">
                   <b>{providers[id].title}{providers[id].tag ? <Pill tone="accent">{t("selfHosted")}</Pill> : null}</b>
                   <small>{t(providers[id].desc)}</small>
                 </span>
-                <i className="ad-radio" />
+                <i className="ochi-admin-radio" />
               </button>
             ))}
           </div>
         </Card>
         <Card>
-          <fieldset className="ad-fieldset" disabled={busy !== null}>
+          <fieldset className="ochi-admin-fieldset" disabled={busy !== null}>
             <Field title={t("serviceURL")}>
               <input className="input mono" type="url" required value={settings.base_url}
                 placeholder={settings.provider === "searxng" ? "https://search.example.com" : providers[settings.provider].baseURL}
                 onChange={(event) => setSettings({ ...settings, base_url: event.target.value })} />
             </Field>
-            <div className="ad-grid2">
+            <div className="ochi-admin-grid2">
               <Field title={settings.provider === "searxng" ? t("optionalAPIKey") : t("apiKey")} hint={removeKey && retainedKey === false && saved?.has_api_key ? t("clearKeyAfterSave") : t("searchKeyHint")}>
-                <div className="ad-input-row">
+                <div className="ochi-admin-input-row">
                   <input className="input mono" type={reveal ? "text" : "password"} value={key} autoComplete="new-password"
                     placeholder={retainedKey ? t("configuredKeepBlank") : t("enterKey")} onChange={(event) => setKey(event.target.value)} />
                   <button type="button" className="icon-btn" aria-label={reveal ? t("hideKey") : t("showKey")} onClick={() => setReveal(!reveal)}>
@@ -128,32 +128,32 @@ export default function SearchPage() {
               </Field>
             </div>
             <Field title={`${t("maxResults")}`} hint={t("maxResultsHint")}>
-              <div className="ad-range-row">
+              <div className="ochi-admin-range-row">
                 <input className="slider" type="range" min={1} max={20} value={settings.max_results}
                   style={{ "--p": `${((settings.max_results - 1) / 19) * 100}%` } as CSSProperties}
                   onChange={(event) => setSettings({ ...settings, max_results: Number(event.target.value) })} />
-                <b className="ad-range-v tnum">{settings.max_results}</b>
+                <b className="ochi-admin-range-v tnum">{settings.max_results}</b>
               </div>
             </Field>
-            {current && <a className="ad-doc-link" href={current.docs} target="_blank" rel="noreferrer">{current.title} {t("documentation")}<ExternalLink className="ic" /></a>}
+            {current && <a className="ochi-admin-doc-link" href={current.docs} target="_blank" rel="noreferrer">{current.title} {t("documentation")}<ExternalLink className="ic" /></a>}
           </fieldset>
         </Card>
       </form>
       <Card>
         <CardHead title={t("testSearch")} desc={current ? t("testSearchWith", { name: current.title }) : undefined} />
-        <form className="ad-input-row" onSubmit={(event) => { event.preventDefault(); void test(); }}>
+        <form className="ochi-admin-input-row" onSubmit={(event) => { event.preventDefault(); void test(); }}>
           <div className="search-field grow"><Search className="ic" />
             <input className="input" required aria-label={t("testSearchQuery")} maxLength={600} value={query} placeholder={t("enterSearchQuery")} disabled={busy !== null} onChange={(event) => setQuery(event.target.value)} /></div>
           <button className={`btn primary${busy === "test" ? " btn-progress" : ""}`} disabled={busy !== null || !query.trim()}>
-            <span className="ad-btn-in"><Search className="ic" />{busy === "test" ? t("testingEllipsis") : t("testSearch")}</span></button>
+            <span className="ochi-admin-btn-in"><Search className="ic" />{busy === "test" ? t("testingEllipsis") : t("testSearch")}</span></button>
         </form>
-        <div className="ad-results" role="status" aria-live="polite">
+        <div className="ochi-admin-results" role="status" aria-live="polite">
           {busy === "test" ? <SkeletonRows rows={3} />
             : result ? <>
-              <div className="ad-rhead muted"><span>{result.count ? t("searchResults", { count: result.count }) : t("noResults")}</span></div>
+              <div className="ochi-admin-rhead muted"><span>{result.count ? t("searchResults", { count: result.count }) : t("noResults")}</span></div>
               {result.results.filter((item) => resultHost(item.url)).map((item, index) => (
-                <a className="ad-res" key={item.url} href={item.url} target="_blank" rel="noreferrer" style={{ "--i": index } as CSSProperties}>
-                  <span className="ad-glyph sm" style={{ "--h": hueOf(resultHost(item.url)) } as CSSProperties}>{resultHost(item.url)[0]?.toUpperCase()}</span>
+                <a className="ochi-admin-res" key={item.url} href={item.url} target="_blank" rel="noreferrer" style={{ "--i": index } as CSSProperties}>
+                  <span className="ochi-admin-glyph sm" style={{ "--h": hueOf(resultHost(item.url)) } as CSSProperties}>{resultHost(item.url)[0]?.toUpperCase()}</span>
                   <div><b>{item.title}</b><small className="mono">{resultHost(item.url)}</small>{item.description ? <p>{item.description}</p> : null}</div>
                 </a>
               ))}

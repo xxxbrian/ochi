@@ -190,20 +190,20 @@ export function SkillsPage() {
           right={<button className="btn primary sm" onClick={() => void edit()}><Plus className="ic" />{t("installSkill")}</button>} />
         <ErrorNotice error={error} notice={notice} />
         {loading ? (
-          <div className="ad-plist"><SkeletonRows rows={2} /></div>
+          <div className="ochi-admin-plist"><SkeletonRows rows={2} /></div>
         ) : items.length ? (
-          <div className="ad-plist">
+          <div className="ochi-admin-plist">
             {items.map((skill) => {
               const kind = skill.source === "inline" ? "SKILL.md" : skill.source?.startsWith("http") || skill.source?.startsWith("git") ? "Git" : t("archive");
               return (
-                <div className="ad-prow" key={skill.id}>
-                  <div className="ad-prow-h">
-                    <span className="ad-tile"><WandSparkles className="ic" /></span>
-                    <button type="button" className="ad-prow-t ad-rowbtn" onClick={() => void edit(skill)}>
+                <div className="ochi-admin-prow" key={skill.id}>
+                  <div className="ochi-admin-prow-h">
+                    <span className="ochi-admin-tile"><WandSparkles className="ic" /></span>
+                    <button type="button" className="ochi-admin-prow-t ochi-admin-rowbtn" onClick={() => void edit(skill)}>
                       <b>{skill.name}</b><small>{skill.description}</small>
                     </button>
-                    <span className="ad-pcol"><Pill tone="accent">{[skill.version ? `v${skill.version}` : "", kind].filter(Boolean).join(" · ")}</Pill></span>
-                    <span className="ad-pcol"><StatusDot tone={skill.enabled ? "success" : ""}>{skill.enabled ? t("ready") : t("disabled")}</StatusDot></span>
+                    <span className="ochi-admin-pcol"><Pill tone="accent">{[skill.version ? `v${skill.version}` : "", kind].filter(Boolean).join(" · ")}</Pill></span>
+                    <span className="ochi-admin-pcol"><StatusDot tone={skill.enabled ? "success" : ""}>{skill.enabled ? t("ready") : t("disabled")}</StatusDot></span>
                     <Switch on={skill.enabled} label={t("enableNamed", { name: skill.name })} busy={busy === skill.id}
                       onChange={(enabled) => {
                         setBusy(skill.id);
@@ -302,7 +302,7 @@ export function SkillsPage() {
                     }
                   />
                 </Field>
-                <div className="ad-grid2">
+                <div className="ochi-admin-grid2">
                   <Field title={t("branchOrVersion")}>
                     <input
                       value={editor.ref ?? ""}
@@ -612,23 +612,23 @@ export function MCPPage() {
           </>} />
         <ErrorNotice error={error} notice={notice} />
         {loading ? (
-          <div className="ad-plist"><SkeletonRows rows={2} /></div>
+          <div className="ochi-admin-plist"><SkeletonRows rows={2} /></div>
         ) : items.length ? (
-          <div className="ad-plist">
+          <div className="ochi-admin-plist">
             {items.map((server) => {
               const tools = (server.tools ?? []) as { name?: string; description?: string; inputSchema?: unknown }[];
               const expanded = Boolean(openRows[server.id]);
               const tone = server.error ? "danger" : server.status === "connected" ? "success" : "";
               return (
-                <div className="ad-prow" key={server.id} data-open={expanded}>
-                  <div className="ad-prow-h">
-                    <span className="ad-tile"><Plug className="ic" /></span>
-                    <button type="button" className="ad-prow-t ad-rowbtn" onClick={() => edit(server)}>
+                <div className="ochi-admin-prow" key={server.id} data-open={expanded}>
+                  <div className="ochi-admin-prow-h">
+                    <span className="ochi-admin-tile"><Plug className="ic" /></span>
+                    <button type="button" className="ochi-admin-prow-t ochi-admin-rowbtn" onClick={() => edit(server)}>
                       <b>{server.name}</b>
                       <small className="mono">{server.transport === "http" ? server.url : [server.command, ...(server.args ?? [])].join(" ")}</small>
                     </button>
-                    <span className="ad-pcol"><Pill>{server.transport === "http" ? "http" : "stdio"}</Pill></span>
-                    <span className="ad-pcol"><StatusDot tone={tone}>{server.error ? t("connectionFailed") : server.status === "connected" ? t("connected") : t("disabled")}</StatusDot></span>
+                    <span className="ochi-admin-pcol"><Pill>{server.transport === "http" ? "http" : "stdio"}</Pill></span>
+                    <span className="ochi-admin-pcol"><StatusDot tone={tone}>{server.error ? t("connectionFailed") : server.status === "connected" ? t("connected") : t("disabled")}</StatusDot></span>
                     <Disclosure open={expanded} onClick={() => setOpenRows((current) => ({ ...current, [server.id]: !expanded }))}>{t("toolsCount", { count: tools.length })}</Disclosure>
                     <Switch on={server.enabled} label={t("enableNamed", { name: server.name })} busy={busy === server.id}
                       onChange={(enabled) => {
@@ -645,12 +645,12 @@ export function MCPPage() {
                     </ActionMenu>
                   </div>
                   <Collapse open={expanded}>
-                    <div className="ad-tools">
-                      {server.error ? <div className="ad-alert"><CircleAlert className="ic" /><div>{server.error}</div></div> : null}
+                    <div className="ochi-admin-tools">
+                      {server.error ? <div className="ochi-admin-alert"><CircleAlert className="ic" /><div>{server.error}</div></div> : null}
                       {tools.length ? tools.map((tool, index) => (
                         <div key={index}>
-                          <div className="ad-tool"><code className="mono">{tool.name}</code><span>{tool.description}</span></div>
-                          {tool.inputSchema ? <details className="ad-schema"><summary>{t("arguments")}</summary><pre className="ad-code">{JSON.stringify(tool.inputSchema, null, 2)}</pre></details> : null}
+                          <div className="ochi-admin-tool"><code className="mono">{tool.name}</code><span>{tool.description}</span></div>
+                          {tool.inputSchema ? <details className="ochi-admin-schema"><summary>{t("arguments")}</summary><pre className="ochi-admin-code">{JSON.stringify(tool.inputSchema, null, 2)}</pre></details> : null}
                         </div>
                       )) : server.error ? null : <Empty icon={<Wrench className="ic" />} title={t("noTools")} />}
                     </div>
@@ -693,7 +693,7 @@ export function MCPPage() {
               void save();
             }}
           >
-            <div className="ad-grid2">
+            <div className="ochi-admin-grid2">
               <Field title={t("name")}>
                 <input
                   required

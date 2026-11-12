@@ -13,28 +13,28 @@ export type Tone = "success" | "warn" | "danger" | "accent" | "neutral" | "";
 export const hueOf = (text: string) => [...text].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) % 360, 11);
 
 export function Card({ children, className = "", flush, ...rest }: { children: ReactNode; className?: string; flush?: boolean } & Record<string, unknown>) {
-  return <section className={`ad-card${flush ? " ad-flush" : ""}${className ? ` ${className}` : ""}`} {...rest}>{children}</section>;
+  return <section className={`ochi-admin-card${flush ? " ochi-admin-flush" : ""}${className ? ` ${className}` : ""}`} {...rest}>{children}</section>;
 }
 
 export function CardHead({ title, desc, right }: { title: ReactNode; desc?: ReactNode; right?: ReactNode }) {
   return (
-    <header className="ad-ch">
+    <header className="ochi-admin-ch">
       <div><h3>{title}</h3>{desc ? <p>{desc}</p> : null}</div>
-      {right ? <div className="ad-ch-r">{right}</div> : null}
+      {right ? <div className="ochi-admin-ch-r">{right}</div> : null}
     </header>
   );
 }
 
 export function Stat({ label, value, sub, tone }: { label: ReactNode; value: ReactNode; sub?: ReactNode; tone?: "success" | "warn" }) {
   return (
-    <div className="ad-stat" data-tone={tone ?? ""}>
+    <div className="ochi-admin-stat" data-tone={tone ?? ""}>
       <span>{label}</span><b className="tnum">{value}</b>{sub ? <small>{sub}</small> : null}
     </div>
   );
 }
 
 export function Empty({ icon, title, desc, action }: { icon: ReactNode; title: ReactNode; desc?: ReactNode; action?: ReactNode }) {
-  return <div className="ad-empty">{icon}<b>{title}</b>{desc ? <p>{desc}</p> : null}{action}</div>;
+  return <div className="ochi-admin-empty">{icon}<b>{title}</b>{desc ? <p>{desc}</p> : null}{action}</div>;
 }
 
 export function Pill({ tone = "neutral", children }: { tone?: Tone; children: ReactNode }) {
@@ -42,7 +42,7 @@ export function Pill({ tone = "neutral", children }: { tone?: Tone; children: Re
 }
 
 export function StatusDot({ tone = "", children }: { tone?: Tone; children: ReactNode }) {
-  return <span className="ad-status"><i className="dot" data-tone={tone} />{children}</span>;
+  return <span className="ochi-admin-status"><i className="dot" data-tone={tone} />{children}</span>;
 }
 
 /** Lab switch: a real button with role=switch so it works with and without a form. */
@@ -54,21 +54,21 @@ export function Switch({ on, onChange, label, disabled, busy }: { on: boolean; o
 }
 
 export function Meter({ pct, tone = "" }: { pct: number; tone?: "warn" | "danger" | "" }) {
-  return <div className="ad-meter" data-tone={tone}><i style={{ "--w": `${Math.max(0, Math.min(100, pct))}%` } as CSSProperties} /></div>;
+  return <div className="ochi-admin-meter" data-tone={tone}><i style={{ "--w": `${Math.max(0, Math.min(100, pct))}%` } as CSSProperties} /></div>;
 }
 
 export function Avatar({ name, size = "" }: { name: string; size?: "xs" | "" }) {
   const letter = [...(name.trim() || "?")][0]?.toUpperCase() ?? "?";
-  return <span className={`ad-av ${size}`} style={{ "--h": hueOf(name) } as CSSProperties} aria-hidden="true">{letter}</span>;
+  return <span className={`ochi-admin-av ${size}`} style={{ "--h": hueOf(name) } as CSSProperties} aria-hidden="true">{letter}</span>;
 }
 
 export function Who({ name, sub, mono }: { name: string; sub?: ReactNode; mono?: boolean }) {
-  return <div className="ad-who"><Avatar name={name} /><div><b>{name}</b>{sub ? <small className={mono ? "mono" : ""}>{sub}</small> : null}</div></div>;
+  return <div className="ochi-admin-who"><Avatar name={name} /><div><b>{name}</b>{sub ? <small className={mono ? "mono" : ""}>{sub}</small> : null}</div></div>;
 }
 
 export function Checkbox({ checked, onChange, label }: { checked: boolean; onChange: (next: boolean) => void; label: string }) {
   return (
-    <button type="button" className="ad-cb" role="checkbox" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}>
+    <button type="button" className="ochi-admin-cb" role="checkbox" aria-checked={checked} aria-label={label} onClick={() => onChange(!checked)}>
       <Check className="ic" />
     </button>
   );
@@ -80,7 +80,7 @@ export function Collapse({ open, children, className = "" }: { open: boolean; ch
 }
 
 export function Disclosure({ open, onClick, children }: { open: boolean; onClick: () => void; children: ReactNode }) {
-  return <button type="button" className="ad-disc" aria-expanded={open} onClick={onClick}>{children}<ChevronRight className="ic chev" /></button>;
+  return <button type="button" className="ochi-admin-disc" aria-expanded={open} onClick={onClick}>{children}<ChevronRight className="ic chev" /></button>;
 }
 
 export function Seg<T extends string>({ value, options, onChange, small, label }: { value: T; options: { v: T; l: ReactNode }[]; onChange: (next: T) => void; small?: boolean; label?: string }) {
@@ -119,7 +119,7 @@ export function SkeletonRows({ rows = 4 }: { rows?: number }) {
     <div role="status" aria-busy="true">
       <span className="sr-only">{t("loading")}</span>
       {Array.from({ length: rows }, (_, index) => (
-        <div className="ad-skel-row" key={index} style={{ "--i": index } as CSSProperties} aria-hidden="true">
+        <div className="ochi-admin-skel-row" key={index} style={{ "--i": index } as CSSProperties} aria-hidden="true">
           <i className="skel circle" style={{ width: 22, height: 22 }} />
           <div>
             <i className="skel" style={{ width: `${46 - index * 3}%` }} />
@@ -140,13 +140,13 @@ export function Drawer({ title, sub, children, footer, onClose, wide, className 
   return (
     <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="ad-scrim" />
-        <Dialog.Popup className={`ad-drawer${wide ? " ad-wide" : ""}${className ? ` ${className}` : ""}`}>
-          <header className="ad-dh">
+        <Dialog.Backdrop className="ochi-admin-scrim" />
+        <Dialog.Popup className={`ochi-admin-drawer${wide ? " ochi-admin-wide" : ""}${className ? ` ${className}` : ""}`}>
+          <header className="ochi-admin-dh">
             <div><Dialog.Title render={<h2 />}>{title}</Dialog.Title>{sub ? <p>{sub}</p> : null}</div>
             <Dialog.Close className="icon-btn" aria-label={t("close")}><X className="ic" /></Dialog.Close>
           </header>
-          <div className="ad-db">{children}</div>
+          <div className="ochi-admin-db">{children}</div>
           {footer}
         </Dialog.Popup>
       </Dialog.Portal>
@@ -170,14 +170,14 @@ export function ChipInput({ values, onChange, placeholder, label, mono = true }:
     setDraft("");
   };
   return (
-    <div className="ad-chips" aria-label={label}>
+    <div className="ochi-admin-chips" aria-label={label}>
       {values.map((value) => (
-        <span className="ad-chip" key={value} style={mono ? undefined : { fontFamily: "var(--font-ui)" }}>
+        <span className="ochi-admin-chip" key={value} style={mono ? undefined : { fontFamily: "var(--font-ui)" }}>
           {value}
           <button type="button" aria-label={t("remove")} onClick={() => onChange(values.filter((item) => item !== value))}><X className="ic" /></button>
         </span>
       ))}
-      <input className="ad-chip-in" value={draft} placeholder={placeholder} aria-label={label}
+      <input className="ochi-admin-chip-in" value={draft} placeholder={placeholder} aria-label={label}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter") { event.preventDefault(); add(); }

@@ -3,11 +3,11 @@ import { CircleAlert, CircleCheck, Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { SkeletonRows, Switch } from "./ui";
 
-/** Lab `.ad-field`: label above, control, optional hint. Wrapping in <label> keeps click-to-focus. */
+/** Lab `.ochi-admin-field`: label above, control, optional hint. Wrapping in <label> keeps click-to-focus. */
 export function Field({ title, children, hint }: { title: string; children: ReactNode; hint?: ReactNode }) {
   useAdminI18n();
   return (
-    <label className="ad-field">
+    <label className="ochi-admin-field">
       <span className="field-label">{title}</span>
       {children}
       {hint ? <p className="field-hint">{hint}</p> : null}
@@ -15,13 +15,13 @@ export function Field({ title, children, hint }: { title: string; children: Reac
   );
 }
 
-/** Settings row: title and detail on the left, switch on the right (lab `.ad-setrow`). */
+/** Settings row: title and detail on the left, switch on the right (lab `.ochi-admin-setrow`). */
 export function Toggle({ title, value, onChange, disabled, detail }: {
   title: string; value: boolean; onChange: (value: boolean) => void; disabled?: boolean; detail?: ReactNode;
 }) {
   useAdminI18n();
   return (
-    <div className="ad-setrow">
+    <div className="ochi-admin-setrow">
       <div><b>{title}</b>{detail ? <small>{detail}</small> : null}</div>
       <Switch on={value} label={title} onChange={onChange} disabled={disabled} />
     </div>
@@ -67,9 +67,9 @@ export function KeyValueEditor({
 }) {
   useAdminI18n();
   return (
-    <div className="ad-kve">
+    <div className="ochi-admin-kve">
       {rows.map((row, index) => (
-        <div className="ad-kve-row" key={index}>
+        <div className="ochi-admin-kve-row" key={index}>
           <input
             className="input mono"
             aria-label={labels[0]}
@@ -126,15 +126,15 @@ export function ErrorNotice({ error, notice }: { error?: string; notice?: string
   useAdminI18n();
   return (
     <>
-      {error && <div className="ad-alert" role="alert"><CircleAlert className="ic" /><div>{error}</div></div>}
-      {notice && <div className="ad-alert ad-ok" role="status"><CircleCheck className="ic" /><div>{notice}</div></div>}
+      {error && <div className="ochi-admin-alert" role="alert"><CircleAlert className="ic" /><div>{error}</div></div>}
+      {notice && <div className="ochi-admin-alert ochi-admin-ok" role="status"><CircleCheck className="ic" /><div>{notice}</div></div>}
     </>
   );
 }
 
 /** Placeholder rows shown while an admin page loads; announced once to assistive tech. */
 export function AdminSkeleton({ rows = 3 }: { label?: string; rows?: number }) {
-  return <section className="ad-card ad-flush"><SkeletonRows rows={rows} /></section>;
+  return <section className="ochi-admin-card ochi-admin-flush"><SkeletonRows rows={rows} /></section>;
 }
 
 /** Destructive actions stay disabled until the operator types the target's name. */

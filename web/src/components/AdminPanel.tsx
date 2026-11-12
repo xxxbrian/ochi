@@ -68,25 +68,25 @@ export default function AdminPanel({ section, onNavigate, onBack, currentUserID 
     place(placed.current);
     placed.current = true;
     const observer = new ResizeObserver(() => place(false));
-    element.querySelectorAll(".ad-nitem").forEach((item) => observer.observe(item));
+    element.querySelectorAll(".ochi-admin-nitem").forEach((item) => observer.observe(item));
     return () => observer.disconnect();
   }, [active, list.length]);
 
   let lastGroup = "";
   return (
-    <div className="ad-root" data-sec={current.id}>
-      <aside className="ad-nav">
-        <div className="ad-brand"><img className="ad-mark" src="/favicon-48.png" alt="" /><div><b>Ochi</b><small>{t("adminConsole")}</small></div></div>
-        <button type="button" className="ad-back" onClick={onBack}><ArrowLeft className="ic" />{t("backToChat")}</button>
-        <nav className="ad-nlist" ref={nav} aria-label={t("adminNavigation")}>
-          <i className="ad-nind" ref={indicator} aria-hidden="true" style={{ opacity: 0 }} />
+    <div className="ochi-admin-root" data-sec={current.id}>
+      <aside className="ochi-admin-nav">
+        <div className="ochi-admin-brand"><img className="ochi-admin-mark" src="/favicon-48.png" alt="" /><div><b>Ochi</b><small>{t("adminConsole")}</small></div></div>
+        <button type="button" className="ochi-admin-back" onClick={onBack}><ArrowLeft className="ic" />{t("backToChat")}</button>
+        <nav className="ochi-admin-nlist" ref={nav} aria-label={t("adminNavigation")}>
+          <i className="ochi-admin-nind" ref={indicator} aria-hidden="true" style={{ opacity: 0 }} />
           {list.map((item) => {
-            const header = item.group !== lastGroup ? <div className="ad-ngroup" aria-hidden="true">{item.group}</div> : null;
+            const header = item.group !== lastGroup ? <div className="ochi-admin-ngroup" aria-hidden="true">{item.group}</div> : null;
             lastGroup = item.group;
             return (
               <Fragment key={item.id}>
                 {header}
-                <button type="button" className="ad-nitem" aria-current={item.id === current.id ? "page" : undefined}
+                <button type="button" className="ochi-admin-nitem" aria-current={item.id === current.id ? "page" : undefined}
                   onClick={() => onNavigate(`/admin/${item.id}`)}>
                   <item.icon className="ic" /><span>{item.title}</span>
                 </button>
@@ -95,16 +95,16 @@ export default function AdminPanel({ section, onNavigate, onBack, currentUserID 
           })}
         </nav>
         {build && (
-          <footer className="ad-nfoot">
+          <footer className="ochi-admin-nfoot">
             <span className="mono" title={t("adminVersion")}>v{build.version.replace(/^v/, "")}</span>
             {build.available && <Pill tone="accent">{t("adminUpdateAvailable")}</Pill>}
           </footer>
         )}
       </aside>
-      <main className="ad-main">
-        <div className="ad-topbar">
+      <main className="ochi-admin-main">
+        <div className="ochi-admin-topbar">
           <button type="button" className="icon-btn" aria-label={t("backToChat")} onClick={onBack}><ArrowLeft className="ic" /></button>
-          <ActionMenu label={t("adminSwitchSection")} className="ad-picker" align="start" side="bottom"
+          <ActionMenu label={t("adminSwitchSection")} className="ochi-admin-picker" align="start" side="bottom"
             trigger={<><current.icon className="ic" /><b>{current.title}</b><ChevronsUpDown className="ic" /></>}>
             {list.map((item) => (
               <MenuAction key={item.id} onClick={() => onNavigate(`/admin/${item.id}`)}>
@@ -113,12 +113,12 @@ export default function AdminPanel({ section, onNavigate, onBack, currentUserID 
             ))}
           </ActionMenu>
         </div>
-        <header className="ad-head">
-          <div className="ad-head-t"><h1>{current.title}</h1><p>{current.desc}</p></div>
-          <div className="ad-head-a" ref={(element) => { if (element !== slots.actions) setSlots((previous) => ({ ...previous, actions: element })); }} />
-          <div className="ad-toolbar" ref={(element) => { if (element !== slots.toolbar) setSlots((previous) => ({ ...previous, toolbar: element })); }} />
+        <header className="ochi-admin-head">
+          <div className="ochi-admin-head-t"><h1>{current.title}</h1><p>{current.desc}</p></div>
+          <div className="ochi-admin-head-a" ref={(element) => { if (element !== slots.actions) setSlots((previous) => ({ ...previous, actions: element })); }} />
+          <div className="ochi-admin-toolbar" ref={(element) => { if (element !== slots.toolbar) setSlots((previous) => ({ ...previous, toolbar: element })); }} />
         </header>
-        <div className="ad-body ad-stagger" key={current.id}>
+        <div className="ochi-admin-body ochi-admin-stagger" key={current.id}>
           <AdminSlotContext.Provider value={slots}>
             <Suspense fallback={<SkeletonRows rows={5} />}>
               {section === "search" ? <SearchPage />

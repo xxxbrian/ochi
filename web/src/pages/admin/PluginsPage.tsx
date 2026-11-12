@@ -154,22 +154,22 @@ function PluginCatalog() {
           <button className="icon-btn sm" aria-label={t("refreshPlugins")} title={t("refreshPlugins")} disabled={unavailable} onClick={() => setRevision((value) => value + 1)}><RefreshCw className={`ic${loading ? " ic-turn" : ""}`} /></button>
           <button className="btn primary sm" disabled={unavailable || !loaded} onClick={() => edit()}><Plus className="ic" />{t("addPlugin")}</button>
         </>} />
-      {error && <div className="ad-alert" role="alert"><CircleAlert className="ic" /><div>{error}</div><button className="btn sm secondary" disabled={unavailable} onClick={() => setRevision((value) => value + 1)}>{t("retry")}</button></div>}
-      {loading && !loaded ? <div className="ad-plist"><SkeletonRows rows={2} /></div> : loaded ? (items.length ? <div className="ad-plist" aria-busy={loading}>
+      {error && <div className="ochi-admin-alert" role="alert"><CircleAlert className="ic" /><div>{error}</div><button className="btn sm secondary" disabled={unavailable} onClick={() => setRevision((value) => value + 1)}>{t("retry")}</button></div>}
+      {loading && !loaded ? <div className="ochi-admin-plist"><SkeletonRows rows={2} /></div> : loaded ? (items.length ? <div className="ochi-admin-plist" aria-busy={loading}>
         {items.map((plugin) => (
-          <div className="ad-prow" key={plugin.id}>
-            <div className="ad-prow-h">
-              <span className="ad-tile"><Puzzle className="ic" /></span>
-              <button type="button" className="ad-prow-t ad-rowbtn" disabled={unavailable} onClick={() => edit(plugin)}>
+          <div className="ochi-admin-prow" key={plugin.id}>
+            <div className="ochi-admin-prow-h">
+              <span className="ochi-admin-tile"><Puzzle className="ic" /></span>
+              <button type="button" className="ochi-admin-prow-t ochi-admin-rowbtn" disabled={unavailable} onClick={() => edit(plugin)}>
                 <b>{plugin.name}</b><small>{plugin.description || plugin.id}</small>
               </button>
-              <span className="ad-pcol ad-counts" aria-label={t("pluginComponentsCount", { skills: plugin.skill_ids?.length ?? 0, mcp: plugin.mcp_ids?.length ?? 0 })}>
+              <span className="ochi-admin-pcol ochi-admin-counts" aria-label={t("pluginComponentsCount", { skills: plugin.skill_ids?.length ?? 0, mcp: plugin.mcp_ids?.length ?? 0 })}>
                 {Boolean(plugin.skill_ids?.length) && <Pill><FileCode2 className="ic" />{plugin.skill_ids.length}</Pill>}
                 {Boolean(plugin.mcp_ids?.length) && <Pill><Plug className="ic" />{plugin.mcp_ids.length}</Pill>}
               </span>
-              <label className="ad-mini" title={t("mandatoryPluginHint")}><span>{t("enabledByDefault")}</span>
+              <label className="ochi-admin-mini" title={t("mandatoryPluginHint")}><span>{t("enabledByDefault")}</span>
                 <Switch on={plugin.default_enabled} label={t("mandatoryNamed", { name: plugin.name })} disabled={unavailable} busy={busy === plugin.id} onChange={(next) => void update(plugin, { default_enabled: next })} /></label>
-              <label className="ad-mini"><span>{t("available")}</span>
+              <label className="ochi-admin-mini"><span>{t("available")}</span>
                 <Switch on={plugin.enabled} label={t("publishNamed", { name: plugin.name })} disabled={unavailable} busy={busy === plugin.id} onChange={(next) => void update(plugin, { enabled: next })} /></label>
               <ActionMenu trigger={<MoreHorizontal className="ic" />} label={t("editNamed", { name: plugin.name })} className="icon-btn sm">
                 <MenuAction onClick={() => edit(plugin)}><Pencil className="ic" />{t("editPlugin")}</MenuAction>
@@ -186,28 +186,28 @@ function PluginCatalog() {
       <button className={`btn primary${busy === "save" ? " btn-progress" : ""}`} type="submit" form="plugin-editor" disabled={Boolean(busy) || !editor.name.trim() || !editor.id.trim()}>{busy === "save" ? t("savingEllipsis") : t("save")}</button>
     </>}>
       <form id="plugin-editor" className="admin-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-        <fieldset className="ad-fieldset" disabled={Boolean(busy)}>
-          <div className="ad-grid2">
+        <fieldset className="ochi-admin-fieldset" disabled={Boolean(busy)}>
+          <div className="ochi-admin-grid2">
             <Field title={t("name")}><input className="input" autoFocus required maxLength={100} value={editor.name} onChange={(event) => setEditor({ ...editor, name: event.target.value })} /></Field>
             <Field title={t("identifier")}><input className="input mono" required pattern={"[a-z0-9][a-z0-9_\\-]{0,63}"} title={t("identifierHint")} maxLength={64} autoCapitalize="none" spellCheck={false} readOnly={existing} value={editor.id} placeholder="research" onChange={(event) => setEditor({ ...editor, id: event.target.value })} /></Field>
           </div>
           <Field title={t("description")}><textarea className="textarea" rows={2} maxLength={4000} value={editor.description} onChange={(event) => setEditor({ ...editor, description: event.target.value })} /></Field>
-          <div className="ad-policy">
+          <div className="ochi-admin-policy">
             <Toggle title={t("publishToUsers")} value={editor.enabled} onChange={(enabled) => setEditor({ ...editor, enabled })} />
             <Toggle title={t("mandatoryPlugin")} value={editor.default_enabled} onChange={(default_enabled) => setEditor({ ...editor, default_enabled })} />
           </div>
-          <div className="ad-cols2">
+          <div className="ochi-admin-cols2">
             <ComponentPicker title={t("skillComponents")} items={components.skills} selected={editor.skill_ids} owners={owners.skills} pluginId={existing ? editor.id : undefined} onChange={(skill_ids) => setEditor({ ...editor, skill_ids })} />
             <ComponentPicker title={t("mcpComponents")} items={components.mcp} selected={editor.mcp_ids} owners={owners.mcp} pluginId={existing ? editor.id : undefined} onChange={(mcp_ids) => setEditor({ ...editor, mcp_ids })} />
           </div>
         </fieldset>
-        {editorError && <p className="ad-alert" role="alert">{editorError}</p>}
+        {editorError && <p className="ochi-admin-alert" role="alert">{editorError}</p>}
       </form>
     </Modal>}
     {deleting && <Modal title={t("deletePluginQuestion")} size="small" dismissible={!busy} onClose={() => setDeleting(null)} footer={<>
       <button className="btn secondary" disabled={Boolean(busy)} onClick={() => setDeleting(null)}>{t("cancel")}</button>
       <button className={`btn danger${busy === "delete" ? " btn-progress" : ""}`} disabled={Boolean(busy)} onClick={() => void remove()}>{busy === "delete" ? t("deletingEllipsis") : t("delete")}</button>
-    </>}><p>{t("pluginDeleteDescription", { name: deleting.name })}</p>{deleteError && <p className="ad-alert" role="alert">{deleteError}</p>}</Modal>}
+    </>}><p>{t("pluginDeleteDescription", { name: deleting.name })}</p>{deleteError && <p className="ochi-admin-alert" role="alert">{deleteError}</p>}</Modal>}
   </>;
 }
 
@@ -217,9 +217,9 @@ function ComponentPicker({ title, items, selected, owners, pluginId, onChange }:
   useAdminI18n();
   const known = new Set(items.map((item) => item.id));
   const missing = selected.filter((id) => !known.has(id));
-  return <fieldset className="ad-cgroup">
+  return <fieldset className="ochi-admin-cgroup">
     <legend>{title}<span>{selected.length}</span></legend>
-    <div className="ad-cgroup-list">
+    <div className="ochi-admin-cgroup-list">
       {items.map((component) => {
         const owner = owners.get(component.id);
         const assigned = owner && owner.id !== pluginId;

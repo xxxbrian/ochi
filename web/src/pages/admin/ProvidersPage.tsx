@@ -490,10 +490,10 @@ export default function ProvidersPage() {
         const result = results[item.id];
         const ready = item.has_api_key || item.allow_no_key;
         return (
-          <Card key={item.id} className="ad-prov" data-off={!item.enabled}>
-            <div className="ad-prov-top">
-              <span className="ad-logo"><BrandIcon src={item.icon} size={20} /></span>
-              <div className="ad-prov-name"><h3>{item.name}</h3><span>{item.protocol === "openai-responses" ? "Responses" : item.protocol === "anthropic" ? "Anthropic Messages" : "Chat Completions"}</span></div>
+          <Card key={item.id} className="ochi-admin-prov" data-off={!item.enabled}>
+            <div className="ochi-admin-prov-top">
+              <span className="ochi-admin-logo"><BrandIcon src={item.icon} size={20} /></span>
+              <div className="ochi-admin-prov-name"><h3>{item.name}</h3><span>{item.protocol === "openai-responses" ? "Responses" : item.protocol === "anthropic" ? "Anthropic Messages" : "Chat Completions"}</span></div>
               <StatusDot tone={!item.enabled ? "" : ready ? "success" : "warn"}>{!item.enabled ? t("disabled") : ready ? t("enabled") : t("noKey")}</StatusDot>
               <span className="grow" />
               <button type="button" className="icon-btn" aria-label={`${t("editProvider")}: ${item.name}`} title={t("editProvider")} onClick={() => editProvider(item)}><Settings2 className="ic" /></button>
@@ -503,24 +503,24 @@ export default function ProvidersPage() {
               </ActionMenu>
               <Switch on={item.enabled} label={`${t("enableNamed", { name: item.name })}`} busy={busy === `enable:${item.id}`} onChange={(next) => void setProviderEnabled(item, next)} />
             </div>
-            <dl className="ad-kv">
+            <dl className="ochi-admin-kv">
               <div><dt>{t("serviceURL")}</dt><dd><code className="mono">{item.base_url}</code><CopyButton text={item.base_url} /></dd></div>
               <div><dt>{t("apiKey")}</dt><dd><code className="mono">{item.has_api_key ? "••••••••••••" : "—"}</code><span className="muted">{item.has_api_key ? t("keyConfigured") : t("noKey")}</span></dd></div>
               <div><dt>{t("models")}</dt><dd className="muted tnum">{t("enabledModelCount", { count: enabledCount })}</dd></div>
             </dl>
-            <div className="ad-prov-foot">
+            <div className="ochi-admin-prov-foot">
               <button type="button" className={`btn secondary sm${busy === item.id ? " btn-progress" : ""}`} disabled={busy === item.id} onClick={() => void test("providers", item.id)}>
-                <span className="ad-btn-in"><Zap className="ic" />{busy === item.id ? t("testingEllipsis") : t("testConnection")}</span>
+                <span className="ochi-admin-btn-in"><Zap className="ic" />{busy === item.id ? t("testingEllipsis") : t("testConnection")}</span>
               </button>
-              {result && <span className="ad-result" data-tone={result.ok ? "success" : "danger"}>
+              {result && <span className="ochi-admin-result" data-tone={result.ok ? "success" : "danger"}>
                 {result.ok ? <CircleCheck className="ic" /> : <CircleX className="ic" />}{result.text}{result.ms ? <b className="tnum">{result.ms} ms</b> : null}
               </span>}
               <span className="grow" />
               <Disclosure open={expanded} onClick={() => setOpen((current) => ({ ...current, [item.id]: !expanded }))}>{enabledCount}/{own.length} {t("models").toLowerCase()}</Disclosure>
             </div>
             <Collapse open={expanded}>
-              <div className="ad-inset">
-                <div className="ad-toolbar ad-mtools">
+              <div className="ochi-admin-inset">
+                <div className="ochi-admin-toolbar ochi-admin-mtools">
                   <div className="search-field"><Search className="ic" /><input className="input" aria-label={t("searchModels")} placeholder={t("searchModels")} value={query} onChange={(event) => setQuery(event.target.value)} /></div>
                   <Seg small value={onlyEnabled ? "on" : "all"} onChange={(next) => setOnlyEnabled(next === "on")} options={[{ v: "all", l: t("all") }, { v: "on", l: t("enabled") }]} />
                   <span className="grow" />
@@ -531,27 +531,27 @@ export default function ProvidersPage() {
                   <button type="button" className="icon-btn sm" aria-label={t("customModel")} title={t("customModel")} onClick={() => editModel(undefined, item.id)}><Plus className="ic" /></button>
                 </div>
                 {shown.length ? (
-                  <div className="ad-tscroll"><table className="ad-table ad-models">
-                    <thead><tr><th>{t("models")}</th><th className="ad-hide-s">{t("capabilities")}</th><th className="r ad-hide-s">{t("contextWindow")}</th><th className="c">{t("enabled")}</th><th className="c" /></tr></thead>
+                  <div className="ochi-admin-tscroll"><table className="ochi-admin-table ochi-admin-models">
+                    <thead><tr><th>{t("models")}</th><th className="ochi-admin-hide-s">{t("capabilities")}</th><th className="r ochi-admin-hide-s">{t("contextWindow")}</th><th className="c">{t("enabled")}</th><th className="c" /></tr></thead>
                     <tbody>{shown.map((model) => {
                       const reasoning = model.reasoning_kind && !["none", "unknown"].includes(model.reasoning_kind);
                       return (
                         <tr key={model.id}>
                           <td>
-                            <button type="button" className="ad-modelname" aria-label={model.name || model.model} onClick={() => editModel(model)}>
+                            <button type="button" className="ochi-admin-modelname" aria-label={model.name || model.model} onClick={() => editModel(model)}>
                               <b>{model.name || model.model}{model.is_default && <Pill tone="accent">{t("default")}</Pill>}</b>
                               <code className="mono">{model.model}</code>
                               {model.available === false && <small className="danger">{t("remoteUnavailable")}</small>}
                             </button>
                           </td>
-                          <td className="ad-hide-s"><span className="ad-caps">
+                          <td className="ochi-admin-hide-s"><span className="ochi-admin-caps">
                             {model.kind === "image" || model.supports_image_generation ? <Pill tone="accent">{t("imageGeneration")}</Pill> : null}
                             {model.kind === "embedding" ? <Pill>{t("embeddingModel")}</Pill> : null}
                             {model.metadata_known?.supports_vision && model.supports_vision ? <Pill tone="accent">{t("imageUnderstanding")}</Pill> : null}
                             {reasoning ? <Pill tone="success">{t("reasoning")}</Pill> : null}
                             {model.metadata_known?.supports_tools && model.supports_tools ? <Pill>{t("toolCalling")}</Pill> : null}
                           </span></td>
-                          <td className="r tnum ad-hide-s">{model.context_window > 0 ? `${Math.round(model.context_window / 1000)}K` : "—"}</td>
+                          <td className="r tnum ochi-admin-hide-s">{model.context_window > 0 ? `${Math.round(model.context_window / 1000)}K` : "—"}</td>
                           <td className="c"><Switch on={model.enabled} label={t("enableNamed", { name: model.name || model.model })} busy={busy === model.id} onChange={(next) => void publish(model, next)} /></td>
                           <td className="c">
                             <ActionMenu trigger={<MoreHorizontal className="ic" />} label={t("modelActions")} className="icon-btn sm">
@@ -645,7 +645,7 @@ export default function ProvidersPage() {
                 }
               />
             </Field>
-            <div className={providerEditor.id ? "ad-grid2" : ""}>
+            <div className={providerEditor.id ? "ochi-admin-grid2" : ""}>
               <Field title="API Key">
                 {providerEditor.id ? (
                   <SelectField
@@ -854,7 +854,7 @@ export default function ProvidersPage() {
             </div>
             {modelSection === "basic" ? (
               <section className="model-editor-section">
-                <div className="ad-grid2">
+                <div className="ochi-admin-grid2">
                   <Field title={t("displayName")}>
                     <input
                       required
@@ -882,7 +882,7 @@ export default function ProvidersPage() {
                     />
                   </Field>
                 </div>
-                <div className="ad-grid2">
+                <div className="ochi-admin-grid2">
                   <Field title={t("type")}>
                     <SelectField
                       value={
@@ -910,7 +910,7 @@ export default function ProvidersPage() {
                     }
                   />
                 </div>
-                {modelEditor.kind !== "image" && <div className="ad-grid2">
+                {modelEditor.kind !== "image" && <div className="ochi-admin-grid2">
                   <Field title={t("contextWindow")}>
                     <input
                       type="number"
@@ -939,7 +939,7 @@ export default function ProvidersPage() {
                     />
                   </Field>}
                 </div>}
-                <div className="ad-grid2">
+                <div className="ochi-admin-grid2">
                   {modelEditor.kind !== "image" && modelEditor.kind !== "embedding" && <Toggle
                     title={modelEditor.metadata_known?.supports_tools ? t("toolCalling") : t("toolCallingUnknown")}
                     value={modelEditor.supports_tools}
@@ -976,7 +976,7 @@ export default function ProvidersPage() {
               </section>
             ) : modelSection === "image" ? (
               <section className="model-editor-section">
-                <div className="ad-grid2">
+                <div className="ochi-admin-grid2">
                   <Field title={t("size")}>
                     <input
                       value={modelEditor.image_config?.size ?? ""}
@@ -1069,7 +1069,7 @@ export default function ProvidersPage() {
                 {["effort", "toggle", "budget"].includes(
                   modelEditor.reasoning_kind ?? "unknown",
                 ) && (
-                  <div className="ad-grid2">
+                  <div className="ochi-admin-grid2">
                     <Field title={t("reasoningParameter")}>
                       <input
                         value={modelEditor.effort_parameter ?? ""}
@@ -1116,7 +1116,7 @@ export default function ProvidersPage() {
                   </Field>
                 )}
                 {modelEditor.reasoning_kind === "budget" && (
-                  <div className="ad-grid2">
+                  <div className="ochi-admin-grid2">
                     {(["min", "max", "default"] as const).map((name) => (
                       <Field title={t(({ min: "budgetMinimum", max: "budgetMaximum", default: "budgetDefault" } as const)[name])} key={name}>
                         <input

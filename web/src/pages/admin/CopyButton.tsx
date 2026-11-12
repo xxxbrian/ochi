@@ -2,7 +2,7 @@ import { Check, Copy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { t } from "./i18n";
 
-/** Icon button that copies text and flashes a check mark (lab `ad-copy`). */
+/** Icon button that copies text and flashes a check mark (lab `ochi-admin-copy`). */
 export function CopyButton({ text, label }: { text: string; label?: string }) {
   const [done, setDone] = useState(false);
   const timer = useRef<number>(0);

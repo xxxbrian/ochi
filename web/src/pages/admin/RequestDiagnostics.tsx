@@ -48,14 +48,14 @@ function RequestFacts({ item }: { item: ProviderRequestDetail }) {
     [t("readError"), item.read_error || "—"], [t("upstreamErrorCode"), item.upstream_error_code || "—"],
     [t("upstreamErrorType"), item.upstream_error_type || "—"], [t("upstreamError"), item.upstream_error || "—"],
   ];
-  return <dl className="ad-facts">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
+  return <dl className="ochi-admin-facts">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
 }
 
 function RequestPayload({ headers, body }: { headers?: Record<string, string[]>; body?: string }) {
   useAdminI18n();
-  return <div className="ad-payload">
-    <h4 className="ad-dh4">{t("httpHeaders")}</h4><pre className="ad-code">{headers && Object.keys(headers).length ? JSON.stringify(headers, null, 2) : t("none")}</pre>
-    <h4 className="ad-dh4">{t("httpBody")}</h4><pre className="ad-code">{body || t("noCapturedBody")}</pre>
+  return <div className="ochi-admin-payload">
+    <h4 className="ochi-admin-dh4">{t("httpHeaders")}</h4><pre className="ochi-admin-code">{headers && Object.keys(headers).length ? JSON.stringify(headers, null, 2) : t("none")}</pre>
+    <h4 className="ochi-admin-dh4">{t("httpBody")}</h4><pre className="ochi-admin-code">{body || t("noCapturedBody")}</pre>
   </div>;
 }
 
@@ -81,16 +81,16 @@ function RequestDetail({ item }: { item: ProviderRequestDetail }) {
   return <>
     <Seg small label={t("requestDetails")} value={tab} onChange={setTab} options={tabs.map((value) => ({ v: value.id, l: value.title }))} />
     <ErrorNotice error={copyError} />
-    {item.truncated && <div className="ad-alert" role="status"><div>{t("captureTruncatedHint")}</div></div>}
-    <div id={`${tabID}-content`} role="tabpanel" className="ad-detail-content">
+    {item.truncated && <div className="ochi-admin-alert" role="status"><div>{t("captureTruncatedHint")}</div></div>}
+    <div id={`${tabID}-content`} role="tabpanel" className="ochi-admin-detail-content">
       {tab === "metadata" ? <RequestFacts item={item} />
         : tab === "request" ? <RequestPayload headers={item.request_headers} body={item.request_body} />
         : tab === "response" ? <RequestPayload headers={item.response_headers} body={item.response_body} />
-        : item.stream_chunks?.length ? <div className="ad-stream" aria-label={t("rawSSEData")}>
-          {item.stream_chunks.map(chunk => <div key={chunk.sequence}><span className="muted mono" title={t("lineNumber", { number: chunk.sequence })}>#{chunk.sequence} · +{chunk.at_ms} ms</span><pre className="ad-code">{chunk.data}</pre></div>)}
+        : item.stream_chunks?.length ? <div className="ochi-admin-stream" aria-label={t("rawSSEData")}>
+          {item.stream_chunks.map(chunk => <div key={chunk.sequence}><span className="muted mono" title={t("lineNumber", { number: chunk.sequence })}>#{chunk.sequence} · +{chunk.at_ms} ms</span><pre className="ochi-admin-code">{chunk.data}</pre></div>)}
         </div> : <Empty icon={<Activity className="ic" />} title={t("noCapturedStream")} />}
     </div>
-    <footer className="ad-df ad-df-inline"><span className="muted mono">{item.id}</span><span className="grow" />
+    <footer className="ochi-admin-df ochi-admin-df-inline"><span className="muted mono">{item.id}</span><span className="grow" />
       <button type="button" className="btn sm secondary" onClick={() => void copy()}><Copy className="ic" />{copied ? t("copied") : t("copyJSON")}</button></footer>
   </>;
 }
@@ -166,9 +166,9 @@ export function RequestDiagnostics({ runID, embedded }: { runID?: string; embedd
     <button type="button" className="btn secondary" disabled={loading || clearing || !page?.total} onClick={() => setConfirmClear(true)}><Eraser className="ic" />{t("clearRecords")}</button>
   </>;
   return <>
-    {embedded ? <div className="ad-toolbar ad-embedded-actions"><p className="muted">{t("runRequestsRetention", { days: page?.retention_days ?? 7, global: 2048, run: page?.max_requests_per_run ?? 256 })}</p><span className="grow" />{actions}</div> : <AdminHeader actions={actions} />}
+    {embedded ? <div className="ochi-admin-toolbar ochi-admin-embedded-actions"><p className="muted">{t("runRequestsRetention", { days: page?.retention_days ?? 7, global: 2048, run: page?.max_requests_per_run ?? 256 })}</p><span className="grow" />{actions}</div> : <AdminHeader actions={actions} />}
     <ErrorNotice error={error} notice={notice} />
-    {!embedded && <div className="ad-stats">
+    {!embedded && <div className="ochi-admin-stats">
       <Stat label={t("records")} value={(page?.total ?? 0).toLocaleString(getLocale())} sub={t(runID ? "runRequestsRetentionShort" : "requestsRetentionShort", { days: page?.retention_days ?? 7 })} />
       <Stat label={t("errorsOnPage")} value={failures} sub={t("onThisPage", { count: rows.length })} tone={failures ? "warn" : "success"} />
       <Stat label={t("averageDuration")} value={average == null ? "—" : duration(average)} sub={t("onThisPage", { count: timed.length })} />
@@ -176,8 +176,8 @@ export function RequestDiagnostics({ runID, embedded }: { runID?: string; embedd
     <Card flush aria-busy={loading}>
       {loading && !page ? <SkeletonRows rows={6} />
         : rows.length ? <>
-          <div className="ad-tscroll ad-tall"><table className="ad-table ad-reqs">
-            <thead><tr><th>{t("start")}</th><th>{t("model")}</th><th>{t("status")}</th><th>{t("duration")}</th><th className="ad-hide-s">{t("protocol")}</th></tr></thead>
+          <div className="ochi-admin-tscroll ochi-admin-tall"><table className="ochi-admin-table ochi-admin-reqs">
+            <thead><tr><th>{t("start")}</th><th>{t("model")}</th><th>{t("status")}</th><th>{t("duration")}</th><th className="ochi-admin-hide-s">{t("protocol")}</th></tr></thead>
             <tbody>{rows.map((item, index) => {
               const bad = Boolean(item.error) || (item.status_code ?? 0) >= 400;
               const ms = item.duration_ms ?? 0;
@@ -186,15 +186,15 @@ export function RequestDiagnostics({ runID, embedded }: { runID?: string; embedd
                   onClick={() => setSelectedID(item.id)} onKeyDown={onActivate(() => setSelectedID(item.id))}>
                   <td className="mono muted">{timestamp(item.started_at)}</td>
                   <td><b>{item.model || item.model_id || "—"}</b><br /><small>{item.purpose} · {item.round ? `${t("roundNumber", { number: item.round })} · ` : ""}{t("requestAttempt", { number: item.attempt })}</small></td>
-                  <td><span className="ad-code-s" data-tone={bad ? "danger" : item.status_code ? "success" : "warn"}>{requestStatus(item)}</span>
-                    {(item.truncated || item.redacted) && <span className="ad-flags">{item.truncated && <Pill tone="warn">{t("truncated")}</Pill>}{item.redacted && <Pill>{t("redacted")}</Pill>}</span>}</td>
-                  <td className="ad-lat"><Meter pct={(ms / slowest) * 100} tone={ms > 2000 ? "danger" : ms > 1000 ? "warn" : ""} /><small className="tnum">{duration(item.duration_ms)}</small></td>
-                  <td className="muted ad-hide-s">{item.protocol}</td>
+                  <td><span className="ochi-admin-code-s" data-tone={bad ? "danger" : item.status_code ? "success" : "warn"}>{requestStatus(item)}</span>
+                    {(item.truncated || item.redacted) && <span className="ochi-admin-flags">{item.truncated && <Pill tone="warn">{t("truncated")}</Pill>}{item.redacted && <Pill>{t("redacted")}</Pill>}</span>}</td>
+                  <td className="ochi-admin-lat"><Meter pct={(ms / slowest) * 100} tone={ms > 2000 ? "danger" : ms > 1000 ? "warn" : ""} /><small className="tnum">{duration(item.duration_ms)}</small></td>
+                  <td className="muted ochi-admin-hide-s">{item.protocol}</td>
                 </tr>
               );
             })}</tbody>
           </table></div>
-          <footer className="ad-pager">
+          <footer className="ochi-admin-pager">
             <span className="muted tnum">{t("recordsRange", { total: page?.total ?? 0, start: page?.total ? offset + 1 : 0, end: Math.min(offset + limit, page?.total ?? 0) })}</span><span className="grow" />
             <button type="button" className="icon-btn sm" aria-label={t("previousRequestsPage")} disabled={loading || clearing || offset === 0} onClick={() => setOffset(value => Math.max(0, value - limit))}><ChevronLeft className="ic" /></button>
             <span className="tnum muted">{Math.floor(offset / limit) + 1} / {Math.max(1, Math.ceil((page?.total ?? 0) / limit))}</span>

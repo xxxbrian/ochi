@@ -173,8 +173,8 @@ export function UsersPage({ currentUserID }: { currentUserID: string }) {
       <ErrorNotice error={error} />
       <Card flush>
         {loading ? <SkeletonRows rows={5} /> : <>
-          <Collapse open={selected.length > 0} className="ad-bulk-c">
-            <div className="ad-bulk" role="toolbar">
+          <Collapse open={selected.length > 0} className="ochi-admin-bulk-c">
+            <div className="ochi-admin-bulk" role="toolbar">
               <b className="tnum">{t("adminSelectedCount", { count: selected.length })}</b><span className="grow" />
               <button className="btn sm secondary" disabled={busy} onClick={() => void bulkEnable(true)}><Check className="ic" />{t("adminBulkEnable")}</button>
               <button className="btn sm secondary" disabled={busy} onClick={() => void bulkEnable(false)}><Ban className="ic" />{t("adminBulkDisable")}</button>
@@ -182,10 +182,10 @@ export function UsersPage({ currentUserID }: { currentUserID: string }) {
             </div>
           </Collapse>
           {rows.length ? <>
-            <div className="ad-tscroll"><table className="ad-table ad-users">
+            <div className="ochi-admin-tscroll"><table className="ochi-admin-table ochi-admin-users">
               <thead><tr>
                 <th className="c"><Checkbox checked={pageSelected} label={t("adminSelectAll")} onChange={() => setSelected((cur) => pageSelected ? cur.filter((id) => !rowIDs.includes(id)) : [...new Set([...cur, ...rowIDs])])} /></th>
-                <th>{t("adminColUser")}</th><th className="ad-hide-s">{t("adminColRole")}</th><th className="ad-hide-s">{t("adminColStatus")}</th><th className="c" />
+                <th>{t("adminColUser")}</th><th className="ochi-admin-hide-s">{t("adminColRole")}</th><th className="ochi-admin-hide-s">{t("adminColStatus")}</th><th className="c" />
               </tr></thead>
               <tbody>{rows.map((user, index) => {
                 const name = user.display_name || user.username;
@@ -194,8 +194,8 @@ export function UsersPage({ currentUserID }: { currentUserID: string }) {
                   <tr key={user.id} data-sel={picked} style={{ "--i": index } as CSSProperties}>
                     <td className="c"><Checkbox checked={picked} label={t("adminSelectUser", { name })} onChange={() => { if (user.id !== currentUserID) toggle(user.id); }} /></td>
                     <td><Who name={name} sub={user.username} /></td>
-                    <td className="ad-hide-s"><Pill tone={user.role === "admin" ? "accent" : "neutral"}>{roleLabel(user.role)}</Pill></td>
-                    <td className="ad-hide-s"><StatusDot tone={user.enabled !== false ? "success" : ""}>{user.enabled !== false ? t("enabled") : t("disabled")}</StatusDot></td>
+                    <td className="ochi-admin-hide-s"><Pill tone={user.role === "admin" ? "accent" : "neutral"}>{roleLabel(user.role)}</Pill></td>
+                    <td className="ochi-admin-hide-s"><StatusDot tone={user.enabled !== false ? "success" : ""}>{user.enabled !== false ? t("enabled") : t("disabled")}</StatusDot></td>
                     <td className="c">
                       <ActionMenu trigger={<Ellipsis className="ic" />} label={t("editUserNamed", { name })} className="icon-btn sm">
                         <MenuAction onClick={() => setEditor({ ...user, password: "" })}><Pencil className="ic" />{t("editUser")}</MenuAction>
@@ -208,10 +208,10 @@ export function UsersPage({ currentUserID }: { currentUserID: string }) {
                 );
               })}</tbody>
             </table></div>
-            <footer className="ad-pager">
+            <footer className="ochi-admin-pager">
               <span className="muted tnum">{t("recordsRange", { total: sorted.length, start: pageIndex * PAGE + 1, end: pageIndex * PAGE + rows.length })}</span><span className="grow" />
               <button className="icon-btn sm" aria-label={t("previousRunsPage")} disabled={pageIndex === 0} onClick={() => setPage(pageIndex - 1)}><ChevronLeft className="ic" /></button>
-              {Array.from({ length: pages }, (_, i) => <button key={i} className="ad-pg" aria-current={i === pageIndex} onClick={() => setPage(i)}>{i + 1}</button>)}
+              {Array.from({ length: pages }, (_, i) => <button key={i} className="ochi-admin-pg" aria-current={i === pageIndex} onClick={() => setPage(i)}>{i + 1}</button>)}
               <button className="icon-btn sm" aria-label={t("nextRunsPage")} disabled={pageIndex >= pages - 1} onClick={() => setPage(pageIndex + 1)}><ChevronRight className="ic" /></button>
             </footer>
           </> : <Empty icon={<Search className="ic" />} title={t("adminNoUsersMatch")} desc={t("adminNoUsersMatchHint")}
@@ -220,10 +220,10 @@ export function UsersPage({ currentUserID }: { currentUserID: string }) {
       </Card>
       {editor && (
         <Drawer title={editor.id ? t("editUser") : t("addUser")} sub={editor.id ? editor.username : undefined} onClose={() => { if (!busy) setEditor(null); }}
-          footer={<footer className="ad-df"><span className="grow" />
+          footer={<footer className="ochi-admin-df"><span className="grow" />
             <button type="button" className="btn ghost" disabled={busy} onClick={() => setEditor(null)}>{t("cancel")}</button>
             <button type="submit" form="user-editor" className={`btn primary${busy ? " btn-progress" : ""}`} disabled={busy}>{busy ? t("savingEllipsis") : t("save")}</button></footer>}>
-          <form id="user-editor" className="ad-stack-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+          <form id="user-editor" className="ochi-admin-stack-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
             <Field title={t("account")}>
               <input className="input mono" required readOnly={Boolean(editor.id)} autoComplete="off" value={editor.username ?? ""} onChange={(event) => setEditor({ ...editor, username: event.target.value })} />
             </Field>
@@ -233,7 +233,7 @@ export function UsersPage({ currentUserID }: { currentUserID: string }) {
             <Field title={editor.id ? t("newPassword") : t("password")}>
               <input className="input" type="password" required={!editor.id} value={editor.password ?? ""} autoComplete="new-password" onChange={(event) => setEditor({ ...editor, password: event.target.value })} />
             </Field>
-            <div className="ad-field"><span className="field-label">{t("role")}</span>
+            <div className="ochi-admin-field"><span className="field-label">{t("role")}</span>
               <Seg value={(editor.role ?? "user") as "user" | "admin"} onChange={(role) => setEditor({ ...editor, role })} options={[{ v: "user", l: t("userRole") }, { v: "admin", l: t("administrator") }]} /></div>
             <Toggle title={t("enable")} value={editor.enabled ?? true} onChange={(enabled) => setEditor({ ...editor, enabled })} />
             <ErrorNotice error={error} />
@@ -241,14 +241,14 @@ export function UsersPage({ currentUserID }: { currentUserID: string }) {
         </Drawer>
       )}
       {deleting && (
-        <Modal title={t("deleteUserQuestion")} onClose={() => setDeleting(null)} dismissible={!busy} size="small" className="ad-danger-m"
+        <Modal title={t("deleteUserQuestion")} onClose={() => setDeleting(null)} dismissible={!busy} size="small" className="ochi-admin-danger-m"
           footer={<div className="modal-actions">
             <button className="btn ghost" disabled={busy} onClick={() => setDeleting(null)}>{t("cancel")}</button>
             <button className={`btn danger${busy ? " btn-progress" : ""}`} disabled={busy || !confirmMatches(typed, deleting.username)} aria-busy={busy} onClick={() => void removeUser()}>
               {busy ? t("deletingEllipsis") : t("delete")}</button>
           </div>}>
           <p><b>{deleting.display_name || deleting.username}</b></p>
-          <div className="ad-alert"><TriangleAlert className="ic" /><div>{t("deleteUserDescription")}</div></div>
+          <div className="ochi-admin-alert"><TriangleAlert className="ic" /><div>{t("deleteUserDescription")}</div></div>
           <TypedConfirm name={deleting.username} value={typed} onChange={setTyped} disabled={busy} />
           <ErrorNotice error={deleteError} />
         </Modal>
@@ -312,7 +312,7 @@ export function SystemPage() {
       <UpdateCard />
       <form
         id="system-settings"
-        className="ad-stack-form"
+        className="ochi-admin-stack-form"
         onSubmit={(event) => {
           event.preventDefault();
           if (busy || debugBusy) return;
@@ -497,30 +497,30 @@ export function WorkspacesPage() {
       {loading ? (
         <Card flush><SkeletonRows rows={3} /></Card>
       ) : items.length ? <>
-        <div className="ad-stats">
+        <div className="ochi-admin-stats">
           <Stat label={t("running")} value={`${running} / ${items.length}`} sub={t("workspaceContainers")} tone={running ? "success" : undefined} />
           <Stat label={t("workspaceImageUpdateAvailable")} value={outdated} sub={t("workspaceRebuildToApply")} tone={outdated ? "warn" : undefined} />
         </div>
-        <div className="ad-wsgrid">
+        <div className="ochi-admin-wsgrid">
           {items.map((item) => {
             const state = item.running ? "running" : !item.state || item.state === "not_created" ? "stopped" : item.state === "error" || item.state === "dead" ? "error" : "stopped";
             const pending = busy === item.user_id;
             const name = workspaceName(item);
             return (
-              <Card key={item.user_id} className="ad-ws" data-st={pending ? "pending" : state}>
-                <div className="ad-ws-h">
+              <Card key={item.user_id} className="ochi-admin-ws" data-st={pending ? "pending" : state}>
+                <div className="ochi-admin-ws-h">
                   <Who name={name} sub={item.container} mono />
                   <span className="grow" />
                   {pending ? <Pill tone="warn"><i className="dot-live" aria-hidden="true" />{t("working")}</Pill>
                     : <Pill tone={state === "running" ? "success" : state === "error" ? "danger" : "neutral"}><i className="dot" data-tone={state === "running" ? "success" : state === "error" ? "danger" : ""} />
                       {item.running ? t("running") : !item.state || item.state === "not_created" ? t("notStarted") : item.state}</Pill>}
                 </div>
-                {item.kind === "control" && <p className="muted ad-ws-note">{t("pluginControlDescription")}</p>}
-                <div className="ad-ws-meta">
+                {item.kind === "control" && <p className="muted ochi-admin-ws-note">{t("pluginControlDescription")}</p>}
+                <div className="ochi-admin-ws-meta">
                   <span className="mono" title={item.image}><Container className="ic" />{item.image}</span>
                   {item.update_available ? <Pill tone="warn">{t("workspaceImageUpdateAvailable")}</Pill> : null}
                 </div>
-                <div className="ad-ws-act">
+                <div className="ochi-admin-ws-act">
                   <button className="btn sm secondary" disabled={Boolean(busy)} onClick={() => void action(item, item.running ? "stop" : "start")}>
                     {item.running ? <CircleStop className="ic" /> : <Play className="ic" />}{item.running ? t("stop") : t("startAction")}</button>
                   <button className="btn sm secondary" disabled={Boolean(busy)} onClick={() => { setConfirmError(""); setConfirm({ workspace: item, action: "rebuild" }); }}>
@@ -538,7 +538,7 @@ export function WorkspacesPage() {
       </> : !error && <Card><Empty icon={<Container className="ic" />} title={t("noWorkspaces")} /></Card>}
       {confirm && (
         <Modal
-          className={confirm.action === "delete" ? "ad-danger-m" : ""}
+          className={confirm.action === "delete" ? "ochi-admin-danger-m" : ""}
           title={confirm.action === "delete" ? t("deleteWorkspaceQuestion") : t("rebuildWorkspaceQuestion")}
           onClose={() => setConfirm(null)}
           dismissible={!busy}
@@ -567,7 +567,7 @@ export function WorkspacesPage() {
             {workspaceName(confirm.workspace)}
           </p>
           {confirm.action === "delete" && <>
-            <div className="ad-alert"><TriangleAlert className="ic" /><div>{t("deleteWorkspaceDescription")}</div></div>
+            <div className="ochi-admin-alert"><TriangleAlert className="ic" /><div>{t("deleteWorkspaceDescription")}</div></div>
             <TypedConfirm name={workspaceName(confirm.workspace)} value={typed} onChange={setTyped} disabled={Boolean(busy)} />
           </>}
           <ErrorNotice error={confirmError} />
@@ -598,7 +598,7 @@ function RunStatusBadge({ run }: { run: Pick<AdminRun, "status" | "error" | "err
 function RunStatusIcon({ status }: { status: string }) {
   const tone = runTone(status);
   const Icon = tone === "success" ? CircleCheck : tone === "danger" ? CircleX : tone === "warn" ? Clock : tone === "accent" ? CirclePlay : CircleSlash;
-  return <span className="ad-sic" data-tone={tone === "neutral" ? "" : tone}><Icon className={`ic${tone === "accent" ? " ic-pulse" : ""}`} /></span>;
+  return <span className="ochi-admin-sic" data-tone={tone === "neutral" ? "" : tone}><Icon className={`ic${tone === "accent" ? " ic-pulse" : ""}`} /></span>;
 }
 function ago(value: string) {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
@@ -609,7 +609,7 @@ function ago(value: string) {
 }
 function ReadOnlySteps({ steps }: { steps: Step[] }) {
   useAdminI18n();
-  return <div className="ad-ro-steps">{steps.map(step => {
+  return <div className="ochi-admin-ro-steps">{steps.map(step => {
     const scope = ["command", "url", "path", "query"].map(key => step.arguments?.[key]).find(value => typeof value === "string") as string | undefined;
     let result: Record<string, unknown> | null = null;
     try {
@@ -715,39 +715,39 @@ export function RunsPage({ currentUserID, onNavigate }: { currentUserID: string;
         <Seg small label={t("statisticsRange")} value={period} onChange={value => { setPeriod(value); setOffset(0); }} options={dateOptions().map(o => ({ v: o.value, l: o.label }))} />
       </>} />
     <ErrorNotice error={error} />
-    <div className="ad-stats" aria-busy={loading}>
+    <div className="ochi-admin-stats" aria-busy={loading}>
       <Stat label={t("runs")} value={stats?.runs.toLocaleString(getLocale()) ?? "—"} sub={stats ? t("runsCompletedActive", { completed: stats.completed, active: stats.active }) : undefined} />
       <Stat label={t("successRate")} value={rate == null ? "—" : `${rate}%`} sub={stats ? t("runsFailedInterrupted", { failed: stats.failed, interrupted: stats.interrupted }) : undefined} tone={rate != null && rate >= 95 ? "success" : rate != null ? "warn" : undefined} />
       <Stat label={t("averageDuration")} value={formatDuration(stats?.average_duration_ms)} sub={stats ? t("cancelledCount", { count: stats.cancelled }) : undefined} />
       <Stat label={t("tokenUsage")} value={stats?.usage_reported_runs ? formatTokens(stats.total_tokens) : "—"} sub={stats?.usage_reported_runs ? `${t("inputTokens")} ${formatTokens(stats.prompt_tokens)} · ${t("outputTokens")} ${formatTokens(stats.completion_tokens)}` : undefined} />
     </div>
     {usage.length > 0 && <Card flush>
-      <div className="ad-tscroll"><table className="ad-table usage-model-table"><thead><tr><th>{t("modelProvider")}</th><th className="r">{t("runs")}</th><th className="r">{t("issues")}</th><th className="r">Tokens</th><th className="r ad-hide-s">{t("cache")}</th></tr></thead>
+      <div className="ochi-admin-tscroll"><table className="ochi-admin-table usage-model-table"><thead><tr><th>{t("modelProvider")}</th><th className="r">{t("runs")}</th><th className="r">{t("issues")}</th><th className="r">Tokens</th><th className="r ochi-admin-hide-s">{t("cache")}</th></tr></thead>
         <tbody>{usage.map(item => <tr key={`${item.model_id}:${item.model_name}`}>
           <td><b>{item.model_name || "—"}</b><br /><small>{item.provider_name || "—"}</small></td>
           <td className="r tnum">{formatTokens(item.runs)}</td>
           <td className="r tnum" style={item.failed ? { color: "var(--danger)" } : undefined}>{item.failed}</td>
           <td className="r tnum" title={t("inputOutputSummary", { input: formatTokens(item.prompt_tokens), output: formatTokens(item.completion_tokens) })}>{item.total_tokens ? formatTokens(item.total_tokens) : "—"}</td>
-          <td className="r tnum ad-hide-s">{formatTokens(item.cached_tokens)}</td>
+          <td className="r tnum ochi-admin-hide-s">{formatTokens(item.cached_tokens)}</td>
         </tr>)}</tbody>
       </table></div>
     </Card>}
     <Card flush aria-busy={loading}>
       {loading && !rows.length ? <SkeletonRows rows={6} /> : rows.length ? <>
-        <div className="ad-runs">{rows.map((run, index) => (
-          <button type="button" className="ad-run" key={run.run_id} style={{ "--i": Math.min(index, 12) } as CSSProperties} onClick={() => selectRun(run)}
+        <div className="ochi-admin-runs">{rows.map((run, index) => (
+          <button type="button" className="ochi-admin-run" key={run.run_id} style={{ "--i": Math.min(index, 12) } as CSSProperties} onClick={() => selectRun(run)}
             aria-label={t("viewRunNamed", { name: run.prompt || run.session_title })}>
             <RunStatusIcon status={run.status} />
-            <div className="ad-run-t"><b>{run.prompt || run.session_title || t("newChat")}</b><small>{[run.model_name, run.display_name || run.username].filter(Boolean).join(" · ")}</small></div>
-            <span className="ad-run-m tnum ad-hide-s" title={t("usageSummary", { input: formatTokens(run.usage?.prompt_tokens), output: formatTokens(run.usage?.completion_tokens), cached: formatTokens(run.usage?.cached_tokens) })}>
+            <div className="ochi-admin-run-t"><b>{run.prompt || run.session_title || t("newChat")}</b><small>{[run.model_name, run.display_name || run.username].filter(Boolean).join(" · ")}</small></div>
+            <span className="ochi-admin-run-m tnum ochi-admin-hide-s" title={t("usageSummary", { input: formatTokens(run.usage?.prompt_tokens), output: formatTokens(run.usage?.completion_tokens), cached: formatTokens(run.usage?.cached_tokens) })}>
               {run.usage?.total_tokens ? formatTokens(run.usage.total_tokens) : "—"}</span>
-            <span className="ad-run-m tnum ad-hide-s"><Wrench className="ic" />{run.step_count}</span>
-            <span className="ad-run-m tnum">{formatDuration(run.duration_ms)}</span>
-            <span className="ad-run-ago muted ad-hide-s" title={new Date(run.created_at).toLocaleString(getLocale())}>{ago(run.created_at)}</span>
-            <ChevronRight className="ic ad-go" />
+            <span className="ochi-admin-run-m tnum ochi-admin-hide-s"><Wrench className="ic" />{run.step_count}</span>
+            <span className="ochi-admin-run-m tnum">{formatDuration(run.duration_ms)}</span>
+            <span className="ochi-admin-run-ago muted ochi-admin-hide-s" title={new Date(run.created_at).toLocaleString(getLocale())}>{ago(run.created_at)}</span>
+            <ChevronRight className="ic ochi-admin-go" />
           </button>
         ))}</div>
-        <footer className="ad-pager">
+        <footer className="ochi-admin-pager">
           <span className="muted tnum">{page ? t("recordsRange", { total: page.total, start: page.total ? Math.min(offset + 1, page.total) : 0, end: Math.min(offset + limit, page.total) }) : ""}</span><span className="grow" />
           <button className="icon-btn sm" aria-label={t("previousRunsPage")} disabled={loading || offset === 0} onClick={() => setOffset(value => Math.max(0, value - limit))}><ChevronLeft className="ic" /></button>
           <span className="tnum muted">{Math.floor(offset / limit) + 1} / {Math.max(1, Math.ceil((page?.total ?? 0) / limit))}</span>
@@ -756,20 +756,20 @@ export function RunsPage({ currentUserID, onNavigate }: { currentUserID: string;
       </> : <Empty icon={<History className="ic" />} title={t("noRecords")} desc={t("runsEmptyHint")} />}
     </Card>
     {selected && current && <Drawer wide title={current.prompt || current.session_title || t("newChat")} sub={[current.model_name, current.display_name || current.username, new Date(current.created_at).toLocaleString(getLocale(), { hour12: false })].filter(Boolean).join(" · ")} onClose={() => setSelected(null)}
-      footer={<footer className="ad-df">
+      footer={<footer className="ochi-admin-df">
         <RunStatusBadge run={current} /><span className="muted tnum">{formatDuration(current.duration_ms)}</span><span className="grow" />
         {current.user_id === currentUserID && <button className="btn sm secondary" onClick={() => onNavigate(`/c/${current.session_id}`)}>{t("openConversation")}<ArrowUpRight className="ic" /></button>}
         <button className="btn sm secondary" disabled={detailLoading} onClick={() => setDetailRevision(value => value + 1)}><RefreshCw className={`ic${detailLoading ? " ic-turn" : ""}`} />{t("refresh")}</button>
       </footer>}>
       <Seg small label={t("runDetails")} value={detailTab} onChange={setDetailTab} options={[{ v: "result", l: t("content") }, { v: "tools", l: t("toolCount", { count: current.step_count }) }, { v: "metadata", l: t("data") }, { v: "requests", l: t("requestDiagnostics") }]} />
       <ErrorNotice error={detailError} />
-      {detailLoading ? <SkeletonRows rows={3} /> : detail && <div id="run-detail-content" role="tabpanel" className="ad-detail-content">
+      {detailLoading ? <SkeletonRows rows={3} /> : detail && <div id="run-detail-content" role="tabpanel" className="ochi-admin-detail-content">
         {detailTab === "result" ? <>
-          <div className="ad-prompt">{detail.prompt}</div>
-          {(detail.error_code || detail.error) && <div className="ad-alert"><CircleAlert className="ic" /><div>{translateError(detail.error_code) ?? detail.error}</div></div>}
+          <div className="ochi-admin-prompt">{detail.prompt}</div>
+          {(detail.error_code || detail.error) && <div className="ochi-admin-alert"><CircleAlert className="ic" /><div>{translateError(detail.error_code) ?? detail.error}</div></div>}
           {publicReply(detail) && <div className="markdown-body"><Suspense fallback={<div>{publicReply(detail)}</div>}><MarkdownContent content={publicReply(detail)} isStreaming={false} /></Suspense></div>}
-          {detail.artifacts.length > 0 && (detail.user_id === currentUserID ? <FileCards files={detail.artifacts} /> : <ul className="ad-artifact-names">{detail.artifacts.map(file => <li key={file.id}>{file.name}</li>)}</ul>)}
-        </> : detailTab === "tools" ? (detail.items.flatMap((item) => item.step ? [item.step] : []).length ? detail.user_id === currentUserID ? <StepList steps={detail.items.flatMap((item) => item.step ? [item.step] : [])} /> : <ReadOnlySteps steps={detail.items.flatMap((item) => item.step ? [item.step] : [])} /> : <Empty icon={<Wrench className="ic" />} title={t("noToolCalls")} />) : detailTab === "requests" ? <RequestDiagnostics embedded key={`${detail.run_id}:${detailRevision}`} runID={detail.run_id} /> : <dl className="ad-facts">
+          {detail.artifacts.length > 0 && (detail.user_id === currentUserID ? <FileCards files={detail.artifacts} /> : <ul className="ochi-admin-artifact-names">{detail.artifacts.map(file => <li key={file.id}>{file.name}</li>)}</ul>)}
+        </> : detailTab === "tools" ? (detail.items.flatMap((item) => item.step ? [item.step] : []).length ? detail.user_id === currentUserID ? <StepList steps={detail.items.flatMap((item) => item.step ? [item.step] : [])} /> : <ReadOnlySteps steps={detail.items.flatMap((item) => item.step ? [item.step] : [])} /> : <Empty icon={<Wrench className="ic" />} title={t("noToolCalls")} />) : detailTab === "requests" ? <RequestDiagnostics embedded key={`${detail.run_id}:${detailRevision}`} runID={detail.run_id} /> : <dl className="ochi-admin-facts">
           {[
             [t("users"), detail.display_name || detail.username], [t("provider"), detail.provider_name || "—"], [t("inputTokens"), formatTokens(detail.usage?.prompt_tokens)], [t("outputTokens"), formatTokens(detail.usage?.completion_tokens)], [t("cachedTokens"), formatTokens(detail.usage?.cached_tokens)], [t("totalDuration"), formatDuration(detail.duration_ms)], [t("update"), new Date(detail.updated_at).toLocaleString(getLocale(), { hour12: false })], [t("files"), String(detail.artifact_count)], [t("runID"), detail.run_id], [t("sessionID"), detail.session_id], [t("userID"), detail.user_id], ...(detail.resource ? [[t("resource"), detail.resource]] : []), ...(detail.archived ? [[t("version"), t("archivedVersion")]] : []),
           ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
