@@ -638,6 +638,23 @@ export type ApiError = Error & {
   params?: Record<string, string | number>;
 };
 
+export type AndroidClientRelease = {
+  version_name: string;
+  version_code: number;
+  size_bytes: number;
+  sha256: string;
+  published_at: string;
+  download_url: string;
+  release_notes: string;
+};
+
+export type IOSClientRelease = { url: string };
+
+export type ClientReleases = {
+  android: AndroidClientRelease | null;
+  ios: IOSClientRelease | null;
+};
+
 export type RunInstruction = {
   id: string;
   content: string;

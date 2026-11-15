@@ -39,6 +39,7 @@ type Server struct {
 	backgroundWG        sync.WaitGroup
 	backgroundMu        sync.Mutex
 	settingsUpdateMu    sync.Mutex
+	clientReleaseMu     sync.Mutex
 	debugMode           atomic.Bool
 	providerDebugSlots  chan struct{}
 	providerDebugWG     sync.WaitGroup
@@ -177,6 +178,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerQueueRoutes(mux)
 	s.registerAdminRoutes(mux)
 	s.registerUpdateRoutes(mux)
+	s.registerClientReleaseRoutes(mux)
 	s.registerExtraRoutes(mux)
 	s.registerTaskRoutes(mux)
 	s.registerContextRoutes(mux)

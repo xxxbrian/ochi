@@ -44,6 +44,36 @@
     "zh-CN": "文件超出了当前服务器的传输上限。",
     "zh-TW": "檔案超出了目前伺服器的傳輸上限。"
   },
+  "client_release_invalid_apk": {
+    "en": "Choose a standalone Ochi APK with a valid application ID and version.",
+    "zh-CN": "请选择应用 ID 和版本有效的 Ochi 独立 APK 安装包。",
+    "zh-TW": "請選擇應用程式 ID 和版本有效的 Ochi 獨立 APK 安裝套件。"
+  },
+  "client_release_notes_too_long": {
+    "en": "Release notes must contain no more than 10,000 characters.",
+    "zh-CN": "更新说明不能超过 10,000 个字符。",
+    "zh-TW": "更新說明不能超過 10,000 個字元。"
+  },
+  "client_release_version_not_newer": {
+    "en": "The replacement APK must have a higher version code than the published package.",
+    "zh-CN": "替换的 APK 构建号必须高于当前发布的安装包。",
+    "zh-TW": "替換的 APK 建置編號必須高於目前發佈的安裝套件。"
+  },
+  "client_release_upload_failed": {
+    "en": "Unable to publish the installation package. Please try again.",
+    "zh-CN": "无法发布安装包，请重试。",
+    "zh-TW": "無法發佈安裝套件，請重試。"
+  },
+  "client_release_invalid_ios_url": {
+    "en": "Enter an HTTPS download link without embedded credentials, up to 2,048 bytes.",
+    "zh-CN": "请填写不含登录凭据的 HTTPS 下载链接，长度不超过 2,048 字节。",
+    "zh-TW": "請填寫不含登入憑證的 HTTPS 下載連結，長度不超過 2,048 位元組。"
+  },
+  "client_release_unavailable": {
+    "en": "The installation package is unavailable. Refresh the download information and try again.",
+    "zh-CN": "安装包暂时不可用，请刷新下载信息后重试。",
+    "zh-TW": "安裝套件暫時無法使用，請重新整理下載資訊後再試。"
+  },
   "rate_limited": {
     "en": "Too many requests. Please try again later.",
     "zh-CN": "请求过于频繁，请稍后再试。",

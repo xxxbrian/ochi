@@ -337,6 +337,23 @@ their paths for targeted analysis. Image previews resize to at most 1280 pixels;
 automatic chat image input remains limited to 8 MiB per image and 32 MiB total.
 Oversized images remain file attachments rather than failing their upload.
 
+The client distribution catalog is independent of ordinary application settings.
+Administrators publish one Android APK and one HTTPS iOS link. APK upload streams
+to private temporary storage, reads bounded compiled manifest metadata, requires
+the Ochi package ID and a newer build when replacing a different package, and
+publishes its size, SHA-256 and version only after validation. Immutable APK bytes
+live in the shared artifacts volume outside user-owned directories. Catalog
+reads and downloads are public; publication remains administrator-only. Replacing
+or removing a package retires its old URL while already-open downloads finish.
+
+Android compares the installed native versionCode against its selected backend,
+throttles automatic checks, and downloads to private disk cache. Size, SHA-256,
+package identity and version are checked before handing the file to the system
+installer. The operating system owns source permission, signature acceptance and
+final installation confirmation. Opening that installer is never an installation
+receipt. iOS opens the configured HTTPS link on explicit request and does not
+poll automatically.
+
 Administrators publish providers/models and configure auxiliary models and
 search services. Users see published capabilities and supported reasoning
 controls, never provider credentials. Search adapters are server-side; results

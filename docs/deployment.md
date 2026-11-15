@@ -307,6 +307,13 @@ volumes hold `/data`, including user files, dependencies, browser login state
 and desktop preferences. Compute scratch and shared extension storage are also
 managed by the server. Never treat those as disposable build caches.
 
+Client release metadata lives in the singleton application settings row. The
+currently published APK is stored under the artifacts volume's `_clients`
+directory, outside per-user cleanup. Back up both together; a database catalog
+without the matching package cannot provide a working download. Replacing or
+removing a publication removes its previous package, so archive any desired
+release history separately.
+
 Back up PostgreSQL and the corresponding artifact/workspace volumes together.
 Store backups and secrets outside the checkout. Stop writes or use a consistent
 snapshot strategy, record image/config versions, and test restoration before
