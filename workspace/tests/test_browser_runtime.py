@@ -960,6 +960,39 @@ class BrowserContracts(unittest.TestCase):
                 download.failure.assert_not_called()
                 download.save_as.assert_not_called()
 
+    def test_oversize_owned_download_is_cancelled_without_changing_existing_file(self):
+        with patch.object(browser, "ChromiumProcess", FakeProcess):
+            runtime = self.runtime()
+            state = runtime._state_for_scope({"session_id": "one"})
+            _, page = state.page()
+            process = runtime.processes["main"]
+            target_path = self.root / "existing.txt"
+            target_path.write_bytes(b"keep")
+            download = SimpleNamespace(suggested_filename="fixture.txt")
+            pending = Mock()
+            pending.__enter__ = Mock(return_value=SimpleNamespace(value=download))
+            pending.__exit__ = Mock(return_value=None)
+            page.expect_download = Mock(return_value=pending)
+            target = Mock()
+            target.first = target
+
+            def begin(**kwargs):
+                process.downloads["owned-guid"] = {"guid": "owned-guid", "frameId": page.target_id,
+                                                    "state": "inProgress", "receivedBytes": 11, "totalBytes": 20}
+                (process.download_root / "owned-guid.crdownload").write_bytes(b"partial")
+
+            target.click.side_effect = begin
+            with patch.object(browser, "MAX_FILE_BYTES", 10), \
+                 patch.object(browser, "_browser_call", side_effect=lambda fn: fn(state)), \
+                 patch.object(page, "locator", return_value=target):
+                with self.assertRaisesRegex(ValueError, "configured transfer limit"):
+                    browser.tool_browser_download({"selector": "a", "path": str(target_path)})
+            self.assertEqual(target_path.read_bytes(), b"keep")
+            self.assertFalse((process.download_root / "owned-guid.crdownload").exists())
+            process.download_cdp.send.assert_has_calls([
+                call("Browser.cancelDownload", {"guid": "owned-guid"}),
+                call("Browser.setDownloadBehavior", process.normal_download_behavior)])
+
     def test_manual_url_validation_does_not_allow_host_files(self):
         with patch.object(browser, "DATA_ROOT", self.root):
             self.assertTrue(browser._restorable_url("https://fixture.invalid"))

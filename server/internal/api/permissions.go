@@ -201,11 +201,6 @@ func (s *Server) prepareToolScope(ctx context.Context, scope agent.RunScope, bri
 	updates := []artifactUpdate{}
 	for source, versions := range sameSessionArtifactVersions(items, scope) {
 		latest := versions[len(versions)-1]
-		data, err := artifactBytes(latest)
-		if err != nil {
-			log.Printf("restore latest artifact %s: %v", latest.ID, err)
-			continue
-		}
 		digests := []string{}
 		for _, item := range versions {
 			if digest := publishedDigest(item.Path); digest != "" {
@@ -215,9 +210,9 @@ func (s *Server) prepareToolScope(ctx context.Context, scope agent.RunScope, bri
 		if len(digests) == 0 {
 			digests = []string{"absent"}
 		}
-		status, _, body, err := bridge.Bridge(agent.WithRunScope(ctx, scope), scope.UserID, http.MethodPut, "/file?path="+url.QueryEscape(source)+"&if_digest="+url.QueryEscape(strings.Join(digests, ",")), data)
-		if err != nil || status >= 400 {
-			log.Printf("restore latest artifact source %s: %v", latest.ID, bridgeError(status, body, err))
+		body, err := putArtifact(ctx, scope, latest, bridge, "/file?path="+url.QueryEscape(source)+"&if_digest="+url.QueryEscape(strings.Join(digests, ",")))
+		if err != nil {
+			log.Printf("restore latest artifact source %s: %v", latest.ID, err)
 			continue
 		}
 		var result struct {
@@ -249,17 +244,23 @@ func withArtifactUpdates(result agent.ToolResult, updates []artifactUpdate) agen
 }
 
 func (s *Server) stageArtifact(ctx context.Context, scope agent.RunScope, item storage.Artifact, bridge bridgeSource) (agent.Attachment, error) {
-	data, err := artifactBytes(item)
-	if err != nil {
-		return agent.Attachment{}, err
-	}
 	attachment := item.Attachment()
-	path := attachment.Path
-	status, _, body, err := bridge.Bridge(agent.WithRunScope(ctx, scope), scope.UserID, http.MethodPut, "/file?if_missing=1&path="+url.QueryEscape(path), data)
-	if err != nil || status >= 400 {
-		return attachment, bridgeError(status, body, err)
+	_, err := putArtifact(ctx, scope, item, bridge, "/file?if_missing=1&path="+url.QueryEscape(attachment.Path))
+	return attachment, err
+}
+
+func putArtifact(ctx context.Context, scope agent.RunScope, item storage.Artifact, bridge bridgeSource, path string) ([]byte, error) {
+	file, err := openArtifact(item)
+	if err != nil {
+		return nil, err
 	}
-	return attachment, nil
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	status, _, body, err := bridgeFile(agent.WithRunScope(ctx, scope), bridge, scope.UserID, http.MethodPut, path, file, info.Size())
+	return bridgeReply(status, body, err)
 }
 
 func publishedDigest(path string) string {

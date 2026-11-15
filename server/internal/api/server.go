@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -534,23 +533,8 @@ func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID
 		return runtime.Snapshot{}, err
 	}
 	if (model.SupportsVision || !model.MetadataKnown["supports_vision"]) && len(attachments) > 0 {
-		for i := range attachments {
-			attachment := &attachments[i]
-			if !strings.HasPrefix(attachment.MIMEType, "image/") {
-				continue
-			}
-			if attachment.Size > 8*1024*1024 {
-				return runtime.Snapshot{}, i18n.New("image_input_too_large")
-			}
-			item, fetchErr := s.store.GetArtifact(ctx, userID, attachment.ID)
-			if fetchErr != nil {
-				return runtime.Snapshot{}, fetchErr
-			}
-			data, fetchErr := artifactBytes(item)
-			if fetchErr != nil {
-				return runtime.Snapshot{}, fetchErr
-			}
-			attachment.DataURL = "data:" + attachment.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(data)
+		if err := s.prepareAttachmentImages(ctx, userID, attachments); err != nil {
+			return runtime.Snapshot{}, err
 		}
 	}
 	settings, err := s.store.Settings(ctx)

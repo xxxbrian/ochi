@@ -327,6 +327,16 @@ source clones and intermediate scripts remain workspace files. Image input and
 image generation are separate model capabilities. Published image models are
 called through the provider Images API and can be used without Computer ON.
 
+Raw file transfers have a configurable single-file limit of 1 GiB by default.
+Uploads, downloads, attachment staging and explicit environment copies stream
+between network and disk; transfer size does not expand JSON or model budgets.
+Text previews sample a bounded prefix and return at most 64,000 characters.
+Automatic PDF/Office extraction accepts at most 32 MiB of source and runs in a
+disposable parser process with time and memory bounds. Larger documents retain
+their paths for targeted analysis. Image previews resize to at most 1280 pixels;
+automatic chat image input remains limited to 8 MiB per image and 32 MiB total.
+Oversized images remain file attachments rather than failing their upload.
+
 Administrators publish providers/models and configure auxiliary models and
 search services. Users see published capabilities and supported reasoning
 controls, never provider credentials. Search adapters are server-side; results

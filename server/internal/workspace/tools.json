@@ -160,7 +160,7 @@
   },
   {
     "name": "files_read",
-    "description": "Read UTF-8 text, images, textual PDFs or basic Office document text in the selected environment. environment defaults to isolated compute; choose desktop explicitly for authorized persistent computer/project files. Images return image content for visual inspection. For precise tables/layout or scientific analysis use Python via exec in the same environment. Relative paths use that environment's session/project working directory. Use explicit absolute paths for staged uploads under /data/files/uploads. Use files_copy to transfer a file between environments.",
+    "description": "Read a bounded preview of UTF-8 text, images, textual PDFs or basic Office document text in the selected environment. Text defaults to 24,000 characters and is capped at 64,000 characters; plain text samples at most 256 KiB. Images return a preview up to 1280 pixels and 8 MiB, not the full source. Automatic PDF/Office extraction accepts sources up to 32 MiB and has separate expansion/time budgets. For larger documents, precise tables/layout or scientific analysis use Python via exec in the same environment. environment defaults to isolated compute; choose desktop explicitly for authorized persistent computer/project files. Relative paths use that environment's session/project working directory. Use explicit absolute paths for staged uploads under /data/files/uploads. Use files_copy to transfer a file between environments.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -170,7 +170,8 @@
         "max_bytes": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 2000000
+          "maximum": 262144,
+          "default": 64000
         },
         "max_pages": {
           "type": "integer",
@@ -180,7 +181,8 @@
         "max_chars": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 200000
+          "maximum": 64000,
+          "default": 24000
         },
         "environment": {
           "type": "string",
@@ -810,7 +812,7 @@
   },
   {
     "name": "web_fetch",
-    "description": "Fetch a public HTTP(S) URL quickly without a browser. Returns readable HTML text with links, plain text/JSON, or a downloaded file. Include path to save a response in the selected environment (isolated compute by default; desktop requires authorization). Paths are separate between environments; use files_copy for transfers. For search use web_search when available; for signed-in or interactive pages use browser tools.",
+    "description": "Fetch a public HTTP(S) URL without a browser, streaming the complete response to a file subject to the configured single-file transfer limit. Returns the saved file and a bounded HTML/plain text/JSON preview: at most 256 KiB of source is sampled, with 24,000 characters by default and a maximum of 64,000, plus bounded links. Include path to choose the saved file location in the selected environment (isolated compute by default; desktop requires authorization). Paths are separate between environments; use files_copy for transfers. For search use web_search when available; for signed-in or interactive pages use browser tools.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -823,7 +825,8 @@
         "max_chars": {
           "type": "integer",
           "minimum": 1000,
-          "maximum": 100000
+          "maximum": 64000,
+          "default": 24000
         },
         "environment": {
           "type": "string",

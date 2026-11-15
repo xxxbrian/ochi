@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/filelimits"
 	"ochi/server/internal/i18n"
 	"ochi/server/internal/runtime"
 	"ochi/server/internal/workspace"
@@ -89,7 +90,7 @@ func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				filePath = file.Path
-				bundle, readErr = artifactBytes(file)
+				bundle, readErr = artifactBytesLimited(file, filelimits.SkillBundleBytes)
 				if readErr != nil {
 					writeError(w, http.StatusBadGateway, readErr)
 					return
@@ -108,12 +109,24 @@ func (s *Server) extensionRequest(w http.ResponseWriter, r *http.Request) {
 				input["source"], _ = json.Marshal(filePath)
 				data, _ = json.Marshal(input)
 				if bundle == nil {
-					status, _, bytes, readErr := bridge.Bridge(r.Context(), currentUser(r).ID, http.MethodGet, "/file?path="+url.QueryEscape(filePath), nil)
-					if readErr != nil || status >= 400 {
-						writeError(w, http.StatusBadGateway, bridgeError(status, bytes, readErr))
+					status, _, stream, readErr := bridgeFile(r.Context(), bridge, currentUser(r).ID, http.MethodGet, "/file?path="+url.QueryEscape(filePath), nil, 0)
+					if readErr != nil {
+						writeError(w, http.StatusBadGateway, readErr)
 						return
 					}
-					bundle = bytes
+					if status >= 400 {
+						_, readErr = bridgeReply(status, stream, nil)
+					} else {
+						bundle, readErr = io.ReadAll(io.LimitReader(stream, filelimits.SkillBundleBytes+1))
+						stream.Close()
+						if int64(len(bundle)) > filelimits.SkillBundleBytes {
+							readErr = errFileTooLarge
+						}
+					}
+					if readErr != nil {
+						writeError(w, http.StatusBadGateway, readErr)
+						return
+					}
 				}
 				input["bundle_base64"], _ = json.Marshal(bundle)
 				delete(input, "path")

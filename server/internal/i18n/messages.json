@@ -40,9 +40,9 @@
     "zh-TW": "目前操作發生衝突，請重試。"
   },
   "payload_too_large": {
-    "en": "Choose a file no larger than 32 MB.",
-    "zh-CN": "请选择 32 MB 以内的文件。",
-    "zh-TW": "請選擇 32 MB 以內的檔案。"
+    "en": "The file exceeds this server's transfer limit.",
+    "zh-CN": "文件超出了当前服务器的传输上限。",
+    "zh-TW": "檔案超出了目前伺服器的傳輸上限。"
   },
   "rate_limited": {
     "en": "Too many requests. Please try again later.",

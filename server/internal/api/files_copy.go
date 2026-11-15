@@ -4,16 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/filelimits"
 )
 
 var filesCopyDefinition = agent.ToolDefinition{
 	Name:        "files_copy",
-	Description: "Copy one selected file between this conversation's isolated compute environment and its authorized persistent desktop environment. The filesystems are separate even when paths have the same spelling. Does not publish a downloadable artifact or copy a directory. Maximum 32 MiB. Existing destination files are preserved unless overwrite is explicitly true.",
+	Description: "Copy one selected file between this conversation's isolated compute environment and its authorized persistent desktop environment. The filesystems are separate even when paths have the same spelling. Does not publish a downloadable artifact or copy a directory. Subject to the configured single-file transfer limit. Existing destination files are preserved unless overwrite is explicitly true.",
 	Parameters:  json.RawMessage(`{"type":"object","properties":{"source_environment":{"type":"string","enum":["compute","desktop"]},"source_path":{"type":"string","minLength":1,"maxLength":4096},"destination_environment":{"type":"string","enum":["compute","desktop"]},"destination_path":{"type":"string","minLength":1,"maxLength":4096},"overwrite":{"type":"boolean"}},"required":["source_environment","source_path","destination_environment","destination_path"],"additionalProperties":false}`),
 	Execution:   &agent.ToolExecution{},
 }
@@ -64,20 +67,39 @@ func (s *Server) copyWorkspaceFile(ctx context.Context, scope agent.RunScope, ar
 	if _, err := s.prepareToolScope(ctx, destination, bridge); err != nil {
 		return agent.ToolResult{}, err
 	}
-	status, _, data, err := bridge.Bridge(agent.WithRunScope(ctx, source), scope.UserID, http.MethodGet, "/file?path="+url.QueryEscape(input.SourcePath), nil)
-	if err != nil || status >= 400 {
-		return agent.ToolResult{}, bridgeError(status, data, err)
+	status, _, data, err := bridgeFile(agent.WithRunScope(ctx, source), bridge, scope.UserID, http.MethodGet, "/file?path="+url.QueryEscape(input.SourcePath), nil, 0)
+	if err != nil {
+		return agent.ToolResult{}, err
 	}
-	if len(data) > 32*1024*1024 {
-		return agent.ToolResult{}, errors.New("workspace file exceeds 32 MiB")
+	if status >= 400 {
+		_, err := bridgeReply(status, data, nil)
+		return agent.ToolResult{}, err
+	}
+	defer data.Close()
+	temp, err := os.CreateTemp("", "ochi-file-copy-")
+	if err != nil {
+		return agent.ToolResult{}, err
+	}
+	defer os.Remove(temp.Name())
+	defer temp.Close()
+	size, err := io.Copy(temp, io.LimitReader(data, filelimits.MaxFileBytes()+1))
+	if err != nil {
+		return agent.ToolResult{}, err
+	}
+	if size > filelimits.MaxFileBytes() {
+		return agent.ToolResult{}, errFileTooLarge
+	}
+	if _, err := temp.Seek(0, io.SeekStart); err != nil {
+		return agent.ToolResult{}, err
 	}
 	query := url.Values{"path": {input.DestinationPath}}
 	if !input.Overwrite {
 		query.Set("if_missing", "1")
 	}
-	status, _, body, err := bridge.Bridge(agent.WithRunScope(ctx, destination), scope.UserID, http.MethodPut, "/file?"+query.Encode(), data)
-	if err != nil || status >= 400 {
-		return agent.ToolResult{}, bridgeError(status, body, err)
+	status, _, response, err := bridgeFile(agent.WithRunScope(ctx, destination), bridge, scope.UserID, http.MethodPut, "/file?"+query.Encode(), temp, size)
+	body, err := bridgeReply(status, response, err)
+	if err != nil {
+		return agent.ToolResult{}, err
 	}
 	var result map[string]any
 	if json.Unmarshal(body, &result) != nil || result == nil {

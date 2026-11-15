@@ -1,6 +1,6 @@
 {
   "protocol": 1,
-  "revision": 4,
+  "revision": 5,
   "capabilities": [
     "plugin-control",
     "public-catalog",
@@ -9,7 +9,9 @@
     "skill-readiness",
     "owned-jobs",
     "activity-lifecycle",
-    "explicit-execution-targets"
+    "explicit-execution-targets",
+    "streaming-files",
+    "bounded-file-previews"
   ],
   "modes": [
     "control",

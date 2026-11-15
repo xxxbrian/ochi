@@ -11,10 +11,11 @@ import os
 import signal
 import struct
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 DATA_ROOT = Path(os.environ.get("WORKSPACE_DATA", "/data"))
 COMPUTE_ONLY = os.environ.get("COMPUTE_ONLY") == "1"
@@ -22,7 +23,23 @@ FILES_ROOT = DATA_ROOT / "files"
 SCREENSHOT_ROOT = FILES_ROOT / "screenshots"
 DISPLAY_SIZE = (1280, 800)
 MAX_BODY_BYTES = 8 * 1024 * 1024
-MAX_FILE_BYTES = 32 * 1024 * 1024
+try:
+    configured_file_bytes = os.environ.get("OCHI_MAX_FILE_BYTES", str(1 << 30))
+    decimal_file_bytes = configured_file_bytes.removeprefix("+")
+    if not decimal_file_bytes.isascii() or not decimal_file_bytes.isdecimal():
+        raise ValueError()
+    MAX_FILE_BYTES = int(configured_file_bytes)
+    if not 0 < MAX_FILE_BYTES <= (1 << 63) - 1 - (1 << 20):
+        raise ValueError()
+except ValueError:
+    MAX_FILE_BYTES = 1 << 30
+FILE_CHUNK_BYTES = 64 * 1024
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+MAX_IMAGE_PIXELS = 64 * 1024 * 1024
+MAX_PREVIEW_BYTES = 256 * 1024
+MAX_PREVIEW_CHARS = 64_000
+MAX_DOCUMENT_BYTES = 32 * 1024 * 1024
+MAX_DOCUMENT_XML_BYTES = 8 * 1024 * 1024
 MAX_OUTPUT_CHARS = 20_000
 MAX_TEXT_CHARS = 24_000
 RUN_SCOPE: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar("run_scope", default={})
@@ -101,6 +118,45 @@ def _file_metadata(path: Path) -> dict[str, Any]:
             "modified_at": stat.st_mtime}
 
 
+def _file_digest(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while chunk := source.read(FILE_CHUNK_BYTES):
+            digest.update(chunk)
+    return digest.hexdigest()[:20]
+
+
+def _stage_file(source: BinaryIO, directory: Path, *, expected_bytes: int | None = None) -> tuple[Path, int, str]:
+    if expected_bytes is not None and not 0 <= expected_bytes <= MAX_FILE_BYTES:
+        raise ValueError("file exceeds the configured transfer limit")
+    directory.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=directory, prefix=".ochi-transfer-", delete=False) as target:
+            temporary = Path(target.name)
+            size = 0
+            digest = hashlib.sha256()
+            while expected_bytes is None or size < expected_bytes:
+                wanted = min(FILE_CHUNK_BYTES, MAX_FILE_BYTES - size + 1)
+                if expected_bytes is not None:
+                    wanted = min(wanted, expected_bytes - size)
+                chunk = source.read(wanted)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > MAX_FILE_BYTES:
+                    raise ValueError("file exceeds the configured transfer limit")
+                target.write(chunk)
+                digest.update(chunk)
+            if expected_bytes is not None and size != expected_bytes:
+                raise ValueError("incomplete file transfer")
+        return temporary, size, digest.hexdigest()[:20]
+    except BaseException:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+
+
 def _publish_file(path: Any) -> dict[str, Any]:
     scope = RUN_SCOPE.get()
     if not scope.get("run_id"):
@@ -108,16 +164,20 @@ def _publish_file(path: Any) -> dict[str, Any]:
     source = _safe_relative(path)
     if not source.is_file():
         raise FileNotFoundError("file does not exist")
-    raw = source.read_bytes()
-    if len(raw) > MAX_FILE_BYTES:
-        raise ValueError("file exceeds 32 MB")
-    digest = hashlib.sha256(raw).hexdigest()[:20]
-    target = DATA_ROOT / "published" / scope["run_id"] / digest / source.name
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if not target.exists():
-        temp = target.with_suffix(target.suffix + ".tmp")
-        temp.write_bytes(raw)
-        os.replace(temp, target)
+    if source.stat().st_size > MAX_FILE_BYTES:
+        raise ValueError("file exceeds the configured transfer limit")
+    directory = DATA_ROOT / "published" / scope["run_id"]
+    with source.open("rb") as handle:
+        temporary, _, digest = _stage_file(handle, directory)
+    try:
+        target = directory / digest / source.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(temporary, target)
+        except FileExistsError:
+            pass
+    finally:
+        temporary.unlink(missing_ok=True)
     return {**_file_metadata(target), "source_path": str(source)}
 
 
@@ -194,17 +254,19 @@ def _run_command(argv: list[str], timeout_ms: int = 20_000, *, cwd: Path | None 
 
 
 def _image_result(path: Path, *, coordinate_space: str = "1280x800") -> dict[str, Any]:
-    raw = path.read_bytes()
-    if len(raw) > MAX_FILE_BYTES:
-        raise ValueError("image exceeds 32 MB")
+    if path.stat().st_size > MAX_FILE_BYTES:
+        raise ValueError("image exceeds the configured transfer limit")
     mime_type = mimetypes.guess_type(path.name)[0] or "image/png"
     original_size = None
     try:
         from PIL import Image
         with Image.open(path) as image:
             width, height = image.size
+            if width * height > MAX_IMAGE_PIXELS:
+                raise ValueError("image dimensions exceed the preview budget; resize it with exec")
             if coordinate_space == "file":
                 original_size = image.size
+                image.draft("RGB", (1280, 1280))
                 image.thumbnail((1280, 1280))
                 if image.mode in {"RGBA", "LA"} or "transparency" in image.info:
                     rgba = image.convert("RGBA")
@@ -216,14 +278,21 @@ def _image_result(path: Path, *, coordinate_space: str = "1280x800") -> dict[str
                 preview.save(output, format="JPEG", quality=90)
                 raw, mime_type = output.getvalue(), "image/jpeg"
                 width, height = preview.size
+            else:
+                with path.open("rb") as handle:
+                    raw = handle.read(MAX_IMAGE_BYTES + 1)
     except ImportError:
-        width, height = struct.unpack(">II", raw[16:24]) if raw.startswith(b"\x89PNG") else (0, 0)
+        with path.open("rb") as handle:
+            raw = handle.read(MAX_IMAGE_BYTES + 1)
+        width, height = struct.unpack(">II", raw[16:24]) if len(raw) >= 24 and raw.startswith(b"\x89PNG") else (0, 0)
+    if len(raw) > MAX_IMAGE_BYTES:
+        raise ValueError("image exceeds the model preview budget; resize it with exec")
     return {
         "mime_type": mime_type,
         "data": base64.b64encode(raw).decode("ascii"),
         "width": width,
         "height": height,
-        "path": str(path.relative_to(DATA_ROOT)),
+        "path": str(path.resolve().relative_to(DATA_ROOT.resolve())),
         "coordinate_space": coordinate_space,
         **({"original_width": original_size[0], "original_height": original_size[1]} if original_size else {}),
     }

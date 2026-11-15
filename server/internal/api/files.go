@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,16 +11,54 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/filelimits"
 	"ochi/server/internal/i18n"
 	"ochi/server/internal/storage"
 )
 
 type bridgeSource interface {
 	Bridge(context.Context, string, string, string, []byte) (int, http.Header, []byte, error)
+}
+
+type streamingBridgeSource interface {
+	BridgeStream(context.Context, string, string, string, io.Reader, int64) (int, http.Header, io.ReadCloser, error)
+}
+
+func bridgeFile(ctx context.Context, bridge bridgeSource, userID, method, path string, body io.Reader, size int64) (int, http.Header, io.ReadCloser, error) {
+	stream, ok := bridge.(streamingBridgeSource)
+	if !ok {
+		return 0, nil, nil, errors.New("workspace file streaming is unavailable")
+	}
+	return stream.BridgeStream(ctx, userID, method, path, body, size)
+}
+
+func bridgeReply(status int, body io.ReadCloser, err error) ([]byte, error) {
+	if err != nil {
+		if body != nil {
+			body.Close()
+		}
+		return nil, err
+	}
+	if body == nil {
+		return nil, errors.New("workspace file response is missing")
+	}
+	defer body.Close()
+	data, readErr := io.ReadAll(io.LimitReader(body, filelimits.BridgeErrorBytes+1))
+	if readErr != nil {
+		return nil, readErr
+	}
+	if int64(len(data)) > filelimits.BridgeErrorBytes {
+		return nil, errors.New("workspace file response is too large")
+	}
+	if status >= 400 {
+		return nil, bridgeError(status, data, nil)
+	}
+	return data, nil
 }
 
 func (s *Server) bridgeSource() (bridgeSource, error) {
@@ -49,20 +89,14 @@ func (s *Server) registerFileRoutes(mux *http.ServeMux) {
 }
 
 func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 33*1024*1024)
-	if err := r.ParseMultipartForm(2 * 1024 * 1024); err != nil {
-		writeError(w, http.StatusBadRequest, i18n.New("payload_too_large"))
+	bodyLimit := filelimits.MaxFileBytes() + filelimits.MultipartOverheadBytes
+	if r.ContentLength > bodyLimit {
+		writeError(w, http.StatusRequestEntityTooLarge, i18n.New("payload_too_large"))
 		return
 	}
-	defer r.MultipartForm.RemoveAll()
-	file, header, err := r.FormFile("file")
+	r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
+	reader, err := r.MultipartReader()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, i18n.New("file_required"))
-		return
-	}
-	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, 32*1024*1024+1))
-	if err != nil || len(data) > 32*1024*1024 {
 		writeError(w, http.StatusBadRequest, i18n.New("payload_too_large"))
 		return
 	}
@@ -71,25 +105,61 @@ func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	name := filepath.Base(strings.ReplaceAll(header.Filename, "\\", "/"))
-	if name == "." || name == "" {
-		name = "attachment"
+	var upload storage.Artifact
+	saved := false
+	defer func() {
+		if !saved && upload.StorageKey != "" {
+			_ = os.Remove(filepath.Join(artifactsRoot(), upload.StorageKey))
+		}
+	}()
+	for {
+		part, partErr := reader.NextPart()
+		if partErr == io.EOF {
+			break
+		}
+		if partErr != nil {
+			writeError(w, http.StatusRequestEntityTooLarge, i18n.New("payload_too_large"))
+			return
+		}
+		if part.FormName() != "file" || part.FileName() == "" || upload.StorageKey != "" {
+			r.Body.Close()
+			writeError(w, http.StatusBadRequest, i18n.New("file_required"))
+			return
+		}
+		name := filepath.Base(strings.ReplaceAll(part.FileName(), "\\", "/"))
+		if name == "." || name == "" {
+			name = "attachment"
+		}
+		path := "/data/files/uploads/" + id + "/" + name
+		content := bufio.NewReader(part)
+		sample, _ := content.Peek(512)
+		mimeType := mime.TypeByExtension(filepath.Ext(name))
+		if mimeType == "" {
+			mimeType = http.DetectContentType(sample)
+		}
+		key, size, storeErr := storeArtifactStream(currentUser(r).ID, path, content)
+		if storeErr != nil {
+			r.Body.Close()
+			if errors.Is(storeErr, errFileTooLarge) || errors.As(storeErr, new(*http.MaxBytesError)) {
+				writeError(w, http.StatusRequestEntityTooLarge, i18n.New("payload_too_large"))
+			} else {
+				writeError(w, http.StatusBadRequest, storeErr)
+			}
+			return
+		}
+		part.Close()
+		upload = storage.Artifact{UserID: currentUser(r).ID, Name: name, Path: path, MIMEType: mimeType, Size: size, StorageKey: key}
 	}
-	path := "/data/files/uploads/" + id + "/" + name
-	key, err := storeArtifactBytes(currentUser(r).ID, path, data)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
+	if upload.StorageKey == "" {
+		writeError(w, http.StatusBadRequest, i18n.New("file_required"))
 		return
 	}
-	mimeType := mime.TypeByExtension(filepath.Ext(name))
-	if mimeType == "" {
-		mimeType = http.DetectContentType(data)
-	}
-	item, err := s.store.SaveArtifact(r.Context(), storage.Artifact{UserID: currentUser(r).ID, Name: name, Path: path, MIMEType: mimeType, Size: int64(len(data)), StorageKey: key})
+	item, err := s.store.SaveArtifact(r.Context(), upload)
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
+	saved = true
 	writeJSON(w, http.StatusCreated, item)
 }
 
@@ -108,9 +178,19 @@ func (s *Server) fileContent(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, err)
 		return
 	}
-	data, err := artifactBytes(item)
+	file, err := openArtifact(item)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	if info.Size() > filelimits.MaxFileBytes() {
+		writeError(w, http.StatusRequestEntityTooLarge, i18n.New("payload_too_large"))
 		return
 	}
 	mimeType := item.MIMEType
@@ -126,9 +206,35 @@ func (s *Server) fileContent(w http.ResponseWriter, r *http.Request) {
 		disposition = "attachment"
 	}
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": item.Name}))
-	w.Header().Set("Content-Length", fmt.Sprint(len(data)))
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	http.ServeContent(w, r, item.Name, info.ModTime(), file)
+}
+
+// Large images remain file references; the model can request a bounded preview.
+func (s *Server) prepareAttachmentImages(ctx context.Context, userID string, attachments []agent.Attachment) error {
+	var total int64
+	for i := range attachments {
+		item := &attachments[i]
+		if !strings.HasPrefix(item.MIMEType, "image/") || item.MIMEType == "image/svg+xml" || item.Size > filelimits.ModelImageBytes || total+item.Size > filelimits.ModelImagesBytes {
+			continue
+		}
+		file, err := s.store.GetArtifact(ctx, userID, item.ID)
+		if err != nil {
+			return err
+		}
+		data, err := artifactBytesLimited(file, filelimits.ModelImageBytes)
+		if errors.Is(err, errFileTooLarge) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if total+int64(len(data)) > filelimits.ModelImagesBytes {
+			continue
+		}
+		total += int64(len(data))
+		item.DataURL = "data:" + item.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(data)
+	}
+	return nil
 }
 
 func (s *Server) attachmentsForRun(ctx context.Context, userID, sessionID string, ids []string) ([]agent.Attachment, error) {
@@ -165,14 +271,21 @@ func (s *Server) publishArtifact(ctx context.Context, userID, sessionID, runID, 
 		return v, err
 	}
 	v.UserID, v.SessionID, v.RunID = userID, sessionID, runID
-	status, _, data, err := bridge.Bridge(ctx, userID, http.MethodGet, "/file?path="+url.QueryEscape(v.Path), nil)
-	if err != nil || status >= 400 {
-		return v, bridgeError(status, data, err)
-	}
-	v.StorageKey, err = storeArtifactBytes(userID, v.Path, data)
+	status, _, data, err := bridgeFile(ctx, bridge, userID, http.MethodGet, "/file?path="+url.QueryEscape(v.Path), nil, 0)
 	if err != nil {
 		return v, err
 	}
+	if status >= 400 {
+		_, err = bridgeReply(status, data, nil)
+		return v, err
+	}
+	defer data.Close()
+	var size int64
+	v.StorageKey, size, err = storeArtifactStream(userID, v.Path, data)
+	if err != nil {
+		return v, err
+	}
+	v.Size = size
 	return s.store.SaveArtifact(ctx, v)
 }
 

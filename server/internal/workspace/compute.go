@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/filelimits"
 )
 
 func computeContainer(userID, sessionID string) string {
@@ -77,7 +79,7 @@ func (d *Docker) ensureComputeLocked(ctx context.Context, userID, sessionID stri
 		if err != nil {
 			return "", err
 		}
-		env := []string{"COMPUTE_ONLY=1", "OCHI_BRIDGE_TOKEN=" + token}
+		env := []string{"COMPUTE_ONLY=1", "OCHI_BRIDGE_TOKEN=" + token, "OCHI_MAX_FILE_BYTES=" + strconv.FormatInt(filelimits.MaxFileBytes(), 10)}
 		container := map[string]any{
 			"Image": d.config.Image, "User": "root", "Env": env,
 			"Labels": map[string]string{"app": "ochi", "scope": "compute", "session": sessionID},

@@ -12,7 +12,6 @@ import base64
 import asyncio
 import contextlib
 import contextvars
-import hashlib
 import io
 import json
 import mimetypes
@@ -27,11 +26,10 @@ import uuid
 import struct
 import signal
 import shutil
-import tempfile
+import sys
 import tarfile
 import urllib.request
 import urllib.parse
-import zipfile
 from html.parser import HTMLParser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -39,10 +37,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 from workspace_runtime import (COMPUTE_ONLY, DATA_ROOT, FILES_ROOT, SCREENSHOT_ROOT,
-    DISPLAY_SIZE, MAX_BODY_BYTES, MAX_FILE_BYTES, MAX_OUTPUT_CHARS, MAX_TEXT_CHARS,
+    DISPLAY_SIZE, FILE_CHUNK_BYTES, MAX_BODY_BYTES, MAX_FILE_BYTES, MAX_OUTPUT_CHARS, MAX_TEXT_CHARS,
+    MAX_PREVIEW_BYTES, MAX_PREVIEW_CHARS, MAX_DOCUMENT_BYTES,
     RUN_SCOPE, _clamp_int, _truncate, _json_error, _execution_environment, _scope_cwd,
     _safe_relative, _safe_cwd, _file_metadata,
-    _publish_file, _cancel_run, _interrupt_operation, _workspace_env,
+    _publish_file, _stage_file, _file_digest, _cancel_run, _interrupt_operation, _workspace_env,
     _run_command, _image_result)
 from workspace_extensions import EXTENSIONS_ROOT, EXTENSIONS_LOCK, _extension_id, _load_extensions, _save_extensions
 from workspace_control import CONTROL_ONLY, authorize_control
@@ -106,37 +105,33 @@ def tool_files_read(args: dict[str, Any]) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError("file does not exist")
     mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    metadata = _file_metadata(path)
     if mime_type.startswith("image/"):
-        if mime_type == "image/svg+xml":
-            text, truncated = _truncate(path.read_text(encoding="utf-8"), 60_000)
-            return {**_file_metadata(path), "content": text, "truncated": truncated}
-        return {**_file_metadata(path), "image": _image_result(path, coordinate_space="file")}
-    if path.suffix.lower() == ".pdf":
-        from pypdf import PdfReader
-        reader = PdfReader(path)
-        max_pages = _clamp_int(args.get("max_pages"), 30, 1, 100)
-        text = "\n\n".join(f"[Page {index + 1}]\n{page.extract_text() or ''}" for index, page in enumerate(reader.pages[:max_pages]))
-        text, truncated = _truncate(text, _clamp_int(args.get("max_chars"), 60_000, 1, 200_000))
-        return {**_file_metadata(path), "content": text, "pages": len(reader.pages), "truncated": truncated or len(reader.pages) > max_pages}
-    if path.suffix.lower() in {".docx", ".xlsx", ".pptx"}:
-        import xml.etree.ElementTree as ET
-        with zipfile.ZipFile(path) as archive:
-            suffix = path.suffix.lower()
-            names = ["word/document.xml"] if suffix == ".docx" else sorted(name for name in archive.namelist() if (suffix == ".pptx" and re.fullmatch(r"ppt/slides/slide\d+\.xml", name)) or (suffix == ".xlsx" and (name == "xl/sharedStrings.xml" or re.fullmatch(r"xl/worksheets/sheet\d+\.xml", name))))
-            blocks = []
-            for name in names[:100]:
-                if archive.getinfo(name).file_size > MAX_FILE_BYTES:
-                    continue
-                root = ET.fromstring(archive.read(name))
-                blocks.append("\n".join(node.text for node in root.iter() if node.tag.rsplit("}", 1)[-1] in {"t", "v"} and node.text))
-        text, truncated = _truncate("\n\n".join(blocks), _clamp_int(args.get("max_chars"), 60_000, 1, 200_000))
-        return {**_file_metadata(path), "content": text, "truncated": truncated, "extraction": "text only; use Python libraries for tables, formulas or layout"}
-    max_bytes = _clamp_int(args.get("max_bytes"), 1_000_000, 1, 2_000_000)
+        if mime_type != "image/svg+xml":
+            return {**metadata, "image": _image_result(path, coordinate_space="file")}
+    if path.suffix.lower() in {".pdf", ".docx", ".xlsx", ".pptx"}:
+        if path.stat().st_size > MAX_DOCUMENT_BYTES:
+            return {**metadata, "content": "", "truncated": True, "extraction": "Document exceeds the automatic preview input budget; use exec for targeted analysis."}
+        try:
+            result = subprocess.run(
+                [sys.executable, "-B", str(Path(__file__).with_name("workspace_document_preview.py")), str(path),
+                 str(_clamp_int(args.get("max_chars"), MAX_TEXT_CHARS, 1, MAX_PREVIEW_CHARS)),
+                 str(_clamp_int(args.get("max_pages"), 30, 1, 100))],
+                capture_output=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                check=False, timeout=15)
+            if result.returncode or len(result.stdout) > 1_000_000:
+                raise ValueError("document preview budget exceeded")
+            preview = json.loads(result.stdout)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            preview = {"content": "", "truncated": True, "extraction": "Automatic text extraction could not finish within the preview budget; use exec for targeted analysis."}
+        return {**metadata, **preview}
+    max_bytes = _clamp_int(args.get("max_bytes"), 64_000, 1, MAX_PREVIEW_BYTES)
     with path.open("rb") as handle:
         data = handle.read(max_bytes + 1)
-    truncated = len(data) > max_bytes
     text = data[:max_bytes].decode("utf-8", errors="replace")
-    return {**_file_metadata(path), "content": text, "bytes": path.stat().st_size, "truncated": truncated}
+    chars = _clamp_int(args.get("max_chars"), MAX_TEXT_CHARS, 1, MAX_PREVIEW_CHARS)
+    text, clipped = _truncate(text, chars)
+    return {**metadata, "content": text, "bytes": metadata["size"], "sampled_bytes": min(len(data), max_bytes), "truncated": len(data) > max_bytes or clipped}
 
 
 def tool_files_write(args: dict[str, Any]) -> dict[str, Any]:
@@ -182,7 +177,7 @@ class _PageText(HTMLParser):
             self.in_title = False
         if tag == "a" and self.anchor:
             if self.anchor["url"] and len(self.links) < 80:
-                self.links.append(self.anchor)
+                self.links.append({"url": self.anchor["url"][:2048], "text": self.anchor["text"][:256]})
             self.anchor = None
 
     def handle_data(self, data: str) -> None:
@@ -200,35 +195,45 @@ def tool_web_fetch(args: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("url must be http or https")
     request = urllib.request.Request(url, headers={"User-Agent": "Ochi/0.1.0"})
     with urllib.request.urlopen(request, timeout=30) as response:
-        raw = response.read(MAX_FILE_BYTES + 1)
         mime = response.headers.get_content_type()
         charset = response.headers.get_content_charset() or "utf-8"
         final_url = response.url
         status = response.status
-    if len(raw) > MAX_FILE_BYTES:
-        raise ValueError("download exceeds 32 MB; use exec for larger files")
-    saved = None
-    if args.get("path"):
-        path = _safe_relative(args["path"])
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(raw)
-        saved = _file_metadata(path)
+        filename = Path(urllib.parse.unquote(urllib.parse.urlsplit(final_url).path)).name or "download.bin"
+        path = _safe_relative(args["path"]) if args.get("path") else _scope_cwd() / "downloads" / f"{uuid.uuid4().hex[:8]}-{filename}"
+        length = response.headers.get("Content-Length")
+        expected = int(length) if length and length.isdecimal() else None
+        temporary, _, _ = _stage_file(response, path.parent, expected_bytes=expected)
+        try:
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    saved = _file_metadata(path)
+    raw = b""
+    if mime.startswith("text/") or mime in {"application/json", "application/xml"}:
+        with path.open("rb") as handle:
+            raw = handle.read(MAX_PREVIEW_BYTES + 1)
+    sampled = saved["size"] > MAX_PREVIEW_BYTES
+    raw = raw[:MAX_PREVIEW_BYTES]
+    chars = _clamp_int(args.get("max_chars"), MAX_TEXT_CHARS, 1_000, MAX_PREVIEW_CHARS)
     if mime == "text/html":
         parser = _PageText()
         parser.feed(raw.decode(charset, errors="replace"))
         text = re.sub(r"[ \t]+", " ", "".join(parser.parts))
         text = re.sub(r"\n\s*\n+", "\n\n", text).strip()
-        text, truncated = _truncate(text, _clamp_int(args.get("max_chars"), 30_000, 1_000, 100_000))
-        return {"url": final_url, "status": status, "mime_type": mime, "title": parser.title.strip(), "text": text, "links": [{**link, "url": urllib.parse.urljoin(final_url, link["url"])} for link in parser.links], "truncated": truncated, "file": saved}
+        text, truncated = _truncate(text, chars)
+        links = []
+        link_chars = 0
+        for link in parser.links:
+            link = {**link, "url": urllib.parse.urljoin(final_url, link["url"])[:2048]}
+            link_chars += len(link["url"]) + len(link["text"])
+            if link_chars > 8_000:
+                break
+            links.append(link)
+        return {"url": final_url, "status": status, "mime_type": mime, "title": parser.title.strip()[:500], "text": text, "links": links, "truncated": truncated or sampled, "sampled_bytes": len(raw), "file": saved}
     if mime.startswith("text/") or mime in {"application/json", "application/xml"}:
-        text, truncated = _truncate(raw.decode(charset, errors="replace"), _clamp_int(args.get("max_chars"), 30_000, 1_000, 100_000))
-        return {"url": final_url, "status": status, "mime_type": mime, "text": text, "truncated": truncated, "file": saved}
-    if not saved:
-        filename = Path(urllib.parse.unquote(urllib.parse.urlsplit(final_url).path)).name or "download.bin"
-        path = _scope_cwd() / "downloads" / f"{uuid.uuid4().hex[:8]}-{filename}"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(raw)
-        saved = _file_metadata(path)
+        text, truncated = _truncate(raw.decode(charset, errors="replace"), chars)
+        return {"url": final_url, "status": status, "mime_type": mime, "text": text, "truncated": truncated or sampled, "sampled_bytes": len(raw), "file": saved}
     return {"url": final_url, "status": status, "mime_type": mime, "file": saved}
 
 
@@ -440,6 +445,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not path.is_file():
                     raise FileNotFoundError("file not found")
                 metadata = _file_metadata(path)
+                if metadata["size"] > MAX_FILE_BYTES:
+                    raise ValueError("file exceeds the configured transfer limit")
                 self.send_response(HTTPStatus.OK)
                 self.send_header("Content-Type", metadata["mime_type"])
                 self.send_header("Content-Length", str(metadata["size"]))
@@ -448,10 +455,18 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Cache-Control", "private, no-store")
                 self.end_headers()
                 with path.open("rb") as handle:
-                    shutil.copyfileobj(handle, self.wfile)
+                    remaining = metadata["size"]
+                    while remaining:
+                        chunk = handle.read(min(FILE_CHUNK_BYTES, remaining))
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        remaining -= len(chunk)
                 return
         except FileNotFoundError as exc:
             self._write(_json_error(str(exc)), HTTPStatus.NOT_FOUND)
+            return
+        except (BrokenPipeError, ConnectionResetError):
             return
         except Exception as exc:
             self._write(_json_error(str(exc)), HTTPStatus.BAD_REQUEST)
@@ -554,27 +569,36 @@ class Handler(BaseHTTPRequestHandler):
             self._write(_json_error("not found"), HTTPStatus.NOT_FOUND)
             return
         try:
-            raw = self._read_body(MAX_FILE_BYTES)
+            if self.headers.get("Transfer-Encoding"):
+                raise ValueError("file transfers require Content-Length")
+            if self.headers.get("Content-Length") is None:
+                raise ValueError("file transfers require Content-Length")
+            length = int(self.headers["Content-Length"])
             path = _safe_relative(query.get("path"))
-            path.parent.mkdir(parents=True, exist_ok=True)
-            written = False
-            if query.get("if_digest") is not None:
-                expected = set(query["if_digest"].split(","))
-                latest = hashlib.sha256(raw).hexdigest()[:20]
-                current = hashlib.sha256(path.read_bytes()).hexdigest()[:20] if path.exists() else ""
-                if current and current != latest and current not in expected:
-                    self._write({**_file_metadata(path), "source_conflict": True, "written": False}, HTTPStatus.OK)
-                    return
-                if current != latest:
-                    with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as temp:
-                        temp.write(raw)
-                        temporary = Path(temp.name)
+            temporary, _, latest = _stage_file(self.rfile, path.parent, expected_bytes=length)
+            try:
+                written = False
+                if query.get("if_digest") is not None:
+                    expected = set(query["if_digest"].split(","))
+                    current = _file_digest(path) if path.exists() else ""
+                    if current and current != latest and current not in expected:
+                        self._write({**_file_metadata(path), "source_conflict": True, "written": False}, HTTPStatus.OK)
+                        return
+                    if current != latest:
+                        os.replace(temporary, path)
+                        written = True
+                elif query.get("if_missing") == "1":
+                    try:
+                        os.link(temporary, path)
+                        written = True
+                    except FileExistsError:
+                        pass
+                else:
                     os.replace(temporary, path)
                     written = True
-            elif query.get("if_missing") != "1" or not path.exists():
-                path.write_bytes(raw)
-                written = True
-            self._write({**_file_metadata(path), "source_conflict": False, "written": written}, HTTPStatus.CREATED)
+                self._write({**_file_metadata(path), "source_conflict": False, "written": written}, HTTPStatus.CREATED)
+            finally:
+                temporary.unlink(missing_ok=True)
         except Exception as exc:
             self._write(_json_error(str(exc)), HTTPStatus.BAD_REQUEST)
 

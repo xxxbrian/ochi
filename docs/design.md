@@ -66,6 +66,10 @@ cancels the old composer's uploads. Normal and mixed clipboard text retains its
 native insertion and selection. Attachments never submit a message by themselves.
 Folder drops are excluded; users select individual files.
 
+File transfer and model previews have separate limits. A large attachment stays
+a file rather than becoming an unbounded text or image prompt. Transfer errors
+describe the server's configured limit instead of assuming a fixed client cap.
+
 Thinking and tool calls follow a linear process timeline: a header (indicator
 plus one rolling label for thinking, the running tool and its subject, waiting,
 replying, or the settled summary) above a rail of rows. Interim replies are not

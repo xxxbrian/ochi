@@ -280,6 +280,25 @@ upload/timeouts for intended use. Do not expose PostgreSQL, Docker, bridge, CDP
 or VNC ports publicly. The Docker socket remains a private server capability;
 the application and its workspaces use the same single Docker Engine.
 
+### File Transfer Capacity
+
+`OCHI_MAX_FILE_BYTES` sets the maximum bytes in a single uploaded, downloaded or
+workspace-transferred file. It defaults to `1073741824` (1 GiB); a positive
+decimal value can raise or lower it. Invalid or overflowing values use the
+default. Compose passes it to the API, which supplies it when creating workspace
+and compute containers. Restart the API and explicitly rebuild existing
+workspaces to apply a changed value consistently.
+
+Configure the reverse proxy for at least that limit plus 1 MiB of multipart
+framing. Stream request and response bodies rather than accumulating them in
+memory, and allow upload/download timeouts appropriate to the intended bandwidth.
+An upstream proxy or CDN may impose a lower body limit; raising Ochi's setting
+does not change it. No extra JSON or header allowance is needed.
+
+This is a byte-transfer setting, not a context limit. Text/image previews,
+document extraction, image generation references and Skills retain their own
+bounded budgets. Large files stay on disk for explicit analysis.
+
 ## Persistent Data
 
 The named database volume holds PostgreSQL; the artifacts volume holds immutable

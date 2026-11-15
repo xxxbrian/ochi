@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/filelimits"
 	"ochi/server/internal/i18n"
 	"ochi/server/internal/storage"
 )
@@ -104,13 +105,18 @@ func (s *Server) generateImageTool(ctx context.Context, scope agent.RunScope, ar
 		if err != nil {
 			return agent.ToolResult{}, i18n.New("reference_image_unavailable")
 		}
+		var total int64
 		for _, file := range items {
-			if !strings.HasPrefix(file.MIMEType, "image/") || file.Size > 32<<20 {
+			if !strings.HasPrefix(file.MIMEType, "image/") || file.Size > filelimits.ImageReferenceBytes || total+file.Size > filelimits.ImageReferencesBytes {
 				return agent.ToolResult{}, i18n.New("reference_image_invalid")
 			}
-			data, err := artifactBytes(file)
+			data, err := artifactBytesLimited(file, filelimits.ImageReferenceBytes)
 			if err != nil {
 				return agent.ToolResult{}, i18n.New("reference_image_read_failed")
+			}
+			total += int64(len(data))
+			if total > filelimits.ImageReferencesBytes {
+				return agent.ToolResult{}, i18n.New("reference_image_invalid")
 			}
 			options.Images = append(options.Images, agent.ImageInput{Name: file.Name, MIMEType: file.MIMEType, Data: data})
 		}

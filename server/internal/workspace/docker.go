@@ -14,11 +14,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"ochi/server/internal/agent"
+	"ochi/server/internal/filelimits"
 )
 
 //go:embed tools.json
@@ -64,10 +66,12 @@ func NewDocker(config Config) *Docker {
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", config.Socket)
 	}}
+	bridgeTransport := http.DefaultTransport.(*http.Transport).Clone()
+	bridgeTransport.ResponseHeaderTimeout = 30 * time.Second
 	return &Docker{
 		config: config,
 		engine: &http.Client{Transport: transport, Timeout: 30 * time.Second},
-		bridge: &http.Client{Timeout: 11 * time.Minute},
+		bridge: &http.Client{Transport: bridgeTransport, Timeout: 11 * time.Minute},
 		urls:   make(map[string]string),
 	}
 }
@@ -110,7 +114,7 @@ func (d *Docker) ensureWorkspaceLocked(ctx context.Context, userID string) (stri
 	}
 	if status == http.StatusNotFound {
 		control := userID == "__admin__"
-		env := []string{"EXTENSIONS_ROOT=/opt/extensions"}
+		env := []string{"EXTENSIONS_ROOT=/opt/extensions", "OCHI_MAX_FILE_BYTES=" + strconv.FormatInt(filelimits.MaxFileBytes(), 10)}
 		mounts := []map[string]any{
 			{"Type": "volume", "Source": name + "-data", "Target": "/data"},
 			{"Type": "volume", "Source": "ochi-plugin-assets", "Target": "/opt/extensions", "ReadOnly": !control},
@@ -240,40 +244,87 @@ func (d *Docker) Definitions(ctx context.Context, userID string) ([]agent.ToolDe
 	return append(definitions, d.extensionDefinitions(ctx, userID)...), nil
 }
 
-// Bridge is private server-to-container I/O, shared by uploads and admin tools.
+// Bridge is bounded private control I/O; raw files use BridgeStream.
 func (d *Docker) Bridge(ctx context.Context, userID, method, path string, data []byte) (int, http.Header, []byte, error) {
+	if strings.HasPrefix(path, "/file?") {
+		return 0, nil, nil, errors.New("workspace files require streaming I/O")
+	}
+	status, header, response, err := d.bridgeRequest(ctx, userID, method, path, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return status, header, nil, err
+	}
+	defer response.Close()
+	body, err := io.ReadAll(io.LimitReader(response, filelimits.BridgeResponseBytes+1))
+	if err == nil && int64(len(body)) > filelimits.BridgeResponseBytes {
+		err = errors.New("workspace response is too large")
+	}
+	return status, header, body, err
+}
+
+// BridgeStream keeps the workspace borrowed until the response body closes.
+func (d *Docker) BridgeStream(ctx context.Context, userID, method, path string, body io.Reader, size int64) (int, http.Header, io.ReadCloser, error) {
+	if !strings.HasPrefix(path, "/file?") {
+		return 0, nil, nil, errors.New("streaming I/O is restricted to workspace files")
+	}
+	if size < 0 || size > filelimits.MaxFileBytes() {
+		return 0, nil, nil, errors.New("workspace file exceeds the configured transfer limit")
+	}
+	status, header, response, err := d.bridgeRequest(ctx, userID, method, path, body, size)
+	if err != nil {
+		return status, header, nil, err
+	}
+	if status < 400 && method == http.MethodGet {
+		if length, parseErr := strconv.ParseInt(header.Get("Content-Length"), 10, 64); parseErr == nil && length > filelimits.MaxFileBytes() {
+			response.Close()
+			return status, header, nil, errors.New("workspace file exceeds the configured transfer limit")
+		}
+	}
+	return status, header, response, nil
+}
+
+type borrowedBody struct {
+	io.ReadCloser
+	release func()
+	once    sync.Once
+}
+
+func (b *borrowedBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.once.Do(b.release)
+	return err
+}
+
+func (d *Docker) bridgeRequest(ctx context.Context, userID, method, path string, body io.Reader, size int64) (int, http.Header, io.ReadCloser, error) {
 	address, release, err := d.borrow(ctx, userID)
 	if err != nil {
 		return 0, nil, nil, err
 	}
-	defer release()
-	req, err := http.NewRequestWithContext(ctx, method, address+path, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, method, address+path, body)
 	if err != nil {
+		release()
 		return 0, nil, nil, err
 	}
+	req.ContentLength = size
 	req.Header.Set("Content-Type", "application/octet-stream")
 	setScopeHeaders(req, ctx)
 	d.setBridgeAuth(req, userID)
 	if strings.HasPrefix(path, "/extensions/") {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := d.bridge.Do(req)
+	client := d.bridge
+	if strings.HasPrefix(path, "/file?") {
+		// File duration follows the caller's cancellation, not the small control
+		// request deadline. Response headers still have a transport timeout.
+		streamClient := *d.bridge
+		streamClient.Timeout = 0
+		client = &streamClient
+	}
+	resp, err := client.Do(req)
 	if err != nil {
+		release()
 		return 0, nil, nil, err
 	}
-	defer resp.Body.Close()
-	limit := int64(34 * 1024 * 1024)
-	if strings.HasPrefix(path, "/file?") {
-		limit = 32 * 1024 * 1024
-	}
-	if resp.ContentLength > limit {
-		return resp.StatusCode, resp.Header.Clone(), nil, errors.New("workspace file exceeds 32 MB")
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
-	if err == nil && int64(len(body)) > limit {
-		err = errors.New("workspace response is too large")
-	}
-	return resp.StatusCode, resp.Header.Clone(), body, err
+	return resp.StatusCode, resp.Header.Clone(), &borrowedBody{ReadCloser: resp.Body, release: release}, nil
 }
 
 type State struct {

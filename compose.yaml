@@ -38,6 +38,7 @@ services:
       COMPUTE_NETWORK: ochi-compute
       ARTIFACTS_ROOT: /var/lib/ochi/artifacts
       OCHI_UPDATE_URL: ${OCHI_UPDATE_URL:-}
+      OCHI_MAX_FILE_BYTES: ${OCHI_MAX_FILE_BYTES:-1073741824}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - artifacts:/var/lib/ochi/artifacts

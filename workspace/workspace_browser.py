@@ -21,9 +21,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from workspace_runtime import (CANCELLED_RUNS, COMPUTE_ONLY, DATA_ROOT, DISPLAY_SIZE,
-    INTERRUPTED_OPERATIONS, MAX_TEXT_CHARS, PROCESS_LOCK, RUN_SCOPE,
+    INTERRUPTED_OPERATIONS, MAX_FILE_BYTES, MAX_TEXT_CHARS, PROCESS_LOCK, RUN_SCOPE,
     SCREENSHOT_ROOT, _clamp_int, _file_metadata, _image_result, _safe_relative,
-    _scope_cwd, _truncate)
+    _scope_cwd, _stage_file, _truncate)
 
 try:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -1203,6 +1203,8 @@ def tool_browser_upload(args: dict[str, Any]) -> dict[str, Any]:
     files = [_safe_relative(path) for path in paths]
     if any(not path.is_file() for path in files):
         raise ValueError("all upload paths must exist")
+    if any(path.stat().st_size > MAX_FILE_BYTES for path in files):
+        raise ValueError("file exceeds the configured transfer limit")
 
     def run(state: BrowserRuntimeState) -> dict[str, Any]:
         tab_id, page = state.page(args.get("tab_id"))
@@ -1266,6 +1268,8 @@ def tool_browser_download(args: dict[str, Any]) -> dict[str, Any]:
                 while True:
                     _check_operation(RUN_SCOPE.get())
                     record = record or started_download()
+                    if record is not None and max(record.get("totalBytes", 0), record.get("receivedBytes", 0)) > MAX_FILE_BYTES:
+                        raise ValueError("download exceeds the configured transfer limit")
                     if record is not None and record.get("state") == "completed":
                         break
                     if record is not None and record.get("state") == "canceled":
@@ -1277,8 +1281,13 @@ def tool_browser_download(args: dict[str, Any]) -> dict[str, Any]:
                 # outlive the page. Copy only Chromium's proven-complete GUID.
                 _check_operation(RUN_SCOPE.get())
                 path = _safe_relative(args["path"]) if args.get("path") else _scope_cwd() / "downloads" / f"{uuid.uuid4().hex[:8]}-{Path(download.suggested_filename).name}"
-                path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(process.download_root / record["guid"], path)
+                source = process.download_root / record["guid"]
+                with source.open("rb") as handle:
+                    temporary, _, _ = _stage_file(handle, path.parent, expected_bytes=source.stat().st_size)
+                try:
+                    os.replace(temporary, path)
+                finally:
+                    temporary.unlink(missing_ok=True)
             finally:
                 try:
                     record = record or started_download()
