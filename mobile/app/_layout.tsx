@@ -11,6 +11,8 @@ import { Geist_400Regular } from '@expo-google-fonts/geist/400Regular';
 import { Geist_500Medium } from '@expo-google-fonts/geist/500Medium';
 import { Geist_600SemiBold } from '@expo-google-fonts/geist/600SemiBold';
 import { AppProvider, useApp } from '../src/providers/AppProvider';
+import { ClientReleaseProvider } from '../src/providers/ClientReleaseProvider';
+import { ClientUpdateNotice } from '../src/components/ClientUpdateNotice';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -49,7 +51,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
-          <AppProvider><Navigation /></AppProvider>
+          <AppProvider><ClientReleaseProvider><Navigation /><ClientUpdateNotice /></ClientReleaseProvider></AppProvider>
         </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

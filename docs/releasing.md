@@ -81,6 +81,30 @@ AAB output is `mobile/android/app/build/outputs/bundle/release/app-release.aab`.
 APK supports direct installation without a Play publisher account. Publishing
 an AAB to Google Play requires the separate publisher setup.
 
+## Distribute Clients Through Ochi
+
+After building and accepting a signed standalone APK, open **Administration >
+System > Client downloads** and upload it with optional release notes. Ochi reads
+the application ID, version name and versionCode from the compiled manifest;
+it accepts `co.bojin.ochi` and requires a higher versionCode when replacing a
+different published APK. Re-uploading identical bytes can update the notes.
+The current package remains available until the replacement is validated.
+Removal unpublishes the package and deletes its server copy.
+
+Web's login and account menus expose the public downloads. Android checks its
+selected backend for newer versionCodes at startup/foreground, with throttling;
+Settings provides an immediate manual check. Downloading verifies the published
+size, SHA-256 and APK identity before offering the system installer. The user
+must allow this installation source and confirm the update. Keep using the same
+signing identity: metadata or checksum validation cannot make an incompatible
+signer an installable update. Installation is never silent.
+
+The iOS field accepts a credential-free HTTPS TestFlight invitation, App Store
+URL or owned download landing page. Clearing it removes the public destination.
+iOS does not install an IPA or poll for updates through this mechanism; its
+settings page opens the configured link after a user action. Configuring a
+TestFlight link does not upload a build or change its tester availability.
+
 ## Acceptance And Recordkeeping
 
 Archive accepted packages outside the checkout with checksums, app ID/version,

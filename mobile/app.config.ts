@@ -46,7 +46,7 @@ const config: ExpoConfig = {
     package: 'co.bojin.ochi',
     versionCode: 13,
     softwareKeyboardLayoutMode: 'resize',
-    permissions: ['CAMERA'],
+    permissions: ['CAMERA', 'REQUEST_INSTALL_PACKAGES'],
     adaptiveIcon: { foregroundImage: './assets/adaptive-icon.png', backgroundColor: '#313235' },
   },
   plugins: [

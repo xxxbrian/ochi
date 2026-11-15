@@ -7,6 +7,7 @@ import {
   Check,
   CircleUserRound,
   Contrast,
+  Download,
   LogOut,
   Languages,
   Monitor,
@@ -92,6 +93,11 @@ export function SettingsScreen() {
             icon={Puzzle}
             title={t("plugin.title")}
             onPress={() => router.push("/settings/plugins")}
+          />
+          <SettingRow
+            icon={Download}
+            title={t("updates.title")}
+            onPress={() => router.push("/settings/updates")}
             last
           />
         </Surface>
