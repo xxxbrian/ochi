@@ -20,9 +20,9 @@ export type MenuItem = {
   onPress: () => void; selected?: boolean; disabled?: boolean; danger?: boolean; separatorBefore?: boolean;
 };
 
-export function AnchoredMenu({ visible, onClose, anchor, items, width = 260, align = 'start', preview, preserveKeyboard = false }: {
+export function AnchoredMenu({ visible, onClose, anchor, items, width = 260, align = 'start', preview, heading, description, preserveKeyboard = false }: {
   visible: boolean; onClose: () => void; anchor: AnchorRect | null;
-  items: MenuItem[]; width?: number; align?: 'start' | 'end'; preview?: ReactNode; preserveKeyboard?: boolean;
+  items: MenuItem[]; width?: number; align?: 'start' | 'end'; preview?: ReactNode; heading?: string; description?: string; preserveKeyboard?: boolean;
 }) {
   useI18n();
   const { colors, fonts } = useTheme();
@@ -40,8 +40,9 @@ export function AnchoredMenu({ visible, onClose, anchor, items, width = 260, ali
   const rect = anchor ?? lastAnchor.current;
   const bounds = rect ?? { x: 0, y: 0, width: 0, height: 0 };
   const [measured, setMeasured] = useState({ key: '', height: 0 });
-  const contentKey = `${viewport.width}:${insets.left}:${insets.right}:${width}:${window.fontScale}:${items.map((item) => `${item.key}/${item.title ?? item.label}/${item.subtitle ?? ''}/${Boolean(item.separatorBefore)}`).join('|')}`;
-  const estimate = items.reduce((height, item) => height + (item.subtitle ? 62 : 46) + (item.separatorBefore ? 10 : 0), 12);
+  const contentKey = `${viewport.width}:${insets.left}:${insets.right}:${width}:${window.fontScale}:${heading ?? ''}:${description ?? ''}:${items.map((item) => `${item.key}/${item.title ?? item.label}/${item.subtitle ?? ''}/${Boolean(item.separatorBefore)}`).join('|')}`;
+  const descriptionLines = description ? description.split('\n').reduce((lines, text) => lines + Math.max(1, Math.ceil(text.length * 7 / Math.max(100, width - 40))), 0) : 0;
+  const estimate = items.reduce((height, item) => height + (item.subtitle ? 62 : 46) + (item.separatorBefore ? 10 : 0), 12) + (heading ? 40 : 0) + (description ? descriptionLines * 19 + 20 : 0);
   const layout = anchoredMenuLayout(viewport, insets, bounds, width, measured.key === contentKey ? measured.height : estimate, align, keyboardTop);
   const { left, top, width: menuWidth, height: menuHeight, safe } = layout;
   // Keep native glass ancestor alpha stable while its geometry springs into place.
@@ -109,6 +110,7 @@ export function AnchoredMenu({ visible, onClose, anchor, items, width = 260, ali
             onContentSizeChange={(_width, height) => {
               if (height > 0 && alive.current && presentation.current.visible && presentation.current.owner === owner) setMeasured((current) => current.key === contentKey && current.height === height ? current : { key: contentKey, height });
             }}>
+            {heading && <Text accessibilityRole="header" style={[styles.heading, { fontFamily: fonts.medium, color: colors.text }]}>{heading}</Text>}
             {items.map((item) => (
               <View key={item.key}>
                 {item.separatorBefore && <View style={[styles.separator, { backgroundColor: colors.border }]} />}
@@ -129,6 +131,7 @@ export function AnchoredMenu({ visible, onClose, anchor, items, width = 260, ali
                 </MenuPressable>
               </View>
             ))}
+            {description && <Text style={[styles.description, { fontFamily: fonts.regular, color: colors.muted }]}>{description}</Text>}
           </MenuScrollView>
         </GlassSurface>
       </Animated.View>
@@ -147,4 +150,6 @@ const styles = StyleSheet.create({
   position: { position: 'absolute', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: Platform.OS === 'ios' ? 0.14 : 0.18, shadowRadius: 24, elevation: 16 },
   menu: { overflow: 'hidden' }, items: { padding: 6 }, row: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   label: { flex: 1 }, subtitle: { fontSize: 13, marginTop: 3 }, separator: { height: StyleSheet.hairlineWidth, marginHorizontal: 10, marginVertical: 5 },
+  heading: { fontSize: 16, lineHeight: 22, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 6 },
+  description: { fontSize: 13, lineHeight: 19, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 12 },
 });

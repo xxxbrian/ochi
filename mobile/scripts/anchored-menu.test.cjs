@@ -32,6 +32,8 @@ function harness({ platform = 'android', composer = false, preserveKeyboard = tr
     draftKey: 'session-A', models: models(modelCount), modelId: 'model-0', effort: '', initialDraft: 'Keep this draft', computerEnabled: false,
     onModel(id) { calls.push({ kind: 'model', value: id }); props.modelId = id; dirty = true; },
     onEffort(value) { calls.push({ kind: 'effort', value }); props.effort = value; dirty = true; },
+    memoryEnabled: true, memoryGloballyEnabled: true, memoryFixed: false,
+    onMemory(enabled) { calls.push({ kind: 'memory', value: enabled }); props.memoryEnabled = enabled; dirty = true; },
     onComputer() {}, onStop() {}, onSubmit: async () => {},
   } : {
     visible: true, anchor: { x: 70, y: 450, width: 44, height: 40 }, preserveKeyboard,
@@ -177,7 +179,9 @@ function harness({ platform = 'android', composer = false, preserveKeyboard = tr
     flushMeasurements() { deferMeasurements = false; measurements.splice(0).forEach((callback) => callback(70, 450, 44, 40)); settle(); },
     resize(width, height, nextInsets) { Object.assign(dimensions, { width, height }); Object.assign(insets, nextInsets); render(); settle(); },
     tap(title) { const node = row(title); if (!node.props.disabled) node.props.onPress(); },
-    open(kind) { assert.ok(composer); find(composerTree, 'Pressable', (props) => props.accessibilityLabel?.startsWith(kind === 'model' ? '\u6a21\u578b ' : '\u601d\u8003\u7a0b\u5ea6 ')).props.onPress(); settle(); },
+    open(kind) { assert.ok(composer); find(composerTree, 'Pressable', (props) => kind === 'options'
+      ? props.accessibilityLabel === testI18n.native.t('chat.composerOptions')
+      : props.accessibilityLabel?.startsWith(kind === 'model' ? '\u6a21\u578b ' : '\u601d\u8003\u7a0b\u5ea6 ')).props.onPress(); settle(); },
     exit() { const animation = animations.findLast((item) => item.callback && !item.cancelled); assert.ok(animation, 'No pending exit animation'); return animation; },
     frame() { for (const [id, callback] of [...frames]) { frames.delete(id); callback(); } settle(); },
     unmount() { for (const owner of scopes.values()) owner.forEach((slot) => slot?.cleanup?.()); live = false; },
@@ -185,6 +189,89 @@ function harness({ platform = 'android', composer = false, preserveKeyboard = tr
 }
 
 for (const platform of ['android', 'ios']) {
+  test(`${platform}: the existing composer options switch conversation memory without changing the mounted input, draft, height or keyboard`, () => {
+    const h = harness({ platform, composer: true });
+    const original = find(h.composerTree, 'TextInput');
+    const rowCount = find(h.composerTree, 'GlassSurface').props.children.filter(Boolean).length;
+    h.open('options');
+    assert.equal(h.menuProps.preserveKeyboard, true);
+    h.tap(testI18n.native.t('sessionMemory.on')); h.settle(); h.exit().finish(); h.settle(); h.frame();
+    assert.equal(h.menuProps.heading, testI18n.native.t('sessionMemory.on'));
+    assert.equal(h.menuProps.items.length, 2);
+    assert.equal(h.menuProps.items[0].selected, true);
+    assert.ok(h.menuProps.description.includes(testI18n.native.t('sessionMemory.beforeSend')));
+    h.tap(testI18n.native.t('sessionMemory.disable')); h.settle(); h.exit().finish(); h.settle(); h.frame();
+    assert.deepEqual(h.calls, [{ kind: 'memory', value: false }]);
+    const input = find(h.composerTree, 'TextInput');
+    assert.equal(input.props.ref, original.props.ref);
+    assert.equal(input.props.value, original.props.value);
+    assert.equal(flattenStyle(input.props.style).height, flattenStyle(original.props.style).height);
+    assert.equal(find(h.composerTree, 'GlassSurface').props.children.filter(Boolean).length, rowCount);
+    h.open('options');
+    assert.ok(h.row(testI18n.native.t('sessionMemory.off')));
+    assert.equal(h.input.focused, true);
+    assert.deepEqual(h.keyboardCalls, []);
+    h.unmount();
+  });
+
+  test(`${platform}: an on choice with account memory off is labelled globally off and still allows explicit off`, () => {
+    const h = harness({ platform, composer: true });
+    h.render({ memoryGloballyEnabled: false }); h.settle();
+    h.open('options');
+    h.tap(testI18n.native.t('sessionMemory.globalOff')); h.settle(); h.exit().finish(); h.settle(); h.frame();
+    assert.equal(h.menuProps.heading, testI18n.native.t('sessionMemory.globalOff'));
+    assert.equal(h.menuProps.items[0].selected, true);
+    assert.equal(h.menuProps.items[1].disabled, false);
+    assert.ok(h.menuProps.description.includes(testI18n.native.t('sessionMemory.globalHint')));
+    assert.ok(!h.menuProps.description.includes(testI18n.native.t('sessionMemory.fixed')));
+    h.tap(testI18n.native.t('sessionMemory.disable')); h.settle(); h.exit().finish(); h.settle(); h.frame();
+    assert.equal(h.props.memoryEnabled, false);
+    assert.deepEqual(h.calls, [{ kind: 'memory', value: false }]);
+    h.unmount();
+  });
+
+  test(`${platform}: existing off and globally-off conversations expose full read-only localized state and no toggle rows`, () => {
+    for (const enabled of [false, true]) {
+      const h = harness({ platform, composer: true });
+      const original = find(h.composerTree, 'TextInput').props.ref;
+      h.render({ memoryEnabled: enabled, memoryGloballyEnabled: false, memoryFixed: true }); h.settle();
+      h.open('options');
+      h.tap(testI18n.native.t(enabled ? 'sessionMemory.globalOff' : 'sessionMemory.off')); h.settle(); h.exit().finish(); h.settle(); h.frame();
+      assert.equal(h.menuProps.items.length, 0);
+      for (const language of ['en', 'zh-TW', 'zh-CN']) {
+        testI18n.core.setLanguage(language); h.render(); h.settle();
+        assert.equal(h.menuProps.heading, testI18n.native.t(enabled ? 'sessionMemory.globalOff' : 'sessionMemory.off'));
+        assert.ok(h.menuProps.description.includes(testI18n.native.t('sessionMemory.fixed')));
+        assert.ok(h.menuProps.description.includes(testI18n.native.t(enabled ? 'sessionMemory.globalHint' : 'sessionMemory.offHint')));
+        assert.ok(find(h.tree, 'Text', (props) => props.children === h.menuProps.description));
+        assert.equal(find(h.composerTree, 'TextInput').props.ref, original);
+        assert.equal(find(h.composerTree, 'TextInput').props.value, 'Keep this draft');
+      }
+      assert.deepEqual(h.calls, []);
+      assert.equal(h.input.focused, true);
+      assert.deepEqual(h.keyboardCalls, []);
+      h.resize(852, 393, { top: 0, bottom: 21, left: 59, right: 59 });
+      assert.equal(h.menuProps.visible, false);
+      h.unmount();
+      testI18n.core.setLanguage('zh-CN');
+    }
+  });
+
+  test(`${platform}: a deferred memory selection cannot change another conversation's draft`, () => {
+    const h = harness({ platform, composer: true });
+    h.open('options');
+    h.tap(testI18n.native.t('sessionMemory.on')); h.settle(); h.exit().finish(); h.settle(); h.frame();
+    h.tap(testI18n.native.t('sessionMemory.disable')); h.settle();
+    const exit = h.exit();
+    h.render({ draftKey: 'session-B' }); h.settle();
+    exit.finish(); h.settle(); h.frame();
+    assert.deepEqual(h.calls, []);
+    assert.equal(h.props.memoryEnabled, true);
+    assert.equal(h.menuProps.visible, false);
+    assert.deepEqual(h.keyboardCalls, []);
+    h.unmount();
+  });
+
   test(`${platform}: switching interface language updates the open model/effort controls without remounting or changing the focused composer draft`, () => {
     const h = harness({ platform, composer: true });
     const originalInput = find(h.composerTree, 'TextInput').props.ref;

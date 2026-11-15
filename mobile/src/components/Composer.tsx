@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowUp,
+  BookUser,
   Brain,
   Camera,
   Check,
@@ -38,7 +39,6 @@ import { useTheme } from "../providers/AppProvider";
 import { GlassSurface } from "../ui/GlassSurface";
 import { AnchoredMenu } from "../ui/AnchoredMenu";
 import { Sheet } from "../ui/Sheet";
-import { MenuTrigger } from "../ui/MenuTrigger";
 import { IconButton } from "../ui/IconButton";
 import {
   ActionIcon,
@@ -66,6 +66,10 @@ type Props = {
   computerEnabled: boolean;
   computerBusy?: boolean;
   onComputer: (enabled: boolean) => void;
+  memoryEnabled: boolean;
+  memoryGloballyEnabled: boolean;
+  memoryFixed: boolean;
+  onMemory: (enabled: boolean) => void;
   running?: boolean;
   stopping?: boolean;
   unavailable?: boolean;
@@ -93,6 +97,10 @@ export const Composer = memo(function Composer({
   computerEnabled,
   computerBusy,
   onComputer,
+  memoryEnabled,
+  memoryGloballyEnabled,
+  memoryFixed,
+  onMemory,
   running,
   stopping,
   unavailable,
@@ -133,7 +141,7 @@ export const Composer = memo(function Composer({
   const [uploadOperation, setUploadOperation] = useState<{ scope: string; id: number } | null>(null);
   const uploading = uploadOperation?.scope === inputScope;
   const [error, setError] = useState<DisplayError>("");
-  const [menu, setMenu] = useState<"attachments" | "models" | "efforts" | null>(
+  const [menu, setMenu] = useState<"attachments" | "models" | "efforts" | "memory" | null>(
     null,
   );
   const lastMenuKind = useRef<NonNullable<typeof menu>>("models");
@@ -184,6 +192,7 @@ export const Composer = memo(function Composer({
   const menuGeometry = useRef(geometry);
   menuGeometry.current = geometry;
   useEffect(() => { setMenu(null); }, [geometry]);
+  useEffect(() => { setMenu(null); }, [draftKey]);
   function measureInputHeight(value: number) {
     if (!mounted.current || latestMeasurementKey.current !== inputMeasurementKey) return;
     const height = Math.min(maximumInputHeight, Math.max(32, Math.ceil(value)));
@@ -198,6 +207,8 @@ export const Composer = memo(function Composer({
   }
   const model = models.find((item) => item.id === modelId);
   const busy = posting || uploading || Boolean(unavailable) || Boolean(supplementBusy);
+  const memoryStatus = !memoryEnabled ? t("sessionMemory.off")
+    : !memoryGloballyEnabled ? t("sessionMemory.globalOff") : t("sessionMemory.on");
   const canThink =
     Boolean(model?.effort_parameter) &&
     ["effort", "toggle", "budget"].includes(model?.reasoning_kind ?? "");
@@ -415,21 +426,45 @@ export const Composer = memo(function Composer({
             key: "camera",
             title: t("attachment.camera"),
             icon: Camera,
+            disabled: busy,
             onPress: () => void pick("camera"),
           },
           {
             key: "photos",
             title: t("attachment.photos"),
             icon: ImageIcon,
+            disabled: busy,
             onPress: () => void pick("photos"),
           },
           {
             key: "files",
             title: t("attachment.file"),
             icon: File,
+            disabled: busy,
             onPress: () => void pick("files"),
           },
+          {
+            key: "memory",
+            title: memoryStatus,
+            icon: BookUser,
+            separatorBefore: true,
+            onPress: () => {
+              if (currentInputScope.current === inputScope) setMenu("memory");
+            },
+          },
         ]
+      : menuKind === "memory"
+        ? memoryFixed ? [] : [true, false].map((enabled) => ({
+            key: String(enabled),
+            title: enabled ? t("sessionMemory.enable") : t("sessionMemory.disable"),
+            selected: memoryEnabled === enabled,
+            disabled: busy,
+            onPress: () => {
+              if (currentInputScope.current !== inputScope) return;
+              onMemory(enabled);
+              setMenu(null);
+            },
+          }))
       : menuKind === "models"
         ? models.map((item) => ({
             key: item.id,
@@ -462,29 +497,6 @@ export const Composer = memo(function Composer({
               },
             })),
           ];
-  const attachments = [
-    {
-      key: "camera",
-      title: t("attachment.camera"),
-      icon: Camera,
-      disabled: busy,
-      onPress: () => void pick("camera"),
-    },
-    {
-      key: "photos",
-      title: t("attachment.photos"),
-      icon: ImageIcon,
-      disabled: busy,
-      onPress: () => void pick("photos"),
-    },
-    {
-      key: "files",
-      title: t("attachment.file"),
-      icon: File,
-      disabled: busy,
-      onPress: () => void pick("files"),
-    },
-  ];
   return (
     <View style={styles.outer}>
       <ErrorNotice error={error} />
@@ -569,7 +581,13 @@ export const Composer = memo(function Composer({
           </View>
         )}
         <View style={[styles.toolbar, shortViewport && styles.toolbarCompact]}>
-          <MenuTrigger items={attachments} label={t("attachment.add")}>
+          <View ref={attachmentRef} collapsable={false}>
+          <Pressable
+            onPress={() => openMenu("attachments", attachmentRef)}
+            accessibilityRole="button"
+            accessibilityLabel={t("chat.composerOptions")}
+            accessibilityValue={{ text: memoryStatus }}
+          >
             <View
               style={{
                 width: 44,
@@ -580,7 +598,8 @@ export const Composer = memo(function Composer({
             >
               <Plus size={22} color={colors.text} strokeWidth={1.8} />
             </View>
-          </MenuTrigger>
+          </Pressable>
+          </View>
           <View ref={modelRef} collapsable={false} style={{ minWidth: 0, flexShrink: 1 }}>
             <Pressable
               onPress={() => openMenu("models", modelRef)}
@@ -703,7 +722,13 @@ export const Composer = memo(function Composer({
         anchor={anchor}
         onClose={() => setMenu(null)}
         items={menuItems}
-        width={menuKind === "models" ? 292 : 230}
+        width={menuKind === "models" || menuKind === "memory" ? 292 : 260}
+        heading={menuKind === "memory" ? memoryStatus : undefined}
+        description={menuKind === "memory" ? [
+          memoryFixed ? t("sessionMemory.fixed") : t("sessionMemory.beforeSend"),
+          memoryEnabled && !memoryGloballyEnabled ? t("sessionMemory.globalHint")
+            : memoryEnabled ? t("sessionMemory.onHint") : t("sessionMemory.offHint"),
+        ].join("\n\n") : undefined}
         preserveKeyboard
       />
       <Sheet

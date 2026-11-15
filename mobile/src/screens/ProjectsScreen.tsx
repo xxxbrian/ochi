@@ -125,7 +125,7 @@ export function ProjectsScreen() {
 
 export function ProjectScreen({ projectId }: { projectId: string }) {
   useI18n();
-  const { colors, models, invalidateLists, invalidateVersion } = useApp();
+  const { colors, models, preferences, invalidateLists, invalidateVersion } = useApp();
   const { height } = useWindowDimensions();
   const compact = height < 500;
   const contentStyle = usePageContentStyle({ horizontal: 18, top: 0, bottom: 30, gap: 0 });
@@ -140,6 +140,11 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
   const [modelId, setModelId] = useState("");
   const [effort, setEffort] = useState("");
   const [computer, setComputer] = useState(true);
+  const [memoryChoice, setMemoryChoice] = useState({ projectId, enabled: true });
+  const memoryEnabled = memoryChoice.projectId === projectId ? memoryChoice.enabled : true;
+  useEffect(() => {
+    setMemoryChoice((current) => current.projectId === projectId ? current : { projectId, enabled: true });
+  }, [projectId]);
   useEffect(() => {
     const model = models.find((item) => item.is_default) ?? models[0];
     if (!modelId && model) {
@@ -193,7 +198,9 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
       effort,
       projectId,
       computer,
+      memoryEnabled,
     );
+    setMemoryChoice({ projectId, enabled: true });
     try {
       await api.startRun(session.id, text, options);
     } finally {
@@ -257,6 +264,10 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
         onEffort={setEffort}
         computerEnabled={computer}
         onComputer={setComputer}
+        memoryEnabled={memoryEnabled}
+        memoryGloballyEnabled={preferences?.memory_enabled ?? true}
+        memoryFixed={false}
+        onMemory={(enabled) => setMemoryChoice({ projectId, enabled })}
         onStop={() => undefined}
         onSubmit={submit}
       />

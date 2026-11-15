@@ -14,7 +14,7 @@ function fixture(overrides = {}) {
   const AppState = { currentState: "active", addEventListener(_event, listener) {
     appListeners.add(listener); return { remove: () => appListeners.delete(listener) };
   } };
-  const session = { id: "S", title: "Session", updated_at: "1", computer_enabled: false };
+  const session = { id: "S", title: "Session", updated_at: "1", computer_enabled: false, memory_enabled: true };
   const snapshot = { run_id: "R", session_id: "S", seq: 1, status: "running", items: [], created_at: "", updated_at: "" };
   const transport = {
     sessionHead: async () => ({ session, latest_run: { run_id: "R", seq: 1, status: "running" }, history_revision: "1", queue_revision: "1" }),
@@ -91,12 +91,40 @@ test("native new draft owns delayed session creation without replacing the compo
     assert.equal(f.current.posting, true);
     await act(async () => { tree.update(React.createElement(f.Screen, { draftId: "project-a:1" })); await flush(); });
     await act(async () => {
-      resolveCreate({ id: "S", title: "Old draft", updated_at: "1", computer_enabled: false });
+      resolveCreate({ id: "S", title: "Old draft", updated_at: "1", computer_enabled: false, memory_enabled: true });
       await creating; await flush();
     });
     assert.equal(await creating, undefined);
     assert.equal(starts, 0); assert.equal(f.current.run, null); assert.equal(f.current.session, null);
     assert.equal(f.current.posting, false); assert.equal(f.mounts, mounts);
     assert.equal(f.current.owner.draftId, "project-a:1");
+  } finally { await act(async () => tree.unmount()); }
+});
+
+test("native first send forwards the fixed memory choice only to session creation", async () => {
+  const created = [], runs = [];
+  const snapshot = { run_id: "R", session_id: "S", seq: 1, status: "running", items: [], created_at: "", updated_at: "" };
+  const session = { id: "S", title: "Private fixture", updated_at: "1", computer_enabled: true, memory_enabled: false };
+  const f = fixture({
+    createSession: async (...args) => {
+      created.push(args);
+      return session;
+    },
+    sessionHead: async () => ({ session, latest_run: { run_id: "R", seq: 1, status: "running" }, history_revision: "1", queue_revision: "1" }),
+    startRun: async (...args) => { runs.push(args); return snapshot; },
+  });
+  let tree;
+  await act(async () => { tree = create(React.createElement(f.Screen, {})); await flush(); });
+  try {
+    await act(async () => {
+      await f.current.createAndSend("fixture", {
+        model_id: "model", effort: "high", project_id: "project", computer_enabled: true,
+        memory_enabled: false, attachment_ids: ["file"],
+      });
+      await flush();
+    });
+    assert.deepEqual(created, [["model", "high", "project", true, false]]);
+    assert.deepEqual(runs[0], ["S", "fixture", { model_id: "model", effort: "high", attachment_ids: ["file"] }]);
+    assert.equal(f.current.session.memory_enabled, false);
   } finally { await act(async () => tree.unmount()); }
 });

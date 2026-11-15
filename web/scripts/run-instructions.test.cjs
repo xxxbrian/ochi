@@ -245,7 +245,17 @@ function composerHarness(native, patch = {}) {
     change(value) { if (native) input().props.onChangeText(value); else input().props.onChange({ target: { value } }); render(); },
     async press() { const button = find('补充当前任务要求'); (native ? button.props.onPress : button.props.onClick)(); await settle(); },
     async attach() {
-      if (native) walk(tree).find((node) => node.type === 'MenuTrigger').props.items.find((entry) => entry.key === 'files').onPress();
+      if (native) {
+        const trigger = find(i18n.mobile.t('chat.composerOptions'));
+        const anchor = walk(tree).find((node) => node.type === 'View' && node.props.children === trigger);
+        anchor.props.ref.current = { measureInWindow: (callback) => callback(0, 0, 44, 44) };
+        trigger.props.onPress();
+        await settle();
+        const menu = walk(tree).find((node) => node.type === 'AnchoredMenu');
+        assert.equal(menu.props.visible, true);
+        assert.equal(menu.props.preserveKeyboard, true);
+        menu.props.items.find((entry) => entry.key === 'files').onPress();
+      }
       else {
         const picker = { files: [{ name: 'qa.txt' }], value: 'qa.txt' };
         walk(tree).find((node) => node.type === 'input' && node.props.type === 'file').props.onChange({ target: picker, currentTarget: picker });

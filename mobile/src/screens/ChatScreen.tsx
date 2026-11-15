@@ -101,6 +101,12 @@ export function ChatScreen({
   const [modelId, setModelId] = useState("");
   const [effort, setEffort] = useState("");
   const [computerDraft, setComputerDraft] = useState(Boolean(projectId));
+  const memoryDraftOwner = `${sessionId ?? "new"}:${projectId ?? ""}:${composerGeneration}`;
+  const [memoryChoice, setMemoryChoice] = useState({ owner: memoryDraftOwner, enabled: true });
+  const memoryDraft = memoryChoice.owner === memoryDraftOwner ? memoryChoice.enabled : true;
+  useEffect(() => {
+    setMemoryChoice((current) => current.owner === memoryDraftOwner ? current : { owner: memoryDraftOwner, enabled: true });
+  }, [memoryDraftOwner]);
   const [computerOperation, setComputerOperation] = useState<number | null>(null);
   const [error, setError] = useState<DisplayError>("");
   const [menu, setMenu] = useState(false);
@@ -280,7 +286,7 @@ export function ChatScreen({
         } else {
           const result = await chat.createAndSend(text, {
             ...options, model_id: modelId, effort, project_id: projectId,
-            computer_enabled: computerDraft, attachments: files,
+            computer_enabled: computerDraft, memory_enabled: memoryDraft, attachments: files,
           });
           if (!result || owner !== actionEpoch.current) return false;
           acceptedCreated = true;
@@ -305,6 +311,7 @@ export function ChatScreen({
       effort,
       projectId,
       computerDraft,
+      memoryDraft,
       invalidateLists,
       navigation,
       editingMessage,
@@ -489,6 +496,13 @@ export function ChatScreen({
         computerEnabled={computerOn}
         computerBusy={computerBusy}
         onComputer={(enabled) => void setComputer(enabled)}
+        memoryEnabled={chat.session?.memory_enabled ?? memoryDraft}
+        memoryGloballyEnabled={preferences?.memory_enabled ?? true}
+        memoryFixed={Boolean(sessionId || chat.session)}
+        onMemory={(enabled) => {
+          if (!sessionId && !chat.session && !chat.posting)
+            setMemoryChoice({ owner: memoryDraftOwner, enabled });
+        }}
         running={active}
         stopping={chat.run?.status === "cancelling"}
         unavailable={chat.loading || chat.posting}

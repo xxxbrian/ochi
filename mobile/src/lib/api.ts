@@ -154,7 +154,7 @@ export const api = {
   },
   sessionHead: (sessionId: string, signal?: AbortSignal) => request<SessionHead>(`/api/sessions/${id(sessionId)}/head`, { signal }),
   session: (sessionId: string) => request<Session>(`/api/sessions/${id(sessionId)}`),
-  createSession: (model_id?: string, effort?: string, project_id?: string, computer_enabled?: boolean) => request<Session>('/api/sessions', json('POST', { model_id, effort, project_id, computer_enabled })),
+  createSession: (model_id?: string, effort?: string, project_id?: string, computer_enabled?: boolean, memory_enabled?: boolean) => request<Session>('/api/sessions', json('POST', { model_id, effort, project_id, computer_enabled, memory_enabled })),
   updateSession: (sessionId: string, patch: SessionPatch) => request<Session>(`/api/sessions/${id(sessionId)}`, json('PATCH', patch)),
   deleteSession: (sessionId: string) => request<void>(`/api/sessions/${id(sessionId)}`, { method: 'DELETE' }),
   messages: (sessionId: string, before?: string, signal?: AbortSignal) => request<Message[]>(`/api/sessions/${id(sessionId)}/messages?limit=100${before ? `&before=${id(before)}` : ''}`, { signal }),

@@ -125,6 +125,20 @@ function apiHarness(locale = 'en') {
   };
 }
 
+test('native createSession keeps the original four positional arguments and only emits an explicit fifth memory choice', async () => {
+  const h = apiHarness(); await h.api.restoreCredentials();
+  await h.api.api.createSession('model', 'high', 'project', false);
+  assert.deepEqual(JSON.parse(h.requests.at(-1).body), {
+    model_id: 'model', effort: 'high', project_id: 'project', computer_enabled: false,
+  });
+  for (const enabled of [true, false]) {
+    await h.api.api.createSession('model', 'high', undefined, true, enabled);
+    assert.deepEqual(JSON.parse(h.requests.at(-1).body), {
+      model_id: 'model', effort: 'high', computer_enabled: true, memory_enabled: enabled,
+    });
+  }
+});
+
 test('native API, authenticated resources, SSE and own-origin WebViews use the selected locale without leaking credentials externally', async () => {
   const h = apiHarness(); await h.api.restoreCredentials();
   await h.api.api.me();
