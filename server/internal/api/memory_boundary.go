@@ -2,20 +2,51 @@ package api
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"ochi/server/internal/agent"
 	"ochi/server/internal/storage"
 )
 
+var errSessionMemoryDisabled = errors.New("personal memory is disabled for this conversation")
+
+type memoryPreferences struct {
+	MemoryEnabled  bool
+	MemoryRevision int64
+}
+
+func (s *Server) sessionMemoryPreferences(ctx context.Context, userID, sessionID string) (memoryPreferences, error) {
+	enabled, revision, err := s.store.SessionMemorySettings(ctx, userID, sessionID)
+	return memoryPreferences{MemoryEnabled: enabled, MemoryRevision: revision}, err
+}
+
+func (s *Server) requireSessionMemory(ctx context.Context, userID string) error {
+	scope, ok := agent.ScopeFromContext(ctx)
+	if !ok || scope.UserID != userID || scope.SessionID == "" {
+		return errors.New("missing authorized memory scope")
+	}
+	enabled, err := s.store.SessionMemoryEnabled(ctx, userID, scope.SessionID)
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		return errSessionMemoryDisabled
+	}
+	return nil
+}
+
 type memoryBoundaryState struct {
-	preferences storage.Preferences
+	preferences memoryPreferences
 	known       bool
 	expiresAt   *time.Time
 }
 
 func (s *Server) memoryBoundaryState(ctx context.Context, request agent.Request) *memoryBoundaryState {
-	preferences, err := s.store.Preferences(ctx, request.UserID)
+	preferences, err := s.sessionMemoryPreferences(ctx, request.UserID, request.SessionID)
+	if err != nil || !preferences.MemoryEnabled {
+		return &memoryBoundaryState{preferences: preferences, known: err == nil}
+	}
 	expires, expiryErr := s.store.MemoryContextExpiry(ctx, request.UserID, request.Scope.ProjectID)
 	return &memoryBoundaryState{preferences: preferences, known: err == nil && expiryErr == nil, expiresAt: expires}
 }
@@ -27,7 +58,7 @@ func observeBoundaryMemory(request agent.Request, event agent.Diagnostic) {
 }
 
 func (s *Server) refreshBoundaryMemory(ctx context.Context, request agent.Request, state *memoryBoundaryState) *string {
-	current, err := s.store.Preferences(ctx, request.UserID)
+	current, err := s.sessionMemoryPreferences(ctx, request.UserID, request.SessionID)
 	empty := ""
 	if err != nil {
 		state.known = false
@@ -57,7 +88,7 @@ func (s *Server) refreshBoundaryMemory(ctx context.Context, request agent.Reques
 		err = readErr
 	}
 	expires, expiryErr := s.store.MemoryContextExpiry(ctx, request.UserID, request.Scope.ProjectID)
-	latest, guardErr := s.store.Preferences(ctx, request.UserID)
+	latest, guardErr := s.sessionMemoryPreferences(ctx, request.UserID, request.SessionID)
 	state.preferences, state.known, state.expiresAt = current, err == nil && expiryErr == nil && guardErr == nil, expires
 	if !state.known || !latest.MemoryEnabled || latest.MemoryRevision != current.MemoryRevision {
 		state.known = false

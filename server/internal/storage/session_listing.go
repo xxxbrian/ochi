@@ -66,7 +66,7 @@ func (s *Store) SessionsPage(ctx context.Context, userID, query, cursor, project
 	for rows.Next() {
 		var item SessionListItem
 		v := &item.Session
-		if err := rows.Scan(&v.ID, &v.Title, &v.CreatedAt, &v.UpdatedAt, &v.ModelID, &v.Effort, &v.SystemPrompt, &v.ProjectID, &v.WorkspacePath, &v.RunStatus, &v.ActiveRunID, &v.QueuedCount, &v.ComputerEnabled, &v.TitleSource, &item.Excerpt, &item.ProjectName); err != nil {
+		if err := rows.Scan(&v.ID, &v.Title, &v.CreatedAt, &v.UpdatedAt, &v.ModelID, &v.Effort, &v.SystemPrompt, &v.ProjectID, &v.WorkspacePath, &v.RunStatus, &v.ActiveRunID, &v.QueuedCount, &v.ComputerEnabled, &v.MemoryEnabled, &v.TitleSource, &item.Excerpt, &item.ProjectName); err != nil {
 			return page, err
 		}
 		page.Items = append(page.Items, item)

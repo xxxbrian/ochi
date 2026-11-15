@@ -21,6 +21,9 @@ func (s *Server) historyTool(ctx context.Context, userID, name string, args json
 	if !ok || scope.UserID != userID || scope.SessionID == "" {
 		return agent.ToolResult{}, errors.New("missing authorized history scope")
 	}
+	if err := s.requireSessionMemory(ctx, userID); err != nil {
+		return agent.ToolResult{}, err
+	}
 	session, err := s.store.GetSession(ctx, userID, scope.SessionID)
 	if err != nil || session.ProjectID != scope.ProjectID {
 		return agent.ToolResult{}, errors.New("history namespace does not match the current conversation")

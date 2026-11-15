@@ -368,6 +368,7 @@ export type Session = {
   project_id?: string;
   workspace_path?: string;
   computer_enabled: boolean;
+  memory_enabled: boolean;
   run_status?: RunStatus | "queued" | "waiting_resource";
   active_run_id?: string;
   queued_count?: number;

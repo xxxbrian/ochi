@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -66,6 +67,17 @@ func TestVerifiedSkillsDatabaseIsolationAndDemandRead(t *testing.T) {
 	v, err := s.PromoteVerifiedSkill(ctx, memoryQAUser, memoryQASession, memoryQARun, input)
 	if err != nil || v.ID != "private:build-file" || len(v.SourceEvidence) != 1 || v.Body != "" {
 		t.Fatalf("promotion metadata/evidence: %#v %v", v, err)
+	}
+	off := false
+	if _, err = s.PatchPreferences(ctx, memoryQAUser, PreferencesPatch{MemoryEnabled: &off}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.PromoteVerifiedSkill(ctx, memoryQAUser, memoryQASession, memoryQARun, input); !errors.Is(err, ErrMemoryChanged) {
+		t.Fatalf("account memory disable did not prevent private skill promotion: %v", err)
+	}
+	on := true
+	if _, err = s.PatchPreferences(ctx, memoryQAUser, PreferencesPatch{MemoryEnabled: &on}); err != nil {
+		t.Fatal(err)
 	}
 	list, total, err := s.VerifiedSkills(ctx, memoryQAUser, "", 32)
 	if err != nil || total != 1 || len(list) != 1 || list[0].Body != "" || list[0].SourceEvidence != nil {

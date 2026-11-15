@@ -36,6 +36,7 @@ type Session struct {
 	ActiveRunID     string    `json:"active_run_id,omitempty"`
 	QueuedCount     int       `json:"queued_count"`
 	ComputerEnabled bool      `json:"computer_enabled"`
+	MemoryEnabled   bool      `json:"memory_enabled"`
 }
 
 type Message struct {
@@ -145,29 +146,34 @@ func (s *Store) initialize(ctx context.Context) error {
 const sessionColumns = `id::text,title,created_at,updated_at,COALESCE(model_id::text,''),effort,system_prompt,COALESCE(project_id::text,''),workspace_path,
  COALESCE((SELECT status FROM runs WHERE session_id=sessions.id AND NOT archived ORDER BY CASE WHEN status IN ('running','waiting_user','waiting_resource','cancelling') THEN 0 WHEN status='queued' THEN 1 ELSE 2 END,created_at DESC,id DESC LIMIT 1),''),
  COALESCE((SELECT id::text FROM runs WHERE session_id=sessions.id AND status IN ('running','waiting_user','waiting_resource','cancelling') LIMIT 1),''),
- (SELECT count(*) FROM runs WHERE session_id=sessions.id AND status='queued'),computer_enabled,title_source`
+ (SELECT count(*) FROM runs WHERE session_id=sessions.id AND status='queued'),computer_enabled,memory_enabled,title_source`
 
 func scanSession(row pgx.Row, session *Session) error {
-	return row.Scan(&session.ID, &session.Title, &session.CreatedAt, &session.UpdatedAt, &session.ModelID, &session.Effort, &session.SystemPrompt, &session.ProjectID, &session.WorkspacePath, &session.RunStatus, &session.ActiveRunID, &session.QueuedCount, &session.ComputerEnabled, &session.TitleSource)
+	return row.Scan(&session.ID, &session.Title, &session.CreatedAt, &session.UpdatedAt, &session.ModelID, &session.Effort, &session.SystemPrompt, &session.ProjectID, &session.WorkspacePath, &session.RunStatus, &session.ActiveRunID, &session.QueuedCount, &session.ComputerEnabled, &session.MemoryEnabled, &session.TitleSource)
 }
 
 func (s *Store) CreateSession(ctx context.Context, userID string, projectIDs ...string) (Session, error) {
+	var projectID string
+	if len(projectIDs) > 0 {
+		projectID = projectIDs[0]
+	}
+	return s.CreateSessionWithMemory(ctx, userID, projectID, true)
+}
+
+func (s *Store) CreateSessionWithMemory(ctx context.Context, userID, projectID string, memoryEnabled bool) (Session, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return Session{}, err
 	}
 	defer tx.Rollback(context.Background())
-	var projectID, path string
-	if len(projectIDs) > 0 {
-		projectID = projectIDs[0]
-	}
+	var path string
 	if projectID != "" {
 		if err = tx.QueryRow(ctx, `SELECT workspace_path FROM projects WHERE id=$1 AND user_id=$2`, projectID, userID).Scan(&path); err != nil {
 			return Session{}, err
 		}
 	}
 	var id string
-	if err = tx.QueryRow(ctx, `INSERT INTO sessions(user_id,project_id,workspace_path,computer_enabled) VALUES($1,NULLIF($2,'')::uuid,$3,CASE WHEN $2<>'' THEN true ELSE COALESCE((SELECT computer_default FROM user_preferences WHERE user_id=$1),false) END) RETURNING id::text`, userID, projectID, path).Scan(&id); err != nil {
+	if err = tx.QueryRow(ctx, `INSERT INTO sessions(user_id,project_id,workspace_path,computer_enabled,memory_enabled) VALUES($1,NULLIF($2,'')::uuid,$3,CASE WHEN $2<>'' THEN true ELSE COALESCE((SELECT computer_default FROM user_preferences WHERE user_id=$1),false) END,$4) RETURNING id::text`, userID, projectID, path, memoryEnabled).Scan(&id); err != nil {
 		return Session{}, err
 	}
 	if path == "" {
@@ -179,6 +185,17 @@ func (s *Store) CreateSession(ctx context.Context, userID string, projectIDs ...
 		return Session{}, err
 	}
 	return s.GetSession(ctx, userID, id)
+}
+
+func (s *Store) SessionMemoryEnabled(ctx context.Context, userID, sessionID string) (bool, error) {
+	enabled, _, err := s.SessionMemorySettings(ctx, userID, sessionID)
+	return enabled, err
+}
+
+func (s *Store) SessionMemorySettings(ctx context.Context, userID, sessionID string) (enabled bool, revision int64, err error) {
+	err = s.db.QueryRow(ctx, `SELECT s.memory_enabled AND COALESCE(p.memory_enabled,true),COALESCE(p.memory_revision,0)
+ FROM sessions s LEFT JOIN user_preferences p ON p.user_id=s.user_id WHERE s.id=$1 AND s.user_id=$2`, sessionID, userID).Scan(&enabled, &revision)
+	return
 }
 
 func (s *Store) ListSessions(ctx context.Context, userID string) ([]Session, error) {

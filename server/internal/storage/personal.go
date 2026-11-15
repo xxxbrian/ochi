@@ -178,6 +178,9 @@ func (s *Store) SaveMemoryRecord(ctx context.Context, userID string, m Memory) (
 	if m.Source != "user" && (!enabled || m.ExpectedRevision == nil || revision != *m.ExpectedRevision) {
 		return m, ErrMemoryChanged
 	}
+	if err = validateLongTermMemorySourceTx(ctx, tx, userID, m.SourceSessionID, m.SourceRunID); err != nil {
+		return m, err
+	}
 	if m.Source != "user" {
 		if err = validateMemorySourceTx(ctx, tx, userID, m); err != nil {
 			return m, err
@@ -471,7 +474,8 @@ func (s *Store) RecallMemoriesWithStatus(ctx context.Context, userID, projectID,
 }
 func (s *Store) FrozenMemoryContext(ctx context.Context, userID, sessionID string) (string, bool, error) {
 	var v *string
-	err := s.db.QueryRow(ctx, `SELECT CASE WHEN memory_profile_expires_at<=now() THEN NULL ELSE memory_context END FROM sessions WHERE id=$1 AND user_id=$2`, sessionID, userID).Scan(&v)
+	err := s.db.QueryRow(ctx, `SELECT CASE WHEN NOT memory_enabled OR NOT COALESCE((SELECT memory_enabled FROM user_preferences WHERE user_id=$2),true)
+ OR memory_profile_expires_at<=now() THEN NULL ELSE memory_context END FROM sessions WHERE id=$1 AND user_id=$2`, sessionID, userID).Scan(&v)
 	if v == nil {
 		return "", false, err
 	}
@@ -479,7 +483,9 @@ func (s *Store) FrozenMemoryContext(ctx context.Context, userID, sessionID strin
 }
 func (s *Store) FreezeMemoryContext(ctx context.Context, userID, sessionID, value string) (string, error) {
 	var frozen string
-	err := s.db.QueryRow(ctx, `UPDATE sessions SET memory_context=COALESCE(memory_context,$3) WHERE id=$1 AND user_id=$2 RETURNING memory_context`, sessionID, userID, value).Scan(&frozen)
+	err := s.db.QueryRow(ctx, `UPDATE sessions SET memory_context=COALESCE(memory_context,$3)
+ WHERE id=$1 AND user_id=$2 AND memory_enabled AND COALESCE((SELECT memory_enabled FROM user_preferences WHERE user_id=$2),true)
+ RETURNING memory_context`, sessionID, userID, value).Scan(&frozen)
 	return frozen, err
 }
 func (s *Store) DeleteMemory(ctx context.Context, userID, id string) error {

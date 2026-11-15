@@ -167,6 +167,9 @@ func (s *Server) extractMemoryJob(ctx context.Context, job storage.MemoryJob) er
 	if err != nil {
 		return memorySourceError(err)
 	}
+	if !session.MemoryEnabled || snapshot.SessionID != session.ID {
+		return storage.ErrMemoryChanged
+	}
 	prompt, err := s.store.MemoryRunPrompt(ctx, job.UserID, job.RunID)
 	if err != nil {
 		return memorySourceError(err)

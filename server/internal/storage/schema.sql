@@ -395,6 +395,7 @@ CREATE TABLE sessions (
     memory_context text,
     source text DEFAULT 'chat'::text NOT NULL,
     computer_enabled boolean DEFAULT false NOT NULL,
+    memory_enabled boolean DEFAULT true NOT NULL,
     title_source text DEFAULT 'pending'::text NOT NULL,
     title_attempts integer DEFAULT 0 NOT NULL,
     title_claimed_at timestamp with time zone,

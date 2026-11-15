@@ -23,12 +23,20 @@ func (s *Server) wrapTools(source agent.ToolSource) agent.ToolSource {
 }
 
 func (p *personalTools) Definitions(ctx context.Context, userID string) ([]agent.ToolDefinition, error) {
+	memoryEnabled := true
 	if scope, ok := agent.ScopeFromContext(ctx); ok && scope.SessionID != "" {
+		if scope.UserID != userID {
+			return nil, errors.New("workspace ownership mismatch")
+		}
 		effective, err := p.server.effectiveScope(ctx, scope)
 		if err != nil {
 			return nil, err
 		}
 		ctx = agent.WithRunScope(ctx, effective)
+		memoryEnabled, err = p.server.store.SessionMemoryEnabled(ctx, userID, scope.SessionID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	var items []agent.ToolDefinition
 	if p.source != nil {
@@ -43,7 +51,16 @@ func (p *personalTools) Definitions(ctx context.Context, userID string) ([]agent
 		}
 	}
 	items = append(items, p.builtinDefinitions(ctx)...)
-	if scope, ok := agent.ScopeFromContext(ctx); ok && scope.SessionID != "" && !scope.ComputeOnly {
+	if !memoryEnabled {
+		allowed := items[:0]
+		for _, item := range items {
+			if !personalMemoryTool(item.Name) {
+				allowed = append(allowed, item)
+			}
+		}
+		items = allowed
+	}
+	if scope, ok := agent.ScopeFromContext(ctx); memoryEnabled && ok && scope.SessionID != "" && !scope.ComputeOnly {
 		hasRead := false
 		for _, item := range items {
 			hasRead = hasRead || item.Name == "skills_read"
@@ -53,6 +70,10 @@ func (p *personalTools) Definitions(ctx context.Context, userID string) ([]agent
 		}
 	}
 	return items, nil
+}
+
+func personalMemoryTool(name string) bool {
+	return strings.HasPrefix(name, "memory_") || strings.HasPrefix(name, "history_") || name == "skills_promote"
 }
 
 func (p *personalTools) builtinDefinitions(ctx context.Context) []agent.ToolDefinition {
@@ -126,6 +147,11 @@ func (p *personalTools) Call(ctx context.Context, userID, name string, args json
 	if scoped {
 		if scope.UserID != userID {
 			return agent.ToolResult{}, errors.New("workspace ownership mismatch")
+		}
+	}
+	if personalMemoryTool(name) {
+		if err := p.server.requireSessionMemory(ctx, userID); err != nil {
+			return agent.ToolResult{}, err
 		}
 	}
 	if personalTool(name) {

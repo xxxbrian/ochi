@@ -55,7 +55,7 @@ func (s *Server) memoryContext(ctx context.Context, userID, projectID, sessionID
 
 func (s *Server) memoryContextWithDiagnostics(ctx context.Context, userID, projectID, sessionID, prompt string) (string, []agent.Diagnostic, error) {
 	diagnostics := []agent.Diagnostic{}
-	pref, err := s.store.Preferences(ctx, userID)
+	pref, err := s.sessionMemoryPreferences(ctx, userID, sessionID)
 	if err != nil || !pref.MemoryEnabled {
 		return "", diagnostics, err
 	}
@@ -93,7 +93,7 @@ func (s *Server) memoryContextWithDiagnostics(ctx context.Context, userID, proje
 	diagnostics = append(diagnostics, memoryRecallDiagnostics(recalled.Status)...)
 	// Dynamic recall runs once per accepted turn, never once per token/tool.
 	// Explicit changes during retrieval must not return a stale deletion/setting.
-	current, err := s.store.Preferences(ctx, userID)
+	current, err := s.sessionMemoryPreferences(ctx, userID, sessionID)
 	if err != nil || !current.MemoryEnabled || current.MemoryRevision != pref.MemoryRevision {
 		return "", diagnostics, err
 	}
@@ -144,6 +144,9 @@ func jsonObject(text string) string {
 }
 
 func (s *Server) memoryTool(ctx context.Context, userID, name string, args json.RawMessage) (agent.ToolResult, error) {
+	if err := s.requireSessionMemory(ctx, userID); err != nil {
+		return agent.ToolResult{}, err
+	}
 	var req struct {
 		ID           string `json:"id"`
 		Query        string `json:"query"`
@@ -157,9 +160,6 @@ func (s *Server) memoryTool(ctx context.Context, userID, name string, args json.
 	pref, err := s.store.Preferences(ctx, userID)
 	if err != nil {
 		return agent.ToolResult{}, err
-	}
-	if !pref.MemoryEnabled && name != "memory_delete" {
-		return agent.ToolResult{Output: `{"memory_enabled":false,"memories":[]}`}, nil
 	}
 	scope, _ := agent.ScopeFromContext(ctx)
 	if scope.UserID != userID || scope.SessionID == "" {

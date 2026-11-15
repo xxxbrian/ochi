@@ -46,7 +46,7 @@ func TestProviderDebugLiveSwitchCapturesExistingConfigAndAuxiliaryScope(t *testi
 	}
 	generate := func() {
 		t.Helper()
-		err := g.Generate(agent.WithRunScope(ctx, scope), agent.Request{Scope: scope, Messages: []agent.Message{{Role: "user", Content: "fixture prompt"}}}, func(agent.Update) error { return nil })
+		err := g.Generate(agent.WithRunScope(ctx, scope), agent.Request{UserID: f.owner, SessionID: f.session.ID, RunID: f.run.RunID, Scope: scope, Messages: []agent.Message{{Role: "user", Content: "fixture prompt"}}}, func(agent.Update) error { return nil })
 		if err != nil {
 			t.Fatal(err)
 		}

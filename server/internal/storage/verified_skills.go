@@ -93,6 +93,19 @@ func (s *Store) PromoteVerifiedSkill(ctx context.Context, userID, sessionID, run
 		return VerifiedSkill{}, err
 	}
 	defer tx.Rollback(context.Background())
+	if _, err = tx.Exec(ctx, `INSERT INTO user_preferences(user_id) VALUES($1) ON CONFLICT DO NOTHING`, userID); err != nil {
+		return VerifiedSkill{}, err
+	}
+	var enabled bool
+	if err = tx.QueryRow(ctx, `SELECT memory_enabled FROM user_preferences WHERE user_id=$1 FOR UPDATE`, userID).Scan(&enabled); err != nil {
+		return VerifiedSkill{}, err
+	}
+	if !enabled {
+		return VerifiedSkill{}, ErrMemoryChanged
+	}
+	if err = validateLongTermMemorySourceTx(ctx, tx, userID, sessionID, runID); err != nil {
+		return VerifiedSkill{}, err
+	}
 	var projectID string
 	err = tx.QueryRow(ctx, `SELECT COALESCE(s.project_id::text,'') FROM sessions s JOIN runs r ON r.session_id=s.id
 		WHERE s.id=$1 AND s.user_id=$2 AND r.id=$3 AND r.status IN ('running','waiting_user','waiting_resource') FOR UPDATE OF s`, sessionID, userID, runID).Scan(&projectID)

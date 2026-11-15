@@ -88,13 +88,20 @@ func (p *personalTools) cachedSkillsIndex(ctx context.Context, userID string) (s
 	cache := item.(*skillIndexCache)
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
+	memoryEnabled, err := p.server.store.SessionMemoryEnabled(ctx, userID, scope.SessionID)
+	if err != nil {
+		return "", err
+	}
+	if !memoryEnabled {
+		cache.loaded, cache.value = false, ""
+	}
 	child, done, err := p.server.computerCallContext(ctx, scope)
 	if err != nil {
 		return "", err
 	}
 	defer done()
 	unavailable := []string{}
-	if !cache.loaded {
+	if memoryEnabled && !cache.loaded {
 		cache.value, err = p.server.privateSkillsIndex(child, userID)
 		if err != nil {
 			unavailable = append(unavailable, "private")
@@ -119,6 +126,13 @@ func (p *personalTools) cachedSkillsIndex(ctx context.Context, userID string) (s
 	}
 	if child.Err() != nil {
 		return "", child.Err()
+	}
+	memoryEnabled, err = p.server.store.SessionMemoryEnabled(child, userID, scope.SessionID)
+	if err != nil {
+		return "", err
+	}
+	if !memoryEnabled {
+		cache.loaded, cache.value = false, ""
 	}
 	value := mergeSkillsIndex(cache.value, installed, unavailable)
 	if len(unavailable) > 0 {

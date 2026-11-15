@@ -219,14 +219,24 @@ func (w *routeErrorResponse) Write(data []byte) (int, error) {
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		ModelID          string `json:"model_id"`
-		Effort           string `json:"effort"`
-		ProjectID        string `json:"project_id"`
-		BudgetTokens     *int   `json:"budget_tokens"`
-		ReasoningEnabled *bool  `json:"reasoning_enabled"`
-		ComputerEnabled  *bool  `json:"computer_enabled"`
+		ModelID          string          `json:"model_id"`
+		Effort           string          `json:"effort"`
+		ProjectID        string          `json:"project_id"`
+		BudgetTokens     *int            `json:"budget_tokens"`
+		ReasoningEnabled *bool           `json:"reasoning_enabled"`
+		ComputerEnabled  *bool           `json:"computer_enabled"`
+		MemoryEnabled    json.RawMessage `json:"memory_enabled"`
 	}
-	if r.ContentLength > 0 && !decodeRequest(w, r, &req) {
+	if r.ContentLength != 0 && !decodeRequest(w, r, &req) {
+		return
+	}
+	memoryEnabled := true
+	switch strings.TrimSpace(string(req.MemoryEnabled)) {
+	case "", "true":
+	case "false":
+		memoryEnabled = false
+	default:
+		writeError(w, http.StatusBadRequest, i18n.New("invalid_json"))
 		return
 	}
 	if req.BudgetTokens != nil {
@@ -244,7 +254,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	item, err := s.store.CreateSession(r.Context(), currentUser(r).ID, req.ProjectID)
+	item, err := s.store.CreateSessionWithMemory(r.Context(), currentUser(r).ID, req.ProjectID, memoryEnabled)
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -595,6 +605,9 @@ func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID
 	if e != nil {
 		return runtime.Snapshot{}, e
 	}
+	// Execution installs run callbacks; title work owns its config snapshot.
+	titleRequest, titleConfig := req, *req.Config
+	titleRequest.Config = &titleConfig
 	run, e := s.runtime.Start(snapshot, func(run *runtime.Run) {
 		defer finishExecution()
 		s.execute(run, req)
@@ -606,7 +619,7 @@ func (s *Server) startQueuedRun(parent context.Context, userID, sessionID, runID
 		_ = s.store.CompleteRun(ctx, snapshot)
 		return runtime.Snapshot{}, e
 	}
-	s.asyncTitle(req)
+	s.asyncTitle(titleRequest)
 	return run.Snapshot(), nil
 }
 func (s *Server) messages(w http.ResponseWriter, r *http.Request) {

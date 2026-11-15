@@ -27,6 +27,9 @@ func (s *Server) promoteVerifiedSkill(ctx context.Context, userID string, raw js
 	if err != nil {
 		return agent.ToolResult{}, err
 	}
+	if err := s.requireSessionMemory(ctx, userID); err != nil {
+		return agent.ToolResult{}, err
+	}
 	definition := verifiedSkillDefinitions()[0]
 	if err := agent.ValidateToolArguments(definition, raw); err != nil {
 		return agent.ToolResult{}, err
@@ -46,6 +49,9 @@ func (s *Server) promoteVerifiedSkill(ctx context.Context, userID string, raw js
 func (s *Server) privateSkillsIndex(ctx context.Context, userID string) (string, error) {
 	scope, err := privateSkillScope(ctx, userID)
 	if err != nil {
+		return "", err
+	}
+	if err := s.requireSessionMemory(ctx, userID); err != nil {
 		return "", err
 	}
 	values, total, err := s.store.VerifiedSkills(ctx, userID, scope.ProjectID, 32)
@@ -74,6 +80,9 @@ func (s *Server) privateSkillsIndex(ctx context.Context, userID string) (string,
 func (s *Server) readVerifiedSkill(ctx context.Context, userID, id string) (agent.ToolResult, error) {
 	scope, err := privateSkillScope(ctx, userID)
 	if err != nil {
+		return agent.ToolResult{}, err
+	}
+	if err := s.requireSessionMemory(ctx, userID); err != nil {
 		return agent.ToolResult{}, err
 	}
 	v, err := s.store.ReadVerifiedSkill(ctx, userID, scope.ProjectID, id)

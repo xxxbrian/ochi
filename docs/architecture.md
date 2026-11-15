@@ -218,6 +218,30 @@ it does not introduce a second queue. Provenance, correction/supersession,
 tombstones and revision guards remain authoritative. Recall is scoped and
 bounded; ephemeral task directions stay in conversation/TaskState.
 
+Each conversation stores a required `memory_enabled` choice. Creation accepts an
+optional boolean that defaults to `true`; the choice is fixed after creation and
+cannot be changed through a session patch or run options. Clients choose it
+before the first message. The account memory preference remains an upper bound:
+personal memory is available only when both the conversation and account allow
+it. Account changes are checked again during turn boundaries and tool dispatch.
+
+A conversation with memory off retains its ordinary saved messages, canonical
+provider history, TaskState, compaction, files and Computer behavior. It receives
+no personal profile or related recall, memory tools, cross-conversation history
+tools, or private learned Skill metadata/instructions/promotion. Administrator
+installed Skills and MCP continue to follow plugin policy and Computer
+permission. Turning off effective memory clears private Skill metadata cached
+for a running turn; isolated research children use the same conversation gates.
+The account's explicit memory management APIs remain separate user actions.
+
+Memory-off conversations are permanently ineligible sources for later history
+search/read, automatic extraction, compaction preservation, saved memories and
+private learned Skills. Storage transactions enforce those source restrictions
+independently of tool discovery and dispatch. Accepted-source attribution used
+by TaskState stays independent so current-conversation continuity still works.
+Completion and compaction remain normal even when they do not create a memory
+job; enabling account memory later cannot admit an excluded conversation.
+
 ## Storage And Permission
 
 PostgreSQL with pgvector persists accounts/configuration, conversations,

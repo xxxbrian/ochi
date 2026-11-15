@@ -23,7 +23,7 @@ func enqueueMemoryJobTx(ctx context.Context, tx pgx.Tx, runID string) error {
 	_, err := tx.Exec(ctx, `INSERT INTO memory_jobs(run_id,user_id,session_id,memory_revision)
  SELECT r.id,s.user_id,s.id,COALESCE(p.memory_revision,0)
  FROM runs r JOIN sessions s ON s.id=r.session_id LEFT JOIN user_preferences p ON p.user_id=s.user_id
- WHERE r.id=$1 AND r.status='completed' AND NOT r.archived AND COALESCE(p.memory_enabled,true)
+ WHERE r.id=$1 AND r.status='completed' AND NOT r.archived AND s.memory_enabled AND COALESCE(p.memory_enabled,true)
  AND EXISTS(SELECT 1 FROM messages WHERE run_id=r.id AND role='user' AND NOT archived)
  ON CONFLICT(run_id) DO NOTHING`, runID)
 	return err
@@ -48,7 +48,7 @@ func (s *Store) QueueMemoryPreservation(ctx context.Context, userID, runID strin
 	_, err := s.db.Exec(ctx, `INSERT INTO memory_jobs(run_id,user_id,session_id,memory_revision)
  SELECT r.id,s.user_id,s.id,COALESCE(p.memory_revision,0)
  FROM runs r JOIN sessions s ON s.id=r.session_id LEFT JOIN user_preferences p ON p.user_id=s.user_id
- WHERE r.id=$1 AND s.user_id=$2 AND NOT r.archived AND r.status IN ('running','completed') AND COALESCE(p.memory_enabled,true)
+ WHERE r.id=$1 AND s.user_id=$2 AND s.memory_enabled AND NOT r.archived AND r.status IN ('running','completed') AND COALESCE(p.memory_enabled,true)
  AND EXISTS(SELECT 1 FROM messages WHERE run_id=r.id AND role='user' AND NOT archived)
  ON CONFLICT(run_id) DO NOTHING`, runID, userID)
 	return err
@@ -57,15 +57,17 @@ func (s *Store) QueueMemoryPreservation(ctx context.Context, userID, runID strin
 func (s *Store) ClaimMemoryJob(ctx context.Context) (*MemoryJob, error) {
 	// Crashed/cancelled/revised agent runs are never resumed by this queue.
 	if _, err := s.db.Exec(ctx, `UPDATE memory_jobs j SET status='skipped',lease_until=NULL,lease_token=NULL,extraction=NULL,last_error='source or memory settings changed',updated_at=now()
- FROM runs r LEFT JOIN user_preferences p ON p.user_id=(SELECT user_id FROM sessions WHERE id=r.session_id)
+ FROM runs r JOIN sessions s ON s.id=r.session_id LEFT JOIN user_preferences p ON p.user_id=s.user_id
  WHERE j.run_id=r.id AND j.status IN ('queued','leased')
- AND (r.archived OR r.status IN ('failed','cancelled','interrupted') OR NOT COALESCE(p.memory_enabled,true) OR j.memory_revision<>COALESCE(p.memory_revision,0))`); err != nil {
+ AND (r.archived OR r.status IN ('failed','cancelled','interrupted') OR NOT s.memory_enabled OR NOT COALESCE(p.memory_enabled,true) OR j.memory_revision<>COALESCE(p.memory_revision,0))`); err != nil {
 		return nil, err
 	}
 	var job MemoryJob
 	err := s.db.QueryRow(ctx, `WITH candidate AS (
- SELECT j.run_id FROM memory_jobs j JOIN runs r ON r.id=j.run_id
- WHERE r.status='completed' AND NOT r.archived AND j.attempts<3
+ SELECT j.run_id FROM memory_jobs j JOIN runs r ON r.id=j.run_id JOIN sessions s ON s.id=r.session_id
+ LEFT JOIN user_preferences p ON p.user_id=s.user_id
+ WHERE r.status='completed' AND NOT r.archived AND s.memory_enabled AND COALESCE(p.memory_enabled,true)
+ AND j.memory_revision=COALESCE(p.memory_revision,0) AND j.attempts<3
  AND ((j.status='queued' AND j.next_attempt_at<=now()) OR (j.status='leased' AND j.lease_until<now()))
  ORDER BY j.created_at,j.run_id FOR UPDATE OF j SKIP LOCKED LIMIT 1)
  UPDATE memory_jobs j SET status='leased',attempts=j.attempts+1,lease_until=now()+interval '2 minutes',lease_token=gen_random_uuid(),updated_at=now()
@@ -84,7 +86,11 @@ func (s *Store) SaveMemoryExtraction(ctx context.Context, job MemoryJob, payload
 	if !json.Valid(payload) || len(payload) > 32*1024 {
 		return errors.New("invalid bounded memory extraction")
 	}
-	tag, err := s.db.Exec(ctx, `UPDATE memory_jobs SET extraction=$3,updated_at=now() WHERE run_id=$1 AND lease_token=NULLIF($2,'')::uuid AND status='leased'`, job.RunID, job.LeaseToken, payload)
+	tag, err := s.db.Exec(ctx, `UPDATE memory_jobs j SET extraction=$3,updated_at=now()
+ FROM runs r JOIN sessions s ON s.id=r.session_id LEFT JOIN user_preferences p ON p.user_id=s.user_id
+ WHERE j.run_id=$1 AND j.lease_token=NULLIF($2,'')::uuid AND j.status='leased' AND r.id=j.run_id
+ AND r.status='completed' AND NOT r.archived AND s.memory_enabled AND COALESCE(p.memory_enabled,true)
+ AND j.memory_revision=COALESCE(p.memory_revision,0)`, job.RunID, job.LeaseToken, payload)
 	if err != nil {
 		return err
 	}

@@ -91,10 +91,35 @@ func validateMemorySourceTx(ctx context.Context, tx pgx.Tx, userID string, m Mem
 	return nil
 }
 
+// Source attribution is also used by current-session TaskState. Long-term
+// derivation has this additional boundary so disabling memory preserves tasks.
+func validateLongTermMemorySourceTx(ctx context.Context, tx pgx.Tx, userID, sessionID, runID string) error {
+	if sessionID == "" && runID == "" {
+		return nil
+	}
+	var enabled bool
+	err := tx.QueryRow(ctx, `SELECT s.memory_enabled FROM sessions s
+ WHERE s.user_id=$1 AND ($2='' OR s.id=NULLIF($2,'')::uuid)
+ AND ($3='' OR EXISTS(SELECT 1 FROM runs r WHERE r.id=NULLIF($3,'')::uuid AND r.session_id=s.id))`,
+		userID, sessionID, runID).Scan(&enabled)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrMemorySource
+	}
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		return ErrMemoryChanged
+	}
+	return nil
+}
+
 const memoryUserStatementsSQL = `SELECT m.content,m.created_at FROM messages m JOIN sessions s ON s.id=m.session_id
- WHERE m.run_id=$1 AND s.user_id=$2 AND m.role='user' AND NOT m.archived
+ WHERE m.run_id=$1 AND s.user_id=$2 AND s.memory_enabled AND m.role='user' AND NOT m.archived
+ AND COALESCE((SELECT memory_enabled FROM user_preferences WHERE user_id=s.user_id),true)
  UNION ALL SELECT i.content,i.created_at FROM run_instructions i JOIN runs r ON r.id=i.run_id
- JOIN sessions s ON s.id=r.session_id WHERE i.run_id=$1 AND s.user_id=$2 AND i.user_id=$2 AND i.canonical_seq IS NOT NULL AND NOT r.archived`
+ JOIN sessions s ON s.id=r.session_id WHERE i.run_id=$1 AND s.user_id=$2 AND s.memory_enabled AND i.user_id=$2 AND i.canonical_seq IS NOT NULL AND NOT r.archived
+ AND COALESCE((SELECT memory_enabled FROM user_preferences WHERE user_id=s.user_id),true)`
 
 func insertMemoryTx(ctx context.Context, tx pgx.Tx, userID string, m Memory) (Memory, error) {
 	return scanMemory(tx.QueryRow(ctx, `INSERT INTO memories(user_id,content,kind,project_id,source,source_session_id,source_run_id,source_excerpt,trust,observed_at,expires_at,admission)
@@ -231,6 +256,9 @@ func (s *Store) FreezeMemoryProfile(ctx context.Context, userID, sessionID, text
 	}
 	if !enabled || current != revision {
 		return "", ErrMemoryChanged
+	}
+	if err = validateLongTermMemorySourceTx(ctx, tx, userID, sessionID, ""); err != nil {
+		return "", err
 	}
 	var frozen string
 	var expires *time.Time

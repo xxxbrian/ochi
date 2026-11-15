@@ -39,7 +39,7 @@ func (s *Store) SearchHistory(ctx context.Context, userID, projectID, currentSes
 	rows, err := s.db.Query(ctx, `SELECT s.id::text,s.title,COALESCE(s.project_id::text,''),m.id::text,m.role,
  substring(m.content FROM greatest(1,position(lower($4) IN lower(m.content))-100) FOR 700),m.created_at
  FROM sessions s JOIN messages m ON m.session_id=s.id
- WHERE s.user_id=$1 AND s.project_id IS NOT DISTINCT FROM NULLIF($2,'')::uuid AND s.id::text<>$3
+ WHERE s.user_id=$1 AND s.memory_enabled AND s.project_id IS NOT DISTINCT FROM NULLIF($2,'')::uuid AND s.id::text<>$3
  AND NOT m.archived AND m.role IN ('user','assistant')
  AND (position(lower($4) IN lower(m.content))>0 OR position(lower($4) IN lower(s.title))>0
  OR EXISTS(SELECT 1 FROM unnest($5::text[]) t WHERE position(t IN lower(m.content))>0))
@@ -99,7 +99,7 @@ func (s *Store) ReadHistory(ctx context.Context, userID, projectID, sessionID st
 	if limit < 1 || limit > 30 {
 		limit = 20
 	}
-	if err := s.db.QueryRow(ctx, `SELECT title FROM sessions WHERE id=$1 AND user_id=$2 AND project_id IS NOT DISTINCT FROM NULLIF($3,'')::uuid`, sessionID, userID, projectID).Scan(&page.Title); err != nil {
+	if err := s.db.QueryRow(ctx, `SELECT title FROM sessions WHERE id=$1 AND user_id=$2 AND memory_enabled AND project_id IS NOT DISTINCT FROM NULLIF($3,'')::uuid`, sessionID, userID, projectID).Scan(&page.Title); err != nil {
 		return page, err
 	}
 	page.Title, _ = SanitizeHistoryText(page.Title, 160)
