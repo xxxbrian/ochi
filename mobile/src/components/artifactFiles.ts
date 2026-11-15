@@ -61,7 +61,9 @@ function artifactURL(value: string, base?: string) {
 }
 
 /** Download to a per-open private file; the native PDF renderer never receives credentials. */
-export async function downloadArtifact(file: Artifact, signal?: AbortSignal): Promise<LocalArtifact> {
+export async function downloadArtifact(file: Artifact, signal?: AbortSignal, options?: { maxBytes?: number }): Promise<LocalArtifact> {
+  const maxBytes = options?.maxBytes;
+  if (maxBytes !== undefined && file.size > maxBytes) throw new ArtifactFileError("error.previewTooLarge");
   const original = artifactURL(fileURL(file));
   const server = getAPIBaseURL();
   const headers = resourceHeaders(file);
@@ -77,6 +79,7 @@ export async function downloadArtifact(file: Artifact, signal?: AbortSignal): Pr
   checkActive();
   const local = await artifactDestination(file);
   let task: ReturnType<typeof BlobUtil.fetch> | undefined;
+  let tooLarge = false;
   const cancel = () => { void task?.cancel().catch(() => undefined); };
   signal?.addEventListener("abort", cancel);
   try {
@@ -84,8 +87,11 @@ export async function downloadArtifact(file: Artifact, signal?: AbortSignal): Pr
     for (let redirects = 0; redirects <= 5; redirects++) {
       checkActive();
       // Do not let the HTTP implementation carry bearer headers across a redirect.
-      task = BlobUtil.config({ path: decodeURIComponent(local.uri.replace(/^file:\/\//, "")), followRedirect: false, trusty: false, overwrite: true, timeout: 60000 })
+      task = BlobUtil.config({ path: decodeURIComponent(local.uri.replace(/^file:\/\//, "")), followRedirect: false, trusty: false, overwrite: true, timeout: 600000 })
         .fetch("GET", url.href, url.origin === original.origin ? headers : {});
+      if (maxBytes !== undefined) task.progress({ interval: 100 }, (received, total) => {
+        if (Number(received) > maxBytes || Number(total) > maxBytes) { tooLarge = true; cancel(); }
+      });
       const response = await task;
       task = undefined;
       checkActive();
@@ -99,12 +105,17 @@ export async function downloadArtifact(file: Artifact, signal?: AbortSignal): Pr
         continue;
       }
       if (info.status < 200 || info.status >= 300) throw new ArtifactFileError("error.fileDownload");
+      if (maxBytes !== undefined) {
+        const info = await FileSystem.getInfoAsync(local.uri);
+        if (!info.exists || info.size > maxBytes) throw new ArtifactFileError("error.previewTooLarge");
+      }
       return local;
     }
     throw new ArtifactFileError("error.fileDownload");
   } catch (reason) {
     await local.dispose().catch(() => undefined);
     if (signal?.aborted) throw new ArtifactFileError("error.fileCancelled");
+    if (tooLarge) throw new ArtifactFileError("error.previewTooLarge");
     // Native transport errors can contain private URLs; keep those out of the UI.
     throw reason instanceof ArtifactFileError ? reason : new ArtifactFileError("error.fileDownload");
   } finally {
@@ -112,11 +123,13 @@ export async function downloadArtifact(file: Artifact, signal?: AbortSignal): Pr
   }
 }
 
-export async function shareArtifact(file: Artifact, localURI?: string) {
+export async function shareArtifact(file: Artifact, localURI?: string, signal?: AbortSignal) {
   if (!(await Sharing.isAvailableAsync())) throw localizedError("error.shareUnavailable");
-  const local = localURI ? await artifactDestination(file) : await downloadArtifact(file);
+  const local = localURI ? await artifactDestination(file) : await downloadArtifact(file, signal);
   try {
+    if (signal?.aborted) throw new ArtifactFileError("error.fileCancelled");
     if (localURI) await FileSystem.copyAsync({ from: localURI, to: local.uri });
+    if (signal?.aborted) throw new ArtifactFileError("error.fileCancelled");
     await Sharing.shareAsync(local.uri, { mimeType: file.mime_type, dialogTitle: file.name });
     // The receiving app can read this immutable cache file after the chooser closes.
   } catch (reason) {

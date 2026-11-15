@@ -24,7 +24,7 @@ const response = (status = 200, headers = {}) => ({ info: () => ({ status, heade
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
 function filesHarness() {
-  const state = { server: 'https://api.example', token: 'Bearer synthetic-token', locale: 'en', calls: [], removed: [], directories: [], copies: [], shared: [], replies: [], cancelCount: 0, available: true };
+  const state = { server: 'https://api.example', token: 'Bearer synthetic-token', locale: 'en', calls: [], removed: [], directories: [], copies: [], shared: [], replies: [], cancelCount: 0, available: true, size: 1000, progress: null };
   const api = {
     getAPIBaseURL: () => state.server,
     fileURL: (value) => new URL(typeof value === 'string' ? value : value.url, state.server).href,
@@ -35,6 +35,7 @@ function filesHarness() {
     makeDirectoryAsync: async (directory) => { state.directories.push(directory); },
     deleteAsync: async (directory) => { state.removed.push(directory); },
     copyAsync: async (copy) => { state.copies.push(copy); },
+    getInfoAsync: async () => ({ exists: true, size: state.size }),
   };
   const Sharing = { isAvailableAsync: async () => state.available, shareAsync: async (uri, options) => { state.shared.push({ uri, options }); if (state.shareError) throw new Error(state.shareError); } };
   const BlobUtil = { config: (options) => ({ fetch(method, url, headers) {
@@ -42,6 +43,7 @@ function filesHarness() {
     const reply = state.replies.shift() ?? response();
     const promise = reply instanceof Error ? Promise.reject(reply) : reply.promise ?? Promise.resolve(reply);
     promise.cancel = () => { state.cancelCount++; reply.reject?.(new Error('cancelled')); return Promise.resolve(); };
+    promise.progress = (_config, callback) => { state.progress = callback; return promise; };
     return promise;
   } }) };
   const module = load('src/components/artifactFiles.ts', { 'expo-file-system/legacy': FileSystem, 'expo-sharing': Sharing, 'react-native-blob-util': { default: BlobUtil, __esModule: true }, '../lib/api': api });
@@ -189,15 +191,47 @@ test('sharing copies local preview bytes to an independent safe filename and kee
   assert.equal(h.state.removed.length, 1);
 });
 
+test('large text preview metadata is rejected before any download, while unknown oversized streams are cancelled natively', async () => {
+  const h = filesHarness();
+  const limit = 4 * 1024 * 1024;
+  await assert.rejects(h.downloadArtifact({ ...file, size: limit + 1 }, undefined, { maxBytes: limit }), (error) => error.source?.key === 'error.previewTooLarge');
+  assert.equal(h.state.calls.length, 0);
+  assert.equal(h.state.directories.length, 0);
+  const pending = deferred();
+  h.state.replies.push(pending);
+  const download = h.downloadArtifact({ ...file, size: 0 }, undefined, { maxBytes: limit });
+  await new Promise(setImmediate);
+  h.state.progress(limit + 1, -1);
+  await assert.rejects(download, (error) => error.source?.key === 'error.previewTooLarge');
+  assert.equal(h.state.cancelCount, 1);
+  assert.equal(h.state.removed.length, 1);
+});
+
+test('large native file downloads have an extended connection budget and sharing abort removes partial bytes without opening a chooser', async () => {
+  const h = filesHarness();
+  const pending = deferred();
+  h.state.replies.push(pending);
+  const controller = new AbortController();
+  const sharing = h.shareArtifact({ ...file, size: 200 * 1024 * 1024 }, undefined, controller.signal);
+  await new Promise(setImmediate);
+  assert.equal(h.state.calls[0].options.timeout, 600000);
+  assert.equal(h.state.calls[0].options.path.includes('://'), false);
+  controller.abort();
+  await assert.rejects(sharing, /取消/);
+  assert.equal(h.state.cancelCount, 1);
+  assert.equal(h.state.shared.length, 0);
+  assert.equal(h.state.removed.length, 1);
+});
+
 const jsx = (type, props) => ({ type, props: props ?? {} });
 const walk = (node) => Array.isArray(node) ? node.flatMap(walk) : node && typeof node === 'object' && 'type' in node ? [node, ...walk(node.props.children)] : [];
 function viewerHarness() {
-  const state = { slots: [], cursor: 0, refs: [], refCursor: 0, opened: [] };
-  const hooks = { useState(initial) { const i = state.cursor++; if (!(i in state.slots)) state.slots[i] = initial; return [state.slots[i], (value) => { state.slots[i] = typeof value === 'function' ? value(state.slots[i]) : value; }]; }, useRef(initial) { const i = state.refCursor++; return state.refs[i] ??= { current: initial }; }, useEffect() {} };
+  const state = { slots: [], cursor: 0, refs: [], refCursor: 0, opened: [], effects: [], downloads: [], type: 'pdf' };
+  const hooks = { useState(initial) { const i = state.cursor++; if (!(i in state.slots)) state.slots[i] = initial; return [state.slots[i], (value) => { state.slots[i] = typeof value === 'function' ? value(state.slots[i]) : value; }]; }, useRef(initial) { const i = state.refCursor++; return state.refs[i] ??= { current: initial }; }, useEffect(effect) { state.effects.push(effect); } };
   const primitives = Object.fromEntries(['Modal', 'Pressable', 'ScrollView', 'View', 'ActivityIndicator'].map((name) => [name, name]));
   const module = load('src/components/DocumentViewer.tsx', {
     react: hooks, 'react/jsx-runtime': { jsx, jsxs: jsx },
-    'react-native': { ...primitives, Linking: { openURL: async (url) => { state.opened.push(url); } }, StyleSheet: { create: (x) => x, hairlineWidth: 0.5 } },
+    'react-native': { ...primitives, Keyboard: { dismiss() {} }, Linking: { openURL: async (url) => { state.opened.push(url); } }, StyleSheet: { create: (x) => x, hairlineWidth: 0.5 } },
     'expo-file-system/legacy': {}, 'expo-status-bar': { StatusBar: 'StatusBar' },
     'lucide-react-native': { FileText: 'FileText', Share2: 'Share2', X: 'X' },
     'react-native-pdf': { default: 'Pdf', __esModule: true },
@@ -209,10 +243,21 @@ function viewerHarness() {
     '../ui/overlayGeometry': { modalOrientations: ['portrait', 'landscape-left', 'landscape-right'] },
     './ScreenChrome': { AppText: 'AppText', Button: 'Button', ErrorNotice: 'ErrorNotice' },
     './Markdown': { Markdown: 'Markdown' },
-    './artifactFiles': { fileType: () => 'pdf', fileSize: () => '1 KB' },
+    './artifactFiles': { fileType: () => state.type, fileSize: () => '1 KB', downloadArtifact: async (...args) => { state.downloads.push(args); return { uri: 'file:///private/cache/file', dispose: async () => {} }; } },
   }, '\nexports.DocumentPreview = DocumentPreview;');
-  return { ...module, state, render() { state.cursor = 0; state.refCursor = 0; return module.DocumentPreview({ file, onClose() {} }); } };
+  return { ...module, state, render(previewFile = file) { state.cursor = 0; state.refCursor = 0; state.effects = []; return module.DocumentPreview({ file: previewFile, onClose() {} }); } };
 }
+
+test('the actual text preview refuses oversized metadata before starting its file effect', async () => {
+  const h = viewerHarness();
+  h.state.type = 'code';
+  h.render({ ...file, name: 'large.txt', size: 5 * 1024 * 1024 });
+  h.state.effects.forEach((effect) => effect());
+  await new Promise(setImmediate);
+  assert.equal(h.state.downloads.length, 0);
+  assert.ok(h.state.slots[3]);
+  assert.equal(h.state.slots[2], false);
+});
 
 test('PDF preview is full-screen and landscape-safe, native zoom/scroll uses only a local URI without network credentials', () => {
   const h = viewerHarness();

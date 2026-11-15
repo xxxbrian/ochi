@@ -18,6 +18,7 @@ const storageOptions = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS
 export const DEFAULT_API_BASE_URL = 'https://ochi.bojin.co';
 let serverURL = initialServerURL(process.env.EXPO_PUBLIC_API_URL?.trim() || DEFAULT_API_BASE_URL);
 let accessToken: string | null = null;
+let credentialRevision = 0;
 let onUnauthorized: (() => void) | undefined;
 
 export function getAPIBaseURL() { return serverURL; }
@@ -57,11 +58,13 @@ export async function restoreCredentials() {
   // Never pair a saved credential with a new build default or an unsafe address.
   if (savedURL) serverURL = initialServerURL(savedURL);
   accessToken = savedURL && serverURL ? savedToken : null;
+  credentialRevision++;
   return Boolean(accessToken);
 }
 
 export async function clearCredentials() {
   accessToken = null;
+  credentialRevision++;
   await SecureStore.deleteItemAsync(AUTH_KEY);
 }
 
@@ -141,6 +144,7 @@ export const api = {
     const response = await request<User & { access_token: string; expires_at: string }>('/api/auth/login', json('POST', { username, password, native: true }));
     if (!response.access_token) throw localizedError("error.nativeLogin");
     accessToken = response.access_token;
+    credentialRevision++;
     await SecureStore.setItemAsync(AUTH_KEY, accessToken, storageOptions);
     const { access_token: _token, expires_at: _expires, ...user } = response;
     return user as User;
@@ -171,20 +175,98 @@ export const api = {
   project: (projectId: string) => request<ProjectDetail>(`/api/projects/${id(projectId)}`),
   saveProject: (value: Partial<Project>) => request<Project>(value.id ? `/api/projects/${id(value.id)}` : '/api/projects', json(value.id ? 'PATCH' : 'POST', { name: value.name, instructions: value.instructions })),
   deleteProject: (projectId: string) => request<void>(`/api/projects/${id(projectId)}`, { method: 'DELETE' }),
-  upload: async (file: NativeUpload) => {
+  upload: async (file: NativeUpload): Promise<Artifact> => {
+    const base = requireAPIBaseURL();
+    const token = accessToken;
+    const revision = credentialRevision;
+    const checkOwner = () => {
+      if (base !== serverURL || token !== accessToken || revision !== credentialRevision) throw localizedError("error.upload");
+    };
+    let sourcePath: string;
+    try {
+      const uri = new URL(file.uri);
+      if (uri.protocol !== 'file:' || (uri.hostname && uri.hostname !== 'localhost')) throw new Error();
+      sourcePath = decodeURIComponent(uri.pathname);
+    } catch {
+      throw localizedError("error.upload");
+    }
     const source = new File(file.uri);
-    if (source.size > 32 * 1024 * 1024) throw localizedError("error.fileTooLarge");
     const boundary = `ochi-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const name = file.name.replace(/["\r\n\\]/g, '_');
     const mime = (file.mimeType || source.type || 'application/octet-stream').replace(/[\r\n]/g, '');
-    const encoder = new TextEncoder();
-    // Expo's FormData encoder percent-escapes Unicode filenames; Go expects UTF-8.
-    const prefix = encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: ${mime}\r\n\r\n`);
-    const suffix = encoder.encode(`\r\n--${boundary}--\r\n`);
-    const bytes = await source.bytes();
-    const body = new Uint8Array(prefix.length + bytes.length + suffix.length);
-    body.set(prefix); body.set(bytes, prefix.length); body.set(suffix, prefix.length + bytes.length);
-    return request<Artifact>('/api/files', { method: 'POST', body, headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` } });
+    const prefix = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${name}"\r\nContent-Type: ${mime}\r\n\r\n`;
+    const suffix = `\r\n--${boundary}--\r\n`;
+    const { default: BlobUtil } = await import('react-native-blob-util');
+    checkOwner();
+    const temporary = `${BlobUtil.fs.dirs.CacheDir}/${boundary}.multipart`;
+    let uploaded: Artifact | undefined;
+    let failure: ApiError | undefined;
+    try {
+      try {
+        // iOS's multipart-array builder buffers whole files. Native URI copying
+        // keeps the file on disk and preserves the filename's literal UTF-8.
+        const original = await BlobUtil.fs.stat(sourcePath);
+        if (original.type !== 'file' || !Number.isSafeInteger(original.size) || original.size < 0) throw new Error();
+        checkOwner();
+        await BlobUtil.fs.createFile(temporary, prefix, 'utf8');
+        checkOwner();
+        await BlobUtil.fs.appendFile(temporary, sourcePath, 'uri');
+        checkOwner();
+        await BlobUtil.fs.appendFile(temporary, suffix, 'utf8');
+        checkOwner();
+        // The iOS URI copier can resolve after a short write; reject a partial spool.
+        const prepared = await BlobUtil.fs.stat(temporary);
+        if (prepared.size !== original.size + new TextEncoder().encode(prefix + suffix).byteLength) throw new Error();
+        checkOwner();
+      } catch {
+        throw localizedError("error.upload");
+      }
+      let response;
+      try {
+        response = await BlobUtil.config({ followRedirect: false, trusty: false, timeout: 600000 })
+          .fetch('POST', `${base}/api/files`, {
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            // Select HTTPBodyStream rather than NSData in the iOS native driver.
+            'Transfer-Encoding': 'chunked',
+            'X-Client-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+            'Accept-Language': getLocale(),
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          }, BlobUtil.wrap(temporary));
+      } catch {
+        checkOwner();
+        throw localizedError("error.connection");
+      }
+      checkOwner();
+      const status = response.info().status;
+      let body: Artifact & { error?: string; code?: string; params?: Record<string, string | number> };
+      try {
+        body = await response.json();
+      } catch {
+        if (status >= 200 && status < 300) throw localizedError("error.upload");
+        body = {} as typeof body;
+      }
+      checkOwner();
+      if (status < 200 || status >= 300) {
+        const error = new Error(errorMessage('/api/files', status, body?.code, body?.params)) as ApiError;
+        error.status = status;
+        error.detail = body?.error ?? '';
+        error.code = body?.code;
+        error.params = body?.params;
+        failure = error;
+      } else {
+        if (!body || typeof body !== 'object') throw localizedError("error.upload");
+        uploaded = body;
+      }
+    } finally {
+      await BlobUtil.fs.unlink(temporary).catch(() => undefined);
+      checkOwner();
+    }
+    if (failure) {
+      if (failure.status === 401) onUnauthorized?.();
+      throw failure;
+    }
+    if (!uploaded) throw localizedError("error.upload");
+    return uploaded;
   },
   memories: (project_id?: string, q?: string) => request<Memory[]>(`/api/memories?${new URLSearchParams({ ...(project_id ? { project_id } : {}), ...(q ? { q } : {}) })}`),
   addMemory: (content: string, metadata?: Partial<Memory>) => request<Memory>('/api/memories', json('POST', { content, kind: metadata?.kind, project_id: metadata?.project_id })),

@@ -49,13 +49,14 @@ function DocumentPreview({ file, onClose }: { file: Artifact; onClose: () => voi
   const [sharing, setSharing] = useState(false);
   const [pages, setPages] = useState({ page: 1, total: 0 });
   const active = useRef(true);
+  const shareDownload = useRef<AbortController | null>(null);
   const currentPreview = useRef({ uri, attempt });
   currentPreview.current = { uri, attempt };
   const isCurrentPreview = () => active.current && currentPreview.current.uri === uri && currentPreview.current.attempt === attempt;
   useEffect(() => {
     active.current = true;
     Keyboard.dismiss();
-    return () => { active.current = false; };
+    return () => { active.current = false; shareDownload.current?.abort(); };
   }, []);
   useEffect(() => {
     const controller = new AbortController();
@@ -64,7 +65,8 @@ function DocumentPreview({ file, onClose }: { file: Artifact; onClose: () => voi
     setLoading(previewable);
     if (previewable) void (async () => {
       try {
-        local = await downloadArtifact(file, controller.signal);
+        if (type !== "pdf" && file.size > textPreviewLimit) throw localizedError("error.previewTooLarge");
+        local = await downloadArtifact(file, controller.signal, type === "pdf" ? undefined : { maxBytes: textPreviewLimit });
         if (controller.signal.aborted) return;
         if (type === "pdf") {
           setURI(local.uri);
@@ -93,9 +95,14 @@ function DocumentPreview({ file, onClose }: { file: Artifact; onClose: () => voi
   async function share() {
     if (sharing) return;
     setSharing(true); setShareError("");
-    try { await shareArtifact(file, uri || undefined); }
+    const controller = new AbortController();
+    shareDownload.current = controller;
+    try { await shareArtifact(file, uri || undefined, controller.signal); }
     catch (reason) { if (active.current) setShareError(errorForDisplay(reason, "error.download")); }
-    finally { if (active.current) setSharing(false); }
+    finally {
+      if (shareDownload.current === controller) shareDownload.current = null;
+      if (active.current) setSharing(false);
+    }
   }
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "text";
   const language = ({ py: "python", js: "javascript", ts: "typescript", sh: "bash", yml: "yaml", svg: "xml", txt: "text", log: "text" } as Record<string, string>)[extension] ?? extension;

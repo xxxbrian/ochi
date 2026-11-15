@@ -90,7 +90,7 @@ export const messages = {
   "common.continue": { "en": "Continue", "zh-CN": "继续", "zh-TW": "繼續" },
   "error.cameraPermission": { "en": "Allow camera access", "zh-CN": "请允许使用相机", "zh-TW": "請允許使用相機" },
   "error.photosPermission": { "en": "Allow access to photos", "zh-CN": "请允许访问照片", "zh-TW": "請允許取用照片" },
-  "error.fileTooLarge": { "en": "File is too large. Choose a file up to 32 MB.", "zh-CN": "文件太大，请选择 32 MB 以内的文件", "zh-TW": "檔案太大，請選擇 32 MB 以內的檔案" },
+  "error.fileTooLarge": { "en": "The file exceeds this server's transfer limit.", "zh-CN": "文件超出了当前服务器的传输上限。", "zh-TW": "檔案超出了目前伺服器的傳輸上限。" },
   "error.upload": { "en": "Unable to upload", "zh-CN": "上传失败", "zh-TW": "上傳失敗" },
   "attachment.camera": { "en": "Camera", "zh-CN": "相机", "zh-TW": "相機" },
   "attachment.photos": { "en": "Photos or videos", "zh-CN": "照片或视频", "zh-TW": "照片或影片" },

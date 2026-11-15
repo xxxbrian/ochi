@@ -1,4 +1,4 @@
-import { errorForDisplay, localizedError, type DisplayError } from "../lib/errors";
+import { errorForDisplay, type DisplayError } from "../lib/errors";
 import { t, useI18n, getLocale, thinkingLevelLabel } from "../lib/i18n";
 import { memo, useEffect, useRef, useState } from "react";
 import {
@@ -341,8 +341,6 @@ export const Composer = memo(function Composer({
         }));
       }
       for (const file of chosen) {
-        if (file.size && file.size > 32 * 1024 * 1024)
-          throw localizedError("error.fileTooLarge");
         const uploaded = await api.upload(file);
         if (!isCurrent()) return;
         changeFiles((current) => [...current, uploaded]);
