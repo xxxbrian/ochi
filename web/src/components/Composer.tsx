@@ -4,6 +4,7 @@ import { sendsOnEnter } from "../lib/appearance";
 import {
   memo,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -12,9 +13,11 @@ import {
   type DragEvent,
   type FormEvent,
   type KeyboardEvent,
+  type RefObject,
 } from "react";
 import {
   ArrowUp,
+  BookUser,
   Brain,
   Check,
   ChevronDown,
@@ -82,6 +85,10 @@ type Props = {
   computerOnce?: boolean;
   computerUpdating?: boolean;
   onComputer: (value: boolean) => void;
+  memoryEnabled: boolean;
+  globalMemoryEnabled: boolean;
+  memoryFixed?: boolean;
+  onMemory?: (value: boolean) => void;
   onError: (error: string) => void;
   busy: boolean;
   unavailable: boolean;
@@ -223,6 +230,58 @@ function EffortPicker({ efforts, value, disabled, onChange }: { efforts: string[
   </Menu.Root>;
 }
 
+function MemoryPicker({ enabled, globalEnabled, fixed, disabled, inputRef, onChange }: {
+  enabled: boolean;
+  globalEnabled: boolean;
+  fixed: boolean;
+  disabled: boolean;
+  inputRef: RefObject<HTMLTextAreaElement | null>;
+  onChange?: (value: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const radioName = useId();
+  const restoreInput = useRef(false);
+  const status = !enabled ? t("sessionMemory.off") : !globalEnabled ? t("sessionMemory.globalOff") : t("sessionMemory.on");
+  return <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Trigger type="button" className="chip-btn memory-chip" aria-label={status} title={status}
+      data-off={!enabled || !globalEnabled || undefined} disabled={disabled}
+      onMouseDown={(event) => {
+        restoreInput.current = document.activeElement === inputRef.current;
+        if (restoreInput.current) event.preventDefault();
+      }}
+      onKeyDown={() => { restoreInput.current = false; }}>
+      <BookUser className="ic" />
+      <span className="chip-label">{status}</span>
+    </Popover.Trigger>
+    <Popover.Portal>
+      <Popover.Positioner className="pop-positioner" side="top" sideOffset={8} align="start" collisionPadding={8}>
+        <Popover.Popup className="pop memory-pop" initialFocus={(type) => type === "keyboard"}
+          finalFocus={() => restoreInput.current ? inputRef.current : true}>
+          <div className="menu-label"><Popover.Title render={<span />}>{t("sessionMemory.title")}</Popover.Title></div>
+          {fixed ? <p className="memory-status">{status}</p> : (
+            <fieldset className="menu memory-options" disabled={disabled || !onChange}>
+              <legend className="sr-only">{t("sessionMemory.title")}</legend>
+              {[true, false].map((value) => <label className="menu-item memory-option" key={String(value)}
+                onMouseDown={(event) => { if (restoreInput.current) event.preventDefault(); }}>
+                <input className="sr-only" type="radio" name={radioName} checked={enabled === value}
+                  onChange={() => { onChange?.(value); setOpen(false); }} />
+                <span>{value ? t("sessionMemory.enable") : t("sessionMemory.disable")}</span>
+                {enabled === value && <Check className="ic memory-tick" />}
+              </label>)}
+            </fieldset>
+          )}
+          <Popover.Description className="memory-description">
+            {fixed ? t("sessionMemory.fixed") : t("sessionMemory.beforeSend")}
+          </Popover.Description>
+          <p className="memory-description">{enabled && !globalEnabled
+            ? t("sessionMemory.globalHint")
+            : enabled ? t("sessionMemory.onHint") : t("sessionMemory.offHint")}</p>
+        </Popover.Popup>
+      </Popover.Positioner>
+    </Popover.Portal>
+  </Popover.Root>;
+}
+
 // Input owns draft state independently from the growing run snapshot.
 export const Composer = memo(function Composer({
   onSubmit,
@@ -239,6 +298,10 @@ export const Composer = memo(function Composer({
   computerOnce,
   computerUpdating,
   onComputer,
+  memoryEnabled = true,
+  globalMemoryEnabled = true,
+  memoryFixed = false,
+  onMemory,
   onError,
   busy,
   unavailable,
@@ -555,6 +618,8 @@ export const Composer = memo(function Composer({
           <Monitor className="ic" />
           <span className="chip-label">{computerOnce ? t("computer.once") : t("computer.title")}</span>
         </button>
+        <MemoryPicker enabled={memoryEnabled} globalEnabled={globalMemoryEnabled} fixed={memoryFixed}
+          disabled={unavailable || submitting} inputRef={inputRef} onChange={onMemory} />
         <span className="grow" />
         {models.length > 0 && <ModelPicker models={models} value={modelId} disabled={unavailable} onChange={onModel} />}
         {efforts.length > 0 && <EffortPicker efforts={efforts} value={effort} disabled={unavailable} onChange={onEffort} />}

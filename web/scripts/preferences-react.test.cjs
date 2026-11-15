@@ -128,12 +128,13 @@ test("the actual preference hook survives StrictMode and isolates a later accoun
   assert.equal(owner.getSnapshot().error, "");
 });
 
-function appFixture({ delayedWrites = false, delayedModels = false } = {}) {
+function appFixture({ delayedWrites = false, delayedModels = false, globalMemoryEnabled = true } = {}) {
   const modelsGate = deferred();
   const locale = createI18nHarness("en");
-  const calls = [], pending = [], sessionUpdates = [];
-  let value = preferences(), reads = 0;
-  const historical = { id: "history", title: "History", model_id: "A", computer_enabled: false, effort: "low" };
+  const calls = [], pending = [], sessionUpdates = [], creates = [], sends = [];
+  let value = preferences({ memory_enabled: globalMemoryEnabled }), reads = 0;
+  const historical = { id: "history", title: "History", model_id: "A", computer_enabled: false, memory_enabled: false, effort: "low" };
+  const createdSessions = [];
   const models = ["A", "B", "C"].map((id) => ({
     id, name: id, model: id, provider_id: "provider", provider_name: "Provider",
     enabled: true, kind: "chat", default_effort: "low", efforts: ["low", "high"],
@@ -142,7 +143,7 @@ function appFixture({ delayedWrites = false, delayedModels = false } = {}) {
     me: async () => ({ id: "account", username: "qa", role: "user" }),
     sessionsPage: async () => ({ items: [historical] }),
     models: async () => delayedModels ? modelsGate.promise : models,
-    projects: async () => [],
+    projects: async () => [{ id: "project", name: "Project" }],
     preferences: async () => { reads++; return value; },
     updatePreferences: (patch) => {
       calls.push(patch);
@@ -157,6 +158,14 @@ function appFixture({ delayedWrites = false, delayedModels = false } = {}) {
   const controller = {
     getSnapshot: () => ({ session: currentSession }),
     updateSession: async (patch) => { sessionUpdates.push(patch); Object.assign(historical, patch); return historical; },
+    select() {},
+    createAndSend: async (content, options) => {
+      creates.push({ content, options });
+      const session = { ...historical, id: `created-${creates.length}`, memory_enabled: options.memory_enabled };
+      createdSessions.push(session);
+      return { session };
+    },
+    send: async (content, options) => { sends.push({ content, options }); },
   };
   const host = (tag = "div") => ({ children }) => React.createElement(tag, {}, children);
   const button = (name, onClick) => React.createElement("button", { onClick, type: "button" }, name);
@@ -166,11 +175,14 @@ function appFixture({ delayedWrites = false, delayedModels = false } = {}) {
     [filename("src/lib/api.ts")]: { api: transport, isActiveStatus: (status) => status === "running" },
     [filename("src/lib/router.ts")]: { useRouter() {
       const [route, setRoute] = React.useState({ kind: "chat", ...(window.location.pathname === "/c/history" ? { id: "history" } : {}) });
-      const navigate = React.useCallback((url) => setRoute({ kind: "chat", ...(url.startsWith("/c/") ? { id: url.slice(3) } : {}) }), []);
+      const navigate = React.useCallback((url) => setRoute({
+        kind: url.startsWith("/projects") ? "projects" : "chat",
+        ...(url.startsWith("/c/") ? { id: url.slice(3) } : url.startsWith("/projects/") ? { id: url.slice(10) } : {}),
+      }), []);
       return { route, navigate };
     } },
     [filename("src/hooks/useConversation.ts")]: { useConversation(_account, id) {
-      currentSession = id ? historical : null;
+      currentSession = id === historical.id ? historical : createdSessions.find((session) => session.id === id) ?? null;
       return {
         controller, session: currentSession, messages: [], run: null, owner: { origin: "fixture" },
         instructions: { items: [], canSend: false }, pending: [], loading: false, posting: false,
@@ -181,9 +193,9 @@ function appFixture({ delayedWrites = false, delayedModels = false } = {}) {
     [filename("src/components/Sidebar.tsx")]: {
       modKey: "Ctrl",
       MobileMenuButton: () => null,
-      Sidebar: ({ onCreate, onSelect, onSettings, onLogout }) => React.createElement("nav", {},
+      Sidebar: ({ onCreate, onSelect, onSettings, onLogout, onProjects }) => React.createElement("nav", {},
         button("Start new draft", onCreate), button("History", () => onSelect("history")),
-        button("Settings", onSettings), button("Logout", onLogout)),
+        button("Settings", onSettings), button("Logout", onLogout), button("Projects", onProjects)),
     },
     [filename("src/components/Composer.tsx")]: { Composer: (props) => {
       const [draft, setDraft] = React.useState("");
@@ -191,7 +203,13 @@ function appFixture({ delayedWrites = false, delayedModels = false } = {}) {
         React.createElement("input", { "aria-label": "Draft", value: draft, onChange: (event) => setDraft(event.target.value) }),
         React.createElement("output", { "data-testid": "model" }, props.modelId),
         React.createElement("output", { "data-testid": "computer" }, String(props.computerEnabled)),
+        React.createElement("output", { "data-testid": "memory" }, String(props.memoryEnabled)),
+        React.createElement("output", { "data-testid": "global-memory" }, String(props.globalMemoryEnabled)),
+        React.createElement("output", { "data-testid": "memory-fixed" }, String(Boolean(props.memoryFixed))),
         button("Composer computer", () => { void props.onComputer(!props.computerEnabled); }),
+        React.createElement("button", { type: "button", disabled: props.memoryFixed,
+          onClick: () => props.onMemory?.(!props.memoryEnabled) }, "Composer memory"),
+        button("Send draft", () => { void props.onSubmit(draft, []); }),
         ...models.map((model) => button(`Composer ${model.id}`, () => { void props.onModel(model.id); })));
     } },
     [filename("src/components/UserSettings.tsx")]: { default: ({ onClose, onLanguage }) => {
@@ -225,10 +243,11 @@ function appFixture({ delayedWrites = false, delayedModels = false } = {}) {
     [filename("src/components/Modal.tsx")]: { Modal: host() },
     [filename("src/components/QueueTray.tsx")]: { QueueTray: () => null },
     [filename("src/components/ui/Loading.tsx")]: { LoadingDots: () => null, SkelRows: () => null },
+    [filename("src/pages/ProjectsPage.tsx")]: { default: ({ renderComposer }) => renderComposer("project") },
   };
   load = createLoader(require("typescript"), require, overrides);
   return {
-    App: load(filename("src/App.tsx")).default, locale, calls, pending, sessionUpdates,
+    App: load(filename("src/App.tsx")).default, locale, calls, pending, sessionUpdates, creates, sends,
     historical, resolveModels: () => modelsGate.resolve(models),
     get reads() { return reads; },
     confirm(index) { value = { ...value, ...pending[index].patch }; pending[index].resolve(value); },
@@ -330,4 +349,68 @@ test("a direct historical link keeps its own model when its session arrives befo
   assert.equal(view.getByTestId("model").textContent, "C");
   assert.equal(view.getByTestId("computer").textContent, "false");
   assert.deepEqual(fixture.calls, [], "loading history never changes the account default");
+});
+
+test("draft memory is independent of account preferences, fixes on first send and resets for a new chat", async () => {
+  const fixture = appFixture();
+  const view = await mount(fixture.App);
+  const draft = view.getByRole("textbox", { name: "Draft" });
+  await change(draft, "Keep this draft");
+  draft.focus();
+  draft.setSelectionRange(4, 8);
+  assert.equal(view.getByTestId("memory").textContent, "true");
+  await click(view.getByRole("button", { name: "Composer memory" }));
+  assert.equal(view.getByTestId("memory").textContent, "false");
+  assert.equal(view.getByRole("textbox", { name: "Draft" }), draft);
+  assert.equal(draft.value, "Keep this draft");
+  assert.equal(document.activeElement, draft);
+  assert.equal(draft.selectionStart, 4);
+  assert.equal(draft.selectionEnd, 8);
+  assert.deepEqual(fixture.calls, [], "a conversation choice never writes the account preference");
+  await click(view.getByRole("button", { name: "Send draft" }));
+  assert.equal(fixture.creates[0].options.memory_enabled, false);
+  assert.equal(view.getByTestId("memory-fixed").textContent, "true");
+  assert.equal(view.getByTestId("memory").textContent, "false");
+  assert.equal(view.getByRole("button", { name: "Composer memory" }).disabled, true);
+  await click(view.getByRole("button", { name: "Send draft" }));
+  assert.equal(fixture.creates.length, 1);
+  assert.equal(Object.hasOwn(fixture.sends[0].options, "memory_enabled"), false);
+  await click(view.getByRole("button", { name: "Start new draft" }));
+  assert.equal(view.getByTestId("memory").textContent, "true");
+  assert.equal(view.getByTestId("memory-fixed").textContent, "false");
+  await click(view.getByRole("button", { name: "History", exact: true }));
+  assert.equal(view.getByTestId("memory").textContent, "false");
+  assert.equal(view.getByTestId("memory-fixed").textContent, "true");
+  assert.deepEqual(fixture.sessionUpdates, [], "opening history never patches its fixed choice");
+});
+
+test("global memory off preserves the draft's on choice while allowing an explicit off choice", async () => {
+  const fixture = appFixture({ globalMemoryEnabled: false });
+  const view = await mount(fixture.App);
+  assert.equal(view.getByTestId("global-memory").textContent, "false");
+  assert.equal(view.getByTestId("memory").textContent, "true");
+  await click(view.getByRole("button", { name: "Composer memory" }));
+  assert.equal(view.getByTestId("memory").textContent, "false");
+  await click(view.getByRole("button", { name: "Send draft" }));
+  assert.equal(fixture.creates[0].options.memory_enabled, false);
+  await click(view.getByRole("button", { name: "Start new draft" }));
+  assert.equal(view.getByTestId("memory").textContent, "true");
+  await click(view.getByRole("button", { name: "Send draft" }));
+  assert.equal(fixture.creates[1].options.memory_enabled, true);
+  assert.deepEqual(fixture.calls, []);
+});
+
+test("project draft memory stays independent and its next conversation returns to on", async () => {
+  const fixture = appFixture();
+  const view = await mount(fixture.App);
+  await click(view.getByRole("button", { name: "Composer memory" }));
+  await click(view.getByRole("button", { name: "Projects", exact: true }));
+  assert.equal(view.getByTestId("memory").textContent, "true");
+  await click(view.getByRole("button", { name: "Composer memory" }));
+  await click(view.getByRole("button", { name: "Send draft" }));
+  assert.equal(fixture.creates[0].options.project_id, "project");
+  assert.equal(fixture.creates[0].options.memory_enabled, false);
+  await click(view.getByRole("button", { name: "Projects", exact: true }));
+  assert.equal(view.getByTestId("memory").textContent, "true");
+  assert.deepEqual(fixture.calls, []);
 });

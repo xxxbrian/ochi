@@ -79,6 +79,14 @@
 .budget-pop { width: 224px; padding: 8px; }
 .budget-field { display: flex; align-items: center; gap: 8px; padding: 2px 4px 4px; }
 .budget-field .field-hint { margin: 0; }
+.memory-chip { max-width: 176px; }
+.memory-chip[data-off] .ic { opacity: 0.55; }
+.memory-pop { width: min(280px, calc(100vw - 24px)); }
+.memory-options { border: 0; margin: 0; padding: 0; min-width: 0; }
+.memory-option:focus-within { background: var(--hover); }
+.memory-option .memory-tick { margin-left: auto; color: var(--accent); width: 14px; height: 14px; }
+.memory-status { margin: 2px 9px 8px; font-size: var(--fs-sm); color: var(--ink); }
+.memory-description { margin: 6px 9px; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; }
 
 /* queued messages + run-instruction receipts hang off the card's top edge */
 .queue-tray {

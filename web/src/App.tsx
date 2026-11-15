@@ -137,6 +137,8 @@ export default function App() {
   const computerDefault = preferences?.computer_default ?? false;
   const [draftComputerEnabled, setDraftComputerEnabled] = useState(false);
   const [projectComputerDrafts, setProjectComputerDrafts] = useState<Record<string, boolean>>({});
+  const [draftMemoryEnabled, setDraftMemoryEnabled] = useState(true);
+  const [projectMemoryDrafts, setProjectMemoryDrafts] = useState<Record<string, boolean>>({});
   const [computerUpdating, setComputerUpdating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [computerOpen, setComputerOpen] = useState(false);
@@ -161,6 +163,8 @@ export default function App() {
     if (previous && previous.id !== current.id) {
       releaseMemoryOwner(previous.id);
       preferencesOwnerRef.current.deactivate();
+      setDraftMemoryEnabled(true);
+      setProjectMemoryDrafts({});
     }
     setUser(current);
   }, []);
@@ -200,6 +204,8 @@ export default function App() {
     setCreating(false);
     setBootstrapLoading(false);
     setDraftComputerEnabled(false);
+    setDraftMemoryEnabled(true);
+    setProjectMemoryDrafts({});
     setComputerUpdating(false);
     setComputerOpen(false);
     setSettingsOpen(false);
@@ -365,6 +371,7 @@ export default function App() {
       selectedRef.current = null;
       setSelectedId(null);
       setDraftComputerEnabled(computerDefault);
+      setDraftMemoryEnabled(true);
       const chosen = preferredChatModel(modelsRef.current, preferencesOwner.getSnapshot().preferences?.preferred_model_id ?? "");
       setModelId(chosen?.id ?? "");
       setEffort(chosen?.default_effort ?? "");
@@ -417,6 +424,7 @@ export default function App() {
     setDrawerOpen(false);
     setRevision(null);
     setDraftComputerEnabled(computerDefault);
+    setDraftMemoryEnabled(true);
     const chosen = preferredChatModel(modelsRef.current, preferencesOwner.getSnapshot().preferences?.preferred_model_id ?? "");
     setModelId(chosen?.id ?? "");
     setEffort(chosen?.default_effort ?? "");
@@ -449,9 +457,14 @@ export default function App() {
         const result = await controller.createAndSend(content, {
           ...options, attachments: files, project_id: projectId,
           computer_enabled: projectId ? projectComputerDrafts[projectId] ?? true : draftComputerEnabled,
+          memory_enabled: projectId ? projectMemoryDrafts[projectId] ?? true : draftMemoryEnabled,
         });
         if (!result || token !== selectionGeneration.current) return true;
         const created = result.session;
+        if (projectId) setProjectMemoryDrafts((current) => {
+          const { [projectId]: _created, ...drafts } = current;
+          return drafts;
+        });
         selectedRef.current = created.id;
         setSelectedId(created.id);
         if (user) storeSelection(user, created.id);
@@ -470,7 +483,7 @@ export default function App() {
       return false;
     } finally { if (token === selectionGeneration.current) setCreating(false); }
   }, [loading, posting, computerUpdating, modelId, effort, budget, reasoningEnabled, controller,
-    chat.owner.origin, user, projectComputerDrafts, draftComputerEnabled, navigate]);
+    chat.owner.origin, user, projectComputerDrafts, draftComputerEnabled, projectMemoryDrafts, draftMemoryEnabled, navigate]);
   const sendMessageNow = useCallback(
     (content: string, files: Artifact[]) => sendMessage(content, files, true),
     [sendMessage],
@@ -793,6 +806,9 @@ export default function App() {
                 onReasoningEnabled={setReasoningEnabled}
                 computerEnabled={projectComputerDrafts[id] ?? true}
                 onComputer={(enabled) => setProjectComputerDrafts((current) => ({ ...current, [id]: enabled }))}
+                memoryEnabled={projectMemoryDrafts[id] ?? true}
+                globalMemoryEnabled={preferences?.memory_enabled ?? true}
+                onMemory={(enabled) => setProjectMemoryDrafts((current) => ({ ...current, [id]: enabled }))}
                 busy={false}
                 unavailable={loading || posting}
                 stopping={false}
@@ -915,6 +931,10 @@ export default function App() {
               computerOnce={computerOnce}
               computerUpdating={computerUpdating}
               onComputer={changeComputer}
+              memoryEnabled={selectedId ? selected?.memory_enabled ?? true : draftMemoryEnabled}
+              globalMemoryEnabled={preferences?.memory_enabled ?? true}
+              memoryFixed={Boolean(selectedId)}
+              onMemory={setDraftMemoryEnabled}
               onStop={stopRun}
               onError={setError}
               busy={busy}

@@ -9,6 +9,7 @@ Object.assign(globalThis, {
   sessionStorage: dom.window.sessionStorage, localStorage: dom.window.localStorage,
   getComputedStyle: dom.window.getComputedStyle, IS_REACT_ACT_ENVIRONMENT: true,
   requestAnimationFrame: (callback) => setTimeout(callback, 0), cancelAnimationFrame: clearTimeout,
+  ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
 });
 Object.defineProperty(globalThis, "navigator", { value: dom.window.navigator, configurable: true });
 window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
@@ -48,7 +49,10 @@ async function fixture({ upload = async (value) => artifact(value), locale = "en
   const language = createI18nHarness(locale);
   const sent = [], errors = [];
   const load = createLoader(require("typescript"), require, {
-    [filename("src/lib/i18n.ts")]: language.web,
+    [filename("src/lib/i18n.ts")]: {
+      ...language.web,
+      useI18n: () => React.useSyncExternalStore(language.runtime.subscribeLocale, language.runtime.getLocaleRevision),
+    },
     [filename("src/lib/api.ts")]: { api: { upload } },
     [filename("src/components/FileCards.tsx")]: { sizeText: String },
   });
@@ -56,7 +60,8 @@ async function fixture({ upload = async (value) => artifact(value), locale = "en
   let props = {
     onSubmit: async (content, files) => { sent.push({ content, files }); return true; },
     onStop() {}, onError: (error) => errors.push(error),
-    computerEnabled: false, onComputer() {}, busy: false, unavailable: false, stopping: false,
+    computerEnabled: false, onComputer() {}, memoryEnabled: true, globalMemoryEnabled: true,
+    busy: false, unavailable: false, stopping: false,
     draftKey: "transfer-fixture", models: [], modelId: "", effort: "", onModel() {}, onEffort() {},
     initialDraft: "Keep this draft", ...patch,
   };
@@ -68,6 +73,7 @@ async function fixture({ upload = async (value) => artifact(value), locale = "en
   await act(async () => { view = render(element()); await flush(); });
   return {
     view, sent, errors, t: language.web.t,
+    async setLanguage(locale) { await act(async () => { language.runtime.setLanguage(locale); await flush(); }); },
     input: () => view.getByRole("textbox", { name: language.web.t("composer.messageLabel") }),
     form: () => view.container.querySelector("form"),
     async rerender(patch, key) {
@@ -242,6 +248,80 @@ test("folder drops report a localized error while ordinary files in the same tra
     assert.deepEqual(uploaded, [kept]);
     assert.deepEqual(h.errors, [h.t("composer.foldersUnsupported")]);
     assert.equal(h.input().value, "Keep this draft");
+    h.view.unmount();
+  }
+});
+
+test("the memory menu keeps textarea identity, draft, focus and selection across choices and live locales", async () => {
+  const choices = [];
+  const h = await fixture({ onMemory: (value) => choices.push(value) });
+  const input = h.input();
+  input.focus();
+  input.setSelectionRange(5, 9);
+  for (const locale of ["en", "zh-CN", "zh-TW"]) {
+    await h.rerender({ memoryEnabled: true });
+    await h.setLanguage(locale);
+    const trigger = h.view.getByRole("button", { name: h.t("sessionMemory.on"), exact: true });
+    await act(async () => {
+      fireEvent.mouseDown(trigger);
+      fireEvent.click(trigger);
+      await flush();
+    });
+    const off = h.view.getByRole("radio", { name: h.t("sessionMemory.disable"), exact: true });
+    await act(async () => { fireEvent.click(off); await flush(); });
+    await h.rerender({ memoryEnabled: false });
+    assert.ok(h.view.getByRole("button", { name: h.t("sessionMemory.off"), exact: true }));
+    assert.equal(h.input(), input);
+    assert.equal(input.value, "Keep this draft");
+    assert.equal(document.activeElement, input);
+    assert.equal(input.selectionStart, 5);
+    assert.equal(input.selectionEnd, 9);
+    assert.equal(sessionStorage.getItem("transfer-fixture"), "Keep this draft");
+  }
+  assert.deepEqual(choices, [false, false, false]);
+  assert.equal(h.sent.length, 0);
+});
+
+test("global-off memory is distinct from fixed-off and still permits a draft to choose off", async () => {
+  for (const locale of ["en", "zh-CN", "zh-TW"]) {
+    const choices = [];
+    const h = await fixture({ locale, globalMemoryEnabled: false, onMemory: (value) => choices.push(value) });
+    await act(async () => {
+      fireEvent.click(h.view.getByRole("button", { name: h.t("sessionMemory.globalOff"), exact: true }));
+      await flush();
+    });
+    assert.equal(h.view.getByRole("radio", { name: h.t("sessionMemory.enable"), exact: true }).checked, true);
+    assert.ok(h.view.getByText(h.t("sessionMemory.globalHint")));
+    await act(async () => {
+      fireEvent.click(h.view.getByRole("radio", { name: h.t("sessionMemory.disable"), exact: true }));
+      await flush();
+    });
+    assert.deepEqual(choices, [false]);
+    await h.rerender({ memoryFixed: true });
+    await act(async () => {
+      fireEvent.click(h.view.getByRole("button", { name: h.t("sessionMemory.globalOff"), exact: true }));
+      await flush();
+    });
+    assert.equal(h.view.queryByRole("radio"), null);
+    assert.ok(h.view.getByText(h.t("sessionMemory.fixed")));
+    assert.ok(h.view.getByText(h.t("sessionMemory.globalHint")));
+    await h.rerender({ globalMemoryEnabled: true });
+    assert.ok(h.view.getByRole("button", { name: h.t("sessionMemory.on"), exact: true }));
+    assert.equal(h.view.queryByRole("radio"), null, "changing the global setting does not unlock the fixed choice");
+    assert.equal(h.view.queryByText(h.t("sessionMemory.globalHint")), null);
+    await act(async () => {
+      fireEvent.click(h.view.getByRole("button", { name: h.t("sessionMemory.on"), exact: true }));
+      await flush();
+    });
+    await h.rerender({ memoryEnabled: false, memoryFixed: true, globalMemoryEnabled: false });
+    await act(async () => {
+      fireEvent.click(h.view.getByRole("button", { name: h.t("sessionMemory.off"), exact: true }));
+      await flush();
+    });
+    assert.equal(h.view.queryByRole("radio"), null);
+    assert.ok(h.view.getByText(h.t("sessionMemory.fixed")));
+    assert.ok(h.view.getByText(h.t("sessionMemory.offHint")));
+    assert.equal(h.view.queryByText(h.t("sessionMemory.globalHint")), null);
     h.view.unmount();
   }
 });

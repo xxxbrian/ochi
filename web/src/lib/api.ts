@@ -143,10 +143,11 @@ export const api = {
     effort?: string,
     project_id?: string,
     computer_enabled?: boolean,
+    memory_enabled?: boolean,
   ) =>
     request<Session>("/api/sessions", {
       method: "POST",
-      body: JSON.stringify({ model_id, effort, project_id, computer_enabled }),
+      body: JSON.stringify({ model_id, effort, project_id, computer_enabled, memory_enabled }),
     }),
   updateSession: (
     id: string,

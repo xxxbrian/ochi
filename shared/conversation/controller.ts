@@ -12,7 +12,7 @@ export type ConversationTransport = RunTransport & {
   sessionHead(id: string, signal?: AbortSignal): Promise<SessionHead>;
   messages(id: string, before?: string, signal?: AbortSignal): Promise<Message[]>;
   queue(id: string, signal?: AbortSignal): Promise<PendingRun[]>;
-  createSession(modelId?: string, effort?: string, projectId?: string, computerEnabled?: boolean): Promise<Session>;
+  createSession(modelId?: string, effort?: string, projectId?: string, computerEnabled?: boolean, memoryEnabled?: boolean): Promise<Session>;
   startRun(id: string, content: string, options?: RunOptions): Promise<Snapshot>;
   updateSession(id: string, patch: SessionPatch): Promise<Session>;
   cancelRun(id: string): Promise<Snapshot>;
@@ -233,20 +233,20 @@ export function createConversationController(transport: ConversationTransport, c
     },
     refresh,
     refreshAll: () => refresh(true),
-    async createAndSend(content: string, options: RunOptions & { attachments?: Artifact[]; project_id?: string; computer_enabled?: boolean } = {}): Promise<CreatedConversation | undefined> {
+    async createAndSend(content: string, options: RunOptions & { attachments?: Artifact[]; project_id?: string; computer_enabled?: boolean; memory_enabled?: boolean } = {}): Promise<CreatedConversation | undefined> {
       const token = generation;
       if (state.owner.sessionId || state.posting) return;
       emit({ posting: true, error: null });
       let created: Session | undefined;
       try {
-        created = await transport.createSession(options.model_id, options.effort, options.project_id, options.computer_enabled);
+        created = await transport.createSession(options.model_id, options.effort, options.project_id, options.computer_enabled, options.memory_enabled);
         if (!owns(token)) return;
         const previous = state.ownerKey;
         const owner = { ...state.owner, sessionId: created.id };
         emit({ owner, ownerKey: conversationKey(owner), adoptedFrom: previous, session: created, loading: false, posting: false });
         syncReceipts();
         callbacks.onSessionChanged?.(created);
-        const { project_id: _project, computer_enabled: _computer, ...runOptions } = options;
+        const { project_id: _project, computer_enabled: _computer, memory_enabled: _memory, ...runOptions } = options;
         const run = await controller.send(content, runOptions);
         return owns(token) ? { session: created, run } : undefined;
       } catch (error) {

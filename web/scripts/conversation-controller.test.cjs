@@ -17,7 +17,7 @@ const run = (id = "R", status = "completed", seq = 10) => ({
 });
 const text = (id, value, phase = "final", source = id) => ({ id, seq: 1, kind: "text", source_id: source, round_id: "round", state: "completed", phase, text: value });
 function fixture(overrides = {}) {
-  let head = { session: { id: "S", title: "First", updated_at: "1", computer_enabled: false },
+  let head = { session: { id: "S", title: "First", updated_at: "1", computer_enabled: false, memory_enabled: true },
     latest_run: { run_id: "R", status: "completed", seq: 10 }, history_revision: "1", queue_revision: "0" };
   let history = [{ id: "M", run_id: "R", role: "assistant", content: "First", created_at: "" }];
   const calls = { head: 0, messages: 0, queue: 0, run: 0, connected: 0, closed: 0 };
@@ -119,6 +119,38 @@ test("first turn adoption and route acknowledgement retain live state and messag
   } finally { f.controller.dispose(); }
 });
 
+test("conversation memory is consumed at creation and never reaches first, queued or retry run options", async () => {
+  for (const memoryEnabled of [true, false, undefined]) {
+    const creates = [], runs = [];
+    const f = fixture({
+      createSession: async (...args) => {
+        creates.push(args);
+        return { ...f.head.session, memory_enabled: memoryEnabled ?? true };
+      },
+      startRun: async (_id, _content, options) => {
+        runs.push(options);
+        return run("R2", options.stop_current ? "running" : "queued", 1);
+      },
+    });
+    try {
+      f.controller.select({ ...owner(), sessionId: undefined });
+      const result = await f.controller.createAndSend("first", {
+        model_id: "model", effort: "high", project_id: "project", computer_enabled: false,
+        memory_enabled: memoryEnabled, attachment_ids: ["file"],
+      });
+      assert.deepEqual(creates, [["model", "high", "project", false, memoryEnabled]]);
+      assert.equal(result.session.memory_enabled, memoryEnabled ?? true);
+      await f.controller.send("queued", { model_id: "model", attachment_ids: [] });
+      await f.controller.send("retry", { retry_run_id: "R2", stop_current: true });
+      assert.deepEqual(runs, [
+        { model_id: "model", effort: "high", attachment_ids: ["file"] },
+        { model_id: "model", attachment_ids: [] },
+        { retry_run_id: "R2", stop_current: true },
+      ]);
+    } finally { f.controller.dispose(); }
+  }
+});
+
 test("session writes serialize independent patches and cannot resolve in reverse order", async () => {
   const first = deferred(), calls = [];
   const f = fixture({ updateSession: async (_id, patch) => {
@@ -184,13 +216,18 @@ test("create completion cannot start a run or change a newly selected owner", as
 
 test("a failed first turn retains the created session for retry without creating another", async () => {
   let created = 0;
-  const f = fixture({ createSession: async () => { created++; return f.head.session; },
+  const f = fixture({ createSession: async () => {
+    created++;
+    f.setHead({ ...f.head, session: { ...f.head.session, memory_enabled: false } });
+    return f.head.session;
+  },
     startRun: async () => { throw new Error("fixture failure"); } });
   try {
     f.controller.select({ ...owner(), sessionId: undefined });
-    const result = await f.controller.createAndSend("draft");
+    const result = await f.controller.createAndSend("draft", { memory_enabled: false });
     assert.equal(result.session.id, "S"); assert.equal(result.error.message, "fixture failure");
     assert.equal(f.controller.getSnapshot().session.id, "S");
+    assert.equal(f.controller.getSnapshot().session.memory_enabled, false);
     assert.equal(f.controller.getSnapshot().posting, false);
     assert.equal(await f.controller.createAndSend("retry"), undefined); assert.equal(created, 1);
   } finally { f.controller.dispose(); }

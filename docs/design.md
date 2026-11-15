@@ -46,6 +46,18 @@ payloads are rendered only on expansion. Editing uses the existing composer and
 restores the previous draft on cancel. Starting a new conversation clears that
 view without stopping another run.
 
+Each new conversation starts with memory selected on. A compact composer menu
+lets the user choose on or off before the first send; creation fixes that choice
+for the entire conversation, and the same entry then shows its read-only state.
+The choice does not become an account default or carry into another new
+conversation. The account memory setting is an upper bound: an on conversation
+shows "Off globally" while account memory is disabled, and the draft still lets
+the user explicitly choose off. Off excludes personal memory, past-chat retrieval
+and private learned Skills from both reads and writes, including later retrieval
+of that conversation by other agents. Chats remain saved normally, and Computer
+permission remains independent. The menu, language changes and streaming updates
+preserve the draft, textarea identity, focus and selection.
+
 The Web composer accepts local file drops and pasted clipboard images through
 the same attachment upload path as the file picker. A drag highlights only the
 composer; text and link drags retain browser behavior. Repeated additions queue
