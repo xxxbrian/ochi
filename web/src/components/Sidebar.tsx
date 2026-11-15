@@ -30,6 +30,7 @@ import { groupSessions } from "../lib/sessionGroups";
 import { exportTranscript } from "../lib/exportTranscript";
 import "./sidebar.css";
 const SessionSearch = lazy(() => import("./SessionSearch").then((module) => ({ default: module.SessionSearch })));
+const ClientDownloads = lazy(() => import("./ClientDownloads").then((module) => ({ default: module.ClientDownloads })));
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 export const modKey = isMac ? "⌘" : "Ctrl";
@@ -174,6 +175,7 @@ export function Sidebar(props: Props) {
   const rail = !compact && !expanded;
   const aside = useRef<HTMLElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [downloads, setDownloads] = useState(false);
   useLayoutEffect(() => {
     const stored = storedWidth();
     if (stored) aside.current?.closest<HTMLElement>(".app-shell")?.style.setProperty("--sidebar-w", `${stored}px`);
@@ -337,6 +339,7 @@ export function Sidebar(props: Props) {
               <MenuAction onClick={onSettings}><Settings className="ic" />{t("settings.title")}</MenuAction>
               {user.role === "admin" && <MenuAction onClick={onAdmin}><ShieldCheck className="ic" />{t("sidebar.admin")}</MenuAction>}
               <MenuAction onClick={onSettings}><Languages className="ic" />{t("settings.language")}</MenuAction>
+              <MenuAction onClick={() => setDownloads(true)}><Download className="ic" />{t("clientDownloads.title")}</MenuAction>
               <MenuSeparator />
               <MenuAction onClick={onLogout}><LogOut className="ic" />{t("login.signOut")}</MenuAction>
             </ActionMenu>
@@ -344,6 +347,7 @@ export function Sidebar(props: Props) {
         </div>
         {!compact && expanded && <ResizeHandle onDragging={setDragging} />}
       </aside>
+      {downloads ? <Suspense fallback={null}><ClientDownloads onClose={() => setDownloads(false)} /></Suspense> : null}
       {searchOpen && (
         <Suspense fallback={null}>
           <SessionSearch onClose={() => onSearchOpenChange(false)} onSelect={onSelect} commands={searchCommands} />

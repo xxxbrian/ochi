@@ -1,8 +1,9 @@
 import { t, useI18n } from "../lib/i18n";
-import { type FormEvent, useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { type FormEvent, lazy, Suspense, useState } from "react";
+import { ArrowRight, Download } from "lucide-react";
 import { api } from "../lib/api";
 import type { User } from "../lib/types";
+const ClientDownloads = lazy(() => import("./ClientDownloads").then((module) => ({ default: module.ClientDownloads })));
 
 export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
   useI18n();
@@ -10,6 +11,7 @@ export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [downloads, setDownloads] = useState(false);
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!username.trim() || !password) return;
@@ -60,7 +62,11 @@ export function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
           <span>{busy ? t("login.signingIn") : t("login.signIn")}</span>
           <ArrowRight size={18} />
         </button>
+        <button type="button" className="btn ghost login-downloads" onClick={() => setDownloads(true)}>
+          <Download className="ic" />{t("clientDownloads.title")}
+        </button>
       </form>
+      {downloads ? <Suspense fallback={null}><ClientDownloads onClose={() => setDownloads(false)} /></Suspense> : null}
     </main>
   );
 }

@@ -194,7 +194,7 @@ test("API requests send the current language and errors resolve in the current l
   const i18n = createI18nHarness("en");
   const source = ts.createSourceFile("api.ts", read("src/lib/api.ts"), ts.ScriptTarget.Latest, true);
   const declarations = source.statements.filter((node) =>
-    ts.isFunctionDeclaration(node) && ["request", "userFacingError"].includes(node.name?.text));
+    ts.isFunctionDeclaration(node) && ["request", "userFacingError", "responseError"].includes(node.name?.text));
   const calls = [];
   let status = 200, body = { ok: true }, networkFailure = false;
   const api = evaluate(declarations.map((node) => node.getText(source)).join("\n"), {}, {

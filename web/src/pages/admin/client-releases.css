@@ -1,0 +1,20 @@
+.client-releases-card { display: flex; flex-direction: column; gap: var(--pad-4); }
+.client-release-platform { min-width: 0; display: flex; flex-direction: column; gap: var(--pad-3); }
+.client-release-platform + .client-release-platform { border-top: 1px solid var(--line); padding-top: var(--pad-4); }
+.client-release-platform h4 { display: flex; align-items: center; gap: var(--pad-2); margin: 0; font-size: var(--fs-ui); font-weight: 600; }
+.client-release-current { display: flex; flex-direction: column; gap: var(--pad-2); padding: var(--pad-3); border-radius: var(--r-md); background: var(--sunken); font-size: var(--fs-sm); color: var(--ink-2); }
+.client-release-current b { font-weight: 600; color: var(--ink); }
+.client-release-current code { color: var(--muted); font: 400 var(--fs-xs)/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.client-release-form { display: flex; flex-direction: column; gap: var(--pad-3); min-width: 0; }
+.client-release-file { height: auto; max-width: 100%; padding-block: var(--pad-2); }
+.client-release-file::file-selector-button { font: inherit; color: inherit; padding: var(--pad-1) var(--pad-2); margin-right: var(--pad-2); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--raised); cursor: pointer; }
+.client-release-form textarea { resize: vertical; min-height: 76px; }
+.client-release-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pad-2); }
+.client-release-actions a { text-decoration: none; }
+.client-release-progress { display: flex; flex-direction: column; gap: var(--pad-2); font-size: var(--fs-sm); color: var(--ink-2); }
+.client-release-progress > div { height: 5px; background: var(--sunken); border-radius: var(--r-pill); overflow: hidden; }
+.client-release-progress i { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.client-releases-feedback { display: flex; flex-direction: column; align-items: flex-start; gap: var(--pad-3); }
+.client-releases-loading { display: grid; gap: var(--pad-3); color: var(--muted); font-size: var(--fs-sm); }
+.client-releases-loading .skel { height: 120px; border-radius: var(--r-md); }
+@media (max-width: 480px) { .client-release-actions .btn { flex: 1; min-width: 0; } }

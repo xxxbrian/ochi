@@ -23,6 +23,7 @@ import type {
   PluginConfig,
   ComputerState,
   CatalogModel,
+  ClientReleases,
   RunStatus,
   RunInstruction,
   Schedule,
@@ -49,6 +50,7 @@ export function userFacingRunError(_error = "", hasArtifacts = false, code?: str
 }
 
 function userFacingError(path: string, status: number): string {
+  if (status === 0) return t("error.connect");
   if (status === 401)
     return path.endsWith("/login") ? t("error.credentials") : t("error.signInAgain");
   if (status === 404) return t("error.notFound");
@@ -58,6 +60,19 @@ function userFacingError(path: string, status: number): string {
   if (status === 403) return t("error.forbidden");
   if (status === 413) return t("error.fileSize");
   return t("error.request");
+}
+
+function responseError(path: string, status: number, body: { error?: string; code?: string; params?: MessageParams } = {}): ApiError {
+  const error = new Error() as ApiError;
+  Object.defineProperty(error, "message", {
+    configurable: true,
+    get: () => translateError(body.code, body.params) ?? userFacingError(path, status),
+  });
+  error.status = status;
+  error.detail = body.error ?? "";
+  error.code = body.code;
+  error.params = body.params;
+  return error;
 }
 
 export async function request<T>(
@@ -100,22 +115,15 @@ export async function request<T>(
     }
     if (!options.quiet && !(path === "/api/auth/me" && response.status === 401))
       console.error("API request failed", path, response.status, detail);
-    const error = new Error() as ApiError;
-    Object.defineProperty(error, "message", {
-      configurable: true,
-      get: () => translateError(code, params) ?? userFacingError(path, response.status),
-    });
-    error.status = response.status;
-    error.detail = detail;
-    error.code = code;
-    error.params = params;
-    throw error;
+    throw responseError(path, response.status, { error: detail, code, params });
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
 export const api = {
+  clientReleases: (signal?: AbortSignal) =>
+    request<ClientReleases>("/api/client-releases", { signal }, { quiet: true }),
   me: () => request<User>("/api/auth/me"),
   login: (username: string, password: string) =>
     request<User>("/api/auth/login", {
@@ -338,6 +346,14 @@ function providerRequestsPath(runID?: string) {
 }
 
 export const adminApi = {
+  clientReleases: (signal?: AbortSignal) =>
+    request<ClientReleases>("/api/admin/client-releases", { signal }, { quiet: true }),
+  uploadAndroidRelease: (file: File, notes: string, progress: (value: number) => void, signal: AbortSignal) =>
+    uploadAndroidRelease(file, notes, progress, signal),
+  removeAndroidRelease: (signal?: AbortSignal) =>
+    request<ClientReleases>("/api/admin/client-releases/android", { method: "DELETE", signal }, { quiet: true }),
+  saveIOSRelease: (url: string, signal?: AbortSignal) =>
+    request<ClientReleases>("/api/admin/client-releases/ios", { method: "PUT", body: JSON.stringify({ url }), signal }, { quiet: true }),
   providers: () => request<Provider[]>("/api/admin/providers"),
   models: () => request<Model[]>("/api/admin/models"),
   saveModelOrder: (model_ids: string[], default_model_id: string) =>
@@ -514,6 +530,39 @@ export const adminApi = {
       },
     ),
 };
+
+/** XHR streams the original file and supplies real upload progress without buffering the APK in JavaScript. */
+export function uploadAndroidRelease(file: File, notes: string, progress: (value: number) => void, signal: AbortSignal): Promise<ClientReleases> {
+  const path = "/api/admin/client-releases/android";
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new DOMException("Aborted", "AbortError")); return; }
+    const xhr = new XMLHttpRequest();
+    const cleanup = () => signal.removeEventListener("abort", abort);
+    const abort = () => xhr.abort();
+    xhr.open("POST", `${API_BASE}${path}`);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("Accept-Language", getLocale());
+    xhr.setRequestHeader("X-Client-Timezone", Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) progress(Math.min(100, Math.max(0, event.loaded / event.total * 100)));
+    };
+    xhr.onload = () => {
+      cleanup();
+      let body: unknown;
+      try { body = JSON.parse(xhr.responseText); }
+      catch { reject(responseError(path, xhr.status >= 200 && xhr.status < 300 ? 500 : xhr.status)); return; }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body as ClientReleases);
+      else reject(responseError(path, xhr.status, body && typeof body === "object" ? body as Parameters<typeof responseError>[2] : {}));
+    };
+    xhr.onerror = () => { cleanup(); reject(responseError(path, 0)); };
+    xhr.onabort = () => { cleanup(); reject(new DOMException("Aborted", "AbortError")); };
+    signal.addEventListener("abort", abort, { once: true });
+    const body = new FormData();
+    body.append("file", file);
+    body.append("release_notes", notes);
+    xhr.send(body);
+  });
+}
 
 export function isActiveStatus(status: RunStatus | undefined): boolean {
   return (

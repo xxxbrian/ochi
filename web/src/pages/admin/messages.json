@@ -2773,5 +2773,105 @@
     "en": "Rebuilding…",
     "zh-CN": "正在重建…",
     "zh-TW": "正在重建…"
+  },
+  "clientReleases.title": {
+    "en": "Client downloads",
+    "zh-CN": "客户端下载",
+    "zh-TW": "用戶端下載"
+  },
+  "clientReleases.description": {
+    "en": "Publish an Android APK and an iOS download link for this server.",
+    "zh-CN": "发布此服务的 Android APK 与 iOS 下载链接。",
+    "zh-TW": "發布此服務的 Android APK 與 iOS 下載連結。"
+  },
+  "clientReleases.processing": {
+    "en": "Verifying APK…",
+    "zh-CN": "正在校验 APK…",
+    "zh-TW": "正在驗證 APK…"
+  },
+  "clientReleases.uploading": {
+    "en": "Uploading {percent}%",
+    "zh-CN": "正在上传 {percent}%",
+    "zh-TW": "正在上傳 {percent}%"
+  },
+  "clientReleases.replace": {
+    "en": "Replace APK",
+    "zh-CN": "替换 APK",
+    "zh-TW": "取代 APK"
+  },
+  "clientReleases.publish": {
+    "en": "Publish APK",
+    "zh-CN": "发布 APK",
+    "zh-TW": "發布 APK"
+  },
+  "clientReleases.saved": {
+    "en": "Client downloads updated",
+    "zh-CN": "客户端下载已更新",
+    "zh-TW": "用戶端下載已更新"
+  },
+  "clientReleases.cancelled": {
+    "en": "Upload cancelled. The current published release is shown below.",
+    "zh-CN": "已取消上传，下方显示当前已发布版本。",
+    "zh-TW": "已取消上傳，下方顯示目前已發布版本。"
+  },
+  "clientReleases.downloadCurrent": {
+    "en": "Download current APK",
+    "zh-CN": "下载当前 APK",
+    "zh-TW": "下載目前 APK"
+  },
+  "clientReleases.remove": {
+    "en": "Unpublish APK",
+    "zh-CN": "取消发布 APK",
+    "zh-TW": "取消發布 APK"
+  },
+  "clientReleases.noAndroid": {
+    "en": "No Android APK is published.",
+    "zh-CN": "尚未发布 Android APK。",
+    "zh-TW": "尚未發布 Android APK。"
+  },
+  "clientReleases.apk": {
+    "en": "Android APK",
+    "zh-CN": "Android APK",
+    "zh-TW": "Android APK"
+  },
+  "clientReleases.apkHint": {
+    "en": "Version and build number are read from the APK. The current download stays available until the new file is verified.",
+    "zh-CN": "版本号与构建号自动从 APK 读取；新文件校验完成前，当前下载仍可使用。",
+    "zh-TW": "版本號與建置號碼自動從 APK 讀取；新檔案驗證完成前，目前的下載仍可使用。"
+  },
+  "clientReleases.notes": {
+    "en": "Release notes",
+    "zh-CN": "更新说明",
+    "zh-TW": "更新說明"
+  },
+  "clientReleases.notesHint": {
+    "en": "Shown with this APK in the download dialog.",
+    "zh-CN": "随此 APK 显示在下载对话框中。",
+    "zh-TW": "隨此 APK 顯示於下載對話框。"
+  },
+  "clientReleases.uploadProgress": {
+    "en": "APK upload progress",
+    "zh-CN": "APK 上传进度",
+    "zh-TW": "APK 上傳進度"
+  },
+  "clientReleases.iosURL": {
+    "en": "iOS download URL",
+    "zh-CN": "iOS 下载链接",
+    "zh-TW": "iOS 下載連結"
+  },
+  "clientReleases.iosHint": {
+    "en": "Use a TestFlight invitation, App Store link or HTTPS download page. Clear and save to remove it.",
+    "zh-CN": "支持 TestFlight 邀请、App Store 链接或 HTTPS 下载页面；清空并保存可移除。",
+    "zh-TW": "支援 TestFlight 邀請、App Store 連結或 HTTPS 下載頁面；清空並儲存即可移除。"
+  },
+  "clientReleases.removeQuestion": {
+    "en": "Unpublish the Android APK?",
+    "zh-CN": "取消发布 Android APK？",
+    "zh-TW": "取消發布 Android APK？"
+  },
+  "clientReleases.removeDescription": {
+    "en": "The Android download will be removed. You can publish another APK later. Installed apps are not affected.",
+    "zh-CN": "Android 下载入口将被移除，之后可以重新发布 APK；已安装的应用不受影响。",
+    "zh-TW": "Android 下載入口將被移除，之後可以重新發布 APK；已安裝的應用程式不受影響。"
   }
 }

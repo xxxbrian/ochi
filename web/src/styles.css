@@ -69,6 +69,7 @@ kbd {
 .login-form { width: min(100%, 360px); display: grid; gap: var(--pad-4); }
 .login-form h1 { margin: 0 0 var(--pad-4); font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -0.04em; text-align: center; }
 .login-form .login-submit { width: 100%; height: var(--row-h-lg); margin-top: var(--pad-1); }
+.login-downloads { justify-self: center; gap: var(--pad-2); }
 .panel-loading { flex: 1; width: min(100%, 800px); margin: 0 auto; padding: 32px 24px; }
 
 /* ---- transitional: legacy class names still used by surfaces awaiting their rewrite ---- */

@@ -38,6 +38,7 @@ import { StepList } from "../../components/ProcessSteps";
 import { FileCards } from "../../components/FileCards";
 import { RequestDiagnostics } from "./RequestDiagnostics";
 import { UpdateCard } from "./UpdateCard";
+import { ClientReleasesCard } from "./ClientReleasesCard";
 import { AdminHeader, Card, CardHead, Checkbox, Collapse, Drawer, Empty, MenuSelect, Pill, Seg, SkeletonRows, StatusDot, Stat, Who, type Tone } from "./ui";
 
 const MarkdownContent = lazy(() => import("../../components/MarkdownContent"));
@@ -310,6 +311,7 @@ export function SystemPage() {
         <Check className="ic" />{busy ? t("savingEllipsis") : t("save")}</button>} />
       <ErrorNotice error={error} notice={notice} />
       <UpdateCard />
+      <ClientReleasesCard />
       <form
         id="system-settings"
         className="ochi-admin-stack-form"

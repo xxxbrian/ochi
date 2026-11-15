@@ -148,6 +148,22 @@ and the authenticated computer viewer can use WebViews; the chat itself does not
   The AI-control glow around the computer viewport is a status frame, not a
   loading indicator.
 
+## Client Downloads And Updates
+
+Login and the account menu share a compact download dialog. Each platform shows
+its configured destination or an explicit unpublished state. Administration's
+System page owns APK upload, real byte progress, cancellation, publication
+metadata, release notes and the independent iOS link.
+
+Android shows a dismissible update notice and a nested settings page with manual
+checks, download progress/cancellation and explicit install/retry actions.
+Returning from source-permission settings refreshes permission without launching
+installation automatically. Cancelling the system installer retains a verified
+download for retry; a confirmed installed version clears it. A retired download
+URL refreshes the catalog once and waits for another explicit download action.
+iOS uses the same settings entry to open the administrator's link without an
+automatic update notice or polling.
+
 ## Native Navigation And Input
 
 iOS and Android share the same visual language; Android is not a separate

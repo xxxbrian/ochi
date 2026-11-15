@@ -120,7 +120,7 @@ test('update transport uses explicit admin actions, exact revisions, cancellatio
 
 test('expected update disconnects do not spam console errors; ordinary requests keep diagnostic logging', async () => {
   const source = ts.createSourceFile('api.ts', read('src/lib/api.ts'), ts.ScriptTarget.Latest, true);
-  const functions = source.statements.filter((node) => ts.isFunctionDeclaration(node) && ['request', 'userFacingError'].includes(node.name?.text));
+  const functions = source.statements.filter((node) => ts.isFunctionDeclaration(node) && ['request', 'userFacingError', 'responseError'].includes(node.name?.text));
   let failFetch = true, logs = 0;
   const { request } = evaluate(functions.map((node) => node.getText(source)).join('\n'), {}, {
     API_BASE: '', FormData, console: { error() { logs++; } },

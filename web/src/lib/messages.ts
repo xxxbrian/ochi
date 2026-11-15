@@ -1793,9 +1793,9 @@ export const messages = {
     "zh-TW": "無法存取"
   },
   "error.fileSize": {
-    "en": "File is too large. Choose a file up to 32 MB.",
-    "zh-CN": "文件太大，请选择 32 MB 以内的文件",
-    "zh-TW": "檔案太大，請選擇 32 MB 以內的檔案"
+    "en": "The file exceeds this server's transfer limit.",
+    "zh-CN": "文件超出了当前服务器的传输上限。",
+    "zh-TW": "檔案超出了目前伺服器的傳輸上限。"
   },
   "error.request": {
     "en": "Request failed. Please try again.",
@@ -3657,5 +3657,40 @@ export const messages = {
     "en": "Cmd/Ctrl Enter",
     "zh-CN": "Cmd/Ctrl Enter",
     "zh-TW": "Cmd/Ctrl Enter"
-  }
+  },
+  "clientDownloads.title": {
+    "en": "Download clients",
+    "zh-CN": "下载客户端",
+    "zh-TW": "下載用戶端"
+  },
+  "clientDownloads.description": {
+    "en": "Use Ochi on your phone with the clients provided by this server.",
+    "zh-CN": "使用此服务提供的客户端，在手机上使用 Ochi。",
+    "zh-TW": "使用此服務提供的用戶端，在手機上使用 Ochi。"
+  },
+  "clientDownloads.android": {
+    "en": "Download APK",
+    "zh-CN": "下载 APK",
+    "zh-TW": "下載 APK"
+  },
+  "clientDownloads.ios": {
+    "en": "Get iOS app",
+    "zh-CN": "获取 iOS 应用",
+    "zh-TW": "取得 iOS 應用程式"
+  },
+  "clientDownloads.iosDescription": {
+    "en": "Open the iOS download page.",
+    "zh-CN": "前往 iOS 下载页面。",
+    "zh-TW": "前往 iOS 下載頁面。"
+  },
+  "clientDownloads.androidUnavailable": {
+    "en": "The administrator has not published an Android APK yet.",
+    "zh-CN": "管理员尚未发布 Android APK。",
+    "zh-TW": "管理員尚未發布 Android APK。"
+  },
+  "clientDownloads.iosUnavailable": {
+    "en": "The administrator has not added an iOS download link yet.",
+    "zh-CN": "管理员尚未添加 iOS 下载链接。",
+    "zh-TW": "管理員尚未加入 iOS 下載連結。"
+  },
 } as const satisfies Messages;
