@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Apple, Check, Download, Smartphone, Trash2, Upload, X } from "lucide-react";
+import { Check, Download, Trash2, Upload, X } from "lucide-react";
 import { adminApi } from "../../lib/api";
 import { androidReleaseURL, releaseSize } from "../../lib/clientReleases";
 import type { ClientReleases } from "../../lib/types";
 import { Modal } from "../../components/Modal";
+import { PlatformLogo } from "../../components/PlatformLogo";
 import { ErrorNotice, Field } from "./Fields";
 import { Card, CardHead } from "./ui";
 import { formatDate, formatNumber, t, useAdminI18n } from "./i18n";
@@ -99,7 +100,7 @@ export function ClientReleasesCard() {
       </div> : !releases ? <div className="client-releases-loading" role="status"><span>{t("loading")}</span><i className="skel" /></div> : <>
         {!confirmRemove ? <ErrorNotice error={error?.message ?? ""} notice={notice === "saved" ? t("clientReleases.saved") : notice === "cancelled" ? t("clientReleases.cancelled") : ""} /> : null}
         <section className="client-release-platform">
-          <h4><Smartphone className="ic" />Android</h4>
+          <h4><PlatformLogo platform="android" className="ic" />Android</h4>
           {android ? <div className="client-release-current">
             <b>{android.version_name} <span className="muted">({android.version_code})</span></b>
             <span>{releaseSize(android.size_bytes)} · {formatDate(android.published_at, { dateStyle: "medium", timeStyle: "short" })}</span>
@@ -126,7 +127,7 @@ export function ClientReleasesCard() {
           </form>
         </section>
         <section className="client-release-platform">
-          <h4><Apple className="ic" />iOS</h4>
+          <h4><PlatformLogo platform="ios" className="ic" />iOS</h4>
           <form className="client-release-form" onSubmit={(event) => { event.preventDefault(); void perform("ios"); }}>
             <Field title={t("clientReleases.iosURL")} hint={t("clientReleases.iosHint")}>
               <input className="input" type="url" aria-label={t("clientReleases.iosURL")} value={iosURL} placeholder="https://testflight.apple.com/join/…" disabled={busy} onChange={(event) => { setIOSURL(event.target.value); setError(null); setNotice(null); }} />

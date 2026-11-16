@@ -151,7 +151,9 @@ and the authenticated computer viewer can use WebViews; the chat itself does not
 ## Client Downloads And Updates
 
 Login and the account menu share a compact download dialog. Each platform shows
-its configured destination or an explicit unpublished state. Administration's
+its filled brand silhouette rather than a generic device or fruit outline, with
+theme-aware foreground color. The configured destination or an explicit
+unpublished state stays visible. Administration's
 System page owns APK upload, real byte progress, cancellation, publication
 metadata, release notes and the independent iOS link.
 

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Apple, Download, ExternalLink, Smartphone } from "lucide-react";
+import { Download, ExternalLink } from "lucide-react";
 import { api } from "../lib/api";
 import { androidReleaseURL, iosReleaseURL, releaseSize } from "../lib/clientReleases";
 import { t, useI18n } from "../lib/i18n";
 import type { ClientReleases } from "../lib/types";
 import { Modal } from "./Modal";
+import { PlatformLogo } from "./PlatformLogo";
 import "./client-downloads.css";
 
 export function ClientDownloads({ onClose }: { onClose: () => void }) {
@@ -36,7 +37,7 @@ export function ClientDownloads({ onClose }: { onClose: () => void }) {
         <span>{t("status.loading")}</span><i className="skel" /><i className="skel" />
       </div> : <div className="client-downloads-grid">
         <section className="client-download-platform">
-          <Smartphone className="client-download-icon" aria-hidden="true" />
+          <PlatformLogo platform="android" className="client-download-icon" />
           <h3>Android</h3>
           {android && androidURL ? <>
             <p className="client-download-version">{android.version_name} <span>({android.version_code}) · {releaseSize(android.size_bytes)}</span></p>
@@ -45,7 +46,7 @@ export function ClientDownloads({ onClose }: { onClose: () => void }) {
           </> : <p className="client-download-unavailable">{t("clientDownloads.androidUnavailable")}</p>}
         </section>
         <section className="client-download-platform">
-          <Apple className="client-download-icon" aria-hidden="true" />
+          <PlatformLogo platform="ios" className="client-download-icon" />
           <h3>iOS</h3>
           {iosURL ? <>
             <p className="client-download-version">{t("clientDownloads.iosDescription")}</p>
