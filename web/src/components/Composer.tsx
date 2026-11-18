@@ -213,7 +213,7 @@ function EffortPicker({ efforts, value, disabled, onChange }: { efforts: string[
   return <Menu.Root>
     <Menu.Trigger className="chip-btn" disabled={disabled} aria-label={t("reasoning.effort")} title={t("reasoning.effortValue", { level: effortLabel(value) })}>
       <Brain className="ic" />
-      <span className="chip-label">{value ? effortLabel(value) : t("reasoning.effort")}</span>
+      <span className="chip-label">{value ? effortLabel(value) : t("common.default")}</span>
     </Menu.Trigger>
     <Menu.Portal>
       <Menu.Positioner className="pop-positioner" side="top" sideOffset={8} align="end" collisionPadding={8}>

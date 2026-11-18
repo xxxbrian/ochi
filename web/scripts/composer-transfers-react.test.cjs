@@ -325,3 +325,40 @@ test("global-off memory is distinct from fixed-off and still permits a draft to 
     h.view.unmount();
   }
 });
+
+for (const locale of ["en", "zh-CN", "zh-TW"]) {
+  test(`reasoning chip shows the selected default or explicit effort while preserving menu values in ${locale}`, async () => {
+    const choices = [];
+    const h = await fixture({
+      locale,
+      models: [{ id: "fixture-model", name: "Fixture model", effort_parameter: "reasoning_effort", reasoning_kind: "effort", efforts: ["low", "high"] }],
+      modelId: "fixture-model",
+      onEffort: (value) => choices.push(value),
+    });
+    const input = h.input();
+    const trigger = () => h.view.getByRole("button", { name: h.t("reasoning.effort"), exact: true });
+    assert.equal(trigger().querySelector(".chip-label").textContent, h.t("common.default"));
+    assert.equal(trigger().title, h.t("reasoning.effortValue", { level: h.t("reasoning.providerDefault") }));
+    await act(async () => { fireEvent.click(trigger()); await flush(); });
+    assert.equal(h.view.getByRole("menuitemradio", { name: h.t("common.default"), exact: true }).getAttribute("aria-checked"), "true");
+    await act(async () => {
+      fireEvent.click(h.view.getByRole("menuitemradio", { name: h.t("reasoning.level.high"), exact: true }));
+      await flush();
+    });
+    assert.deepEqual(choices, ["high"]);
+    await h.rerender({ effort: "high" });
+    assert.equal(trigger().querySelector(".chip-label").textContent, h.t("reasoning.level.high"));
+    assert.equal(trigger().title, h.t("reasoning.effortValue", { level: h.t("reasoning.level.high") }));
+    await act(async () => { fireEvent.click(trigger()); await flush(); });
+    await act(async () => {
+      fireEvent.click(h.view.getByRole("menuitemradio", { name: h.t("common.default"), exact: true }));
+      await flush();
+    });
+    assert.deepEqual(choices, ["high", ""], "default retains its existing empty-string contract");
+    await h.rerender({ effort: "" });
+    assert.equal(trigger().querySelector(".chip-label").textContent, h.t("common.default"));
+    assert.equal(h.input(), input);
+    assert.equal(input.value, "Keep this draft");
+    assert.equal(h.sent.length, 0);
+  });
+}

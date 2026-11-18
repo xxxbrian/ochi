@@ -37,6 +37,8 @@ remounting inputs or closing the keyboard. Layouts must accommodate English
 labels and locale-formatted values; preserve the same compact hierarchy in all
 three languages. Native system prompts use localized resources. User/model
 content, custom titles and raw diagnostics retain their original language.
+The thinking-level control displays its current value, including "Default" for
+the default choice; the field name belongs in its accessible label and tooltip.
 
 ## Conversation
 
