@@ -93,12 +93,14 @@ its outline: only the gradient angle turns, so the tile never rotates and the
 ring follows the tile's corner radius; static under reduced motion. A settled header reads "Processed · N tool calls", then a
 flat strip of one chip per tool family (four, then "+N"; two, then "+N" at 480px
 and narrower) and the duration at the far right. Header and step titles use
-`--ink-2`. While running only the newest row stays open (earlier rows fold away);
-reasoning streams in a short box that follows new text unless the reader scrolls
-away, then settles into a taller scrollable block. Consecutive tool calls of one
-family group into a single row with a bounded inner list; every row can always
-be expanded or collapsed by hand. Details have bounded scrollable height and
-expensive payloads render only while open. Status animation belongs on active
+`--ink-2`. The automatic running view keeps only the newest row visible.
+Manually expanding the process keeps its earlier rows visible as new steps
+arrive; manually expanding a tool group does the same within that group.
+Individual rows and groups retain their own disclosure state. Reasoning
+streams in a short box that follows new text unless the reader scrolls away,
+then settles into a taller scrollable block. Consecutive tool calls of one
+family group into a single row with a bounded inner list. Details have bounded
+scrollable height and expensive payloads render only while open. Status animation belongs on active
 system state (indicator, active label), never on settled prose, and honors
 reduced motion.
 

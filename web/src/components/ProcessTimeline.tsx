@@ -98,11 +98,11 @@ export const ProcessTimeline = memo(function ProcessTimeline({
   const clock = sharedClock ?? ownClock;
   const rows = useMemo(() => groupProcessEntries(timeline.filter((entry) => entry.kind === "tool" ? Boolean(entry.step) : Boolean((entry.reasoning?.text ?? entry.text)?.trim()))), [timeline]);
   const hasRows = rows.length > 0 || Boolean(error);
-  const peek = active;
   const durationMs = processElapsedMilliseconds(createdAt, updatedAt, false, 0);
   const header = useMemo(() => describeHeader({ status, active, entries: headerEntries ?? timeline, waitingKind, resource, durationMs }), [status, active, timeline, headerEntries, waitingKind, resource, durationMs]);
   const [localTouched, setLocalTouched] = useState<boolean | undefined>(undefined);
   const touched = expanded ?? localTouched;
+  const peek = active && touched !== true;
   // Automatic policy: open while the run works, close 0.7 s after it ends.
   const wantOpen = active && hasRows;
   const [auto, setAuto] = useState(wantOpen);

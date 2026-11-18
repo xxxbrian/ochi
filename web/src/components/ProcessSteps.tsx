@@ -255,7 +255,8 @@ export const ToolGroup = memo(function ToolGroup({ row, live, peek, fold, enter,
   const running = steps.some((step) => step.status === "running");
   const waiting = steps.some((step) => stepState(step) === "waiting");
   const failed = steps.some((step) => isToolFailure(step));
-  const { open, toggle } = useDisclosure(live && (running || waiting), 1500);
+  const { open, touched, toggle } = useDisclosure(live && (running || waiting), 1500);
+  const peekChildren = peek && !(touched && open);
   const state: StepState = waiting ? "waiting" : running ? "running" : failed ? "error" : "done";
   const families = [...new Set(steps.map((step) => toolFamily(step.name)))];
   const counts = families.map((family) => `${familyName(family)} ${steps.filter((step) => toolFamily(step.name) === family).length}`).join(" · ");
@@ -268,7 +269,7 @@ export const ToolGroup = memo(function ToolGroup({ row, live, peek, fold, enter,
       time={<span className="st-time tnum">{running || !total ? "" : formatStepDuration(total)}</span>}>
       <ol className="steps nested">
         {row.entries.map((entry, index) => (
-          <ToolRow key={entry.id} entry={entry} live={live} fold={peek && (fold || index < row.entries.length - 1)} enter={!clock.initial.has(entry.id)} clock={clock} />
+          <ToolRow key={entry.id} entry={entry} live={live} fold={peekChildren && (fold || index < row.entries.length - 1)} enter={!clock.initial.has(entry.id)} clock={clock} />
         ))}
       </ol>
     </StepItem>
