@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1320" viewBox="0 0 1440 1320" role="img" aria-labelledby="title desc">
+<title id="title">Context, with a budget.</title>
+<desc id="desc">Stable policy and project guidance, conversation history and live state assemble a model request. Skill bodies and MCP schemas load on demand under plugin and Computer policy. Actual provider prompt usage calibrates the unchanged prefix; compaction preserves the current user request and complete tool groups without rewriting canonical history.</desc>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#171717" stroke-width="1.5"/></marker>
+  <marker id="fine-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#858582" stroke-width="1.4"/></marker>
+</defs>
+<style>
+  text { font-family:Geist,Arial,sans-serif; fill:#171717; }
+  .mono { font-family:"Geist Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace; }
+  .eyebrow { font-size:16px; letter-spacing:1px; }
+  .title { font-size:48px; font-weight:700; letter-spacing:-1.5px; }
+  .subtitle { font-size:21px; fill:#5c5c5c; }
+  .section { font-size:17px; font-weight:500; letter-spacing:.4px; }
+  .station { font-size:28px; font-weight:650; letter-spacing:-.5px; }
+  .body { font-size:20px; }
+  .detail { font-size:18px; fill:#5c5c5c; }
+  .micro { font-size:16px; fill:#5c5c5c; }
+  .large { font-size:36px; font-weight:650; letter-spacing:-.7px; }
+  .flow { fill:none; stroke:#171717; stroke-width:2.3; marker-end:url(#arrow); }
+  .fine { fill:none; stroke:#858582; stroke-width:1.5; marker-end:url(#fine-arrow); }
+  .rule { stroke:#d7d7d4; stroke-width:1; }
+</style>
+<rect width="1440" height="1320" fill="#fcfcfb"/>
+<text x="64" y="54" class="mono eyebrow">02 / CONTEXT &amp; CAPABILITIES</text>
+<text x="1376" y="54" class="mono eyebrow" text-anchor="end">OCHI / SYSTEM NOTES</text>
+<line x1="64" y1="72" x2="1376" y2="72" class="rule"/>
+<text x="64" y="132" class="title">Context, with a budget.</text>
+<text x="64" y="173" class="subtitle">Reuse the stable part. Load relevant capabilities. Measure before compacting.</text>
+<text x="64" y="244" class="mono section">01 / ASSEMBLE THE REQUEST</text>
+<text x="64" y="296" class="mono micro">REUSABLE PREFIX</text>
+<text x="64" y="336" class="station">Policy + project</text>
+<text x="520" y="296" class="mono micro">CONVERSATION</text>
+<text x="520" y="336" class="station">Evidence so far</text>
+<text x="980" y="296" class="mono micro">LIVE STATE</text>
+<text x="980" y="336" class="station">Current conditions</text>
+<line x1="64" y1="356" x2="456" y2="356" class="rule"/>
+<line x1="520" y1="356" x2="916" y2="356" class="rule"/>
+<line x1="980" y1="356" x2="1376" y2="356" class="rule"/>
+<text x="64" y="390" class="body">System + administrator guidance</text>
+<text x="64" y="422" class="body">Project instructions + cwd</text>
+<text x="64" y="477" class="detail">Kept apart from changing state.</text>
+<text x="520" y="390" class="body">Accepted dialogue + tool results</text>
+<text x="520" y="422" class="body">Complete tool-call groups</text>
+<text x="520" y="477" class="detail">Compacted input view;</text>
+<text x="520" y="505" class="detail">canonical records stay intact.</text>
+<text x="980" y="390" class="body">Clock / scope / permissions</text>
+<text x="980" y="422" class="body">Task state / gated recall</text>
+<text x="980" y="477" class="detail">Bounded Skill metadata</text>
+<line x1="64" y1="543" x2="1376" y2="543" class="rule"/>
+<text x="64" y="591" class="mono section">Messages + selected tool schemas</text>
+<path d="M590 584 H1168" class="flow"/>
+<rect x="1200" y="552" width="176" height="64" fill="#171717" stroke="#171717"/>
+<text x="1288" y="593" class="station" text-anchor="middle" style="fill:#ffffff">Model</text>
+<text x="64" y="686" class="mono section">02 / LOAD CAPABILITIES ON DEMAND</text>
+<text x="64" y="741" class="mono micro">SKILLS</text>
+<text x="760" y="741" class="mono micro">MCP</text>
+<line x1="64" y1="759" x2="672" y2="759" class="rule"/>
+<line x1="760" y1="759" x2="1376" y2="759" class="rule"/>
+<text x="64" y="801" class="station">Metadata</text>
+<path d="M217 792 H300" class="flow"/>
+<text x="330" y="801" class="station">Read the method</text>
+<text x="64" y="843" class="detail">Search / page the permitted catalog.</text>
+<text x="64" y="873" class="detail">skills_read loads the selected body and prepared path.</text>
+<text x="760" y="801" class="station">Find tools</text>
+<path d="M915 792 H982" class="flow"/>
+<text x="1012" y="801" class="station">Relevant schemas</text>
+<text x="760" y="843" class="detail">tool_search discovers external tools by relevance.</text>
+<text x="760" y="873" class="detail">Selected slots are replaceable, not a lifetime quota.</text>
+<line x1="64" y1="912" x2="1376" y2="912" class="rule"/>
+<text x="64" y="945" class="detail">Discovery + dispatch recheck plugin policy and Computer permission.</text>
+<text x="64" y="975" class="detail">MCP credentials are injected at transport, outside the model prompt.</text>
+<text x="64" y="1044" class="mono section">03 / CALIBRATE THE INPUT BUDGET</text>
+<line x1="64" y1="1080" x2="1376" y2="1080" class="rule"/>
+<text x="64" y="1122" class="station">01  Measure</text>
+<text x="64" y="1159" class="detail">Actual provider prompt usage</text>
+<text x="520" y="1122" class="station">02  Calibrate</text>
+<text x="520" y="1159" class="detail">Unchanged prefix + estimated growth</text>
+<text x="1012" y="1122" class="station">03  Compact</text>
+<text x="1012" y="1159" class="detail">Typically 70% to 55% input</text>
+<path d="M330 1113 H472" class="fine"/>
+<path d="M826 1113 H964" class="fine"/>
+<text x="64" y="1207" class="detail">Reserve headroom; retain the current request and complete tool groups. Prefix changes invalidate calibration.</text>
+<line x1="64" y1="1250" x2="1376" y2="1250" class="rule"/>
+<text x="64" y="1287" class="detail">Cache-friendly structure is not a cache-hit guarantee. Input budgeting does not impose an output cap.</text>
+</svg>

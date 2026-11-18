@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1280" viewBox="0 0 1440 1280" role="img" aria-labelledby="title desc">
+<title id="title">One run. Three records.</title>
+<desc id="desc">Accepted turns are persisted and run sequentially within a conversation. A server-owned run assembles stable and dynamic context, invokes the model, dispatches scoped tools with permission and shared-resource checks, and feeds observed results into the next round. Canonical history, run and task state, and ordered public items remain distinct. Snapshots and sequenced deltas drive a shared Web, iOS and Android reducer. A run outlives a client connection, but active work is not automatically replayed after a server restart.</desc>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#171717" stroke-width="1.5" stroke-linecap="square"/></marker>
+  <marker id="fine-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#858582" stroke-width="1.4"/></marker>
+</defs>
+<style>
+  text { font-family:Geist,Arial,sans-serif; fill:#171717; }
+  .mono { font-family:"Geist Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace; }
+  .eyebrow { font-size:16px; letter-spacing:1px; }
+  .title { font-size:48px; font-weight:700; letter-spacing:-1.5px; }
+  .subtitle { font-size:21px; fill:#5c5c5c; }
+  .section { font-size:17px; font-weight:500; letter-spacing:.4px; }
+  .station { font-size:28px; font-weight:650; letter-spacing:-.5px; }
+  .body { font-size:20px; }
+  .detail { font-size:18px; fill:#5c5c5c; }
+  .micro { font-size:16px; fill:#5c5c5c; }
+  .record { font-size:26px; font-weight:600; letter-spacing:-.4px; }
+  .flow { fill:none; stroke:#171717; stroke-width:2.3; marker-end:url(#arrow); }
+  .fine { fill:none; stroke:#858582; stroke-width:1.5; marker-end:url(#fine-arrow); }
+  .rule { stroke:#d7d7d4; stroke-width:1; }
+</style>
+<rect width="1440" height="1280" fill="#fcfcfb"/>
+<text x="64" y="54" class="mono eyebrow">OCHI / SYSTEM NOTE 01</text>
+<text x="1376" y="54" class="mono eyebrow" text-anchor="end">EXECUTION &amp; EVIDENCE</text>
+<line x1="64" y1="72" x2="1376" y2="72" class="rule"/>
+<text x="64" y="132" class="title">One run. Three records.</text>
+<text x="64" y="173" class="subtitle">A server-owned loop, with distinct histories for the model, the task and the user.</text>
+<text x="64" y="248" class="mono section">01 / ACCEPT</text>
+<text x="64" y="290" class="station">Accepted turns</text>
+<text x="64" y="322" class="mono micro">PER-CONVERSATION QUEUE</text>
+<line x1="64" y1="337" x2="304" y2="337" class="rule"/>
+<rect x="64" y="338" width="4" height="48" fill="#171717" stroke="#171717"/>
+<text x="80" y="369" class="mono section">01</text>
+<text x="124" y="369" class="body">current turn</text>
+<line x1="64" y1="386" x2="304" y2="386" class="rule"/>
+<text x="80" y="418" class="mono section" style="fill:#5c5c5c">02</text>
+<text x="124" y="418" class="body" style="fill:#5c5c5c">next turn</text>
+<line x1="64" y1="435" x2="304" y2="435" class="rule"/>
+<text x="80" y="467" class="mono section" style="fill:#5c5c5c">03</text>
+<text x="124" y="467" class="body" style="fill:#5c5c5c">next turn</text>
+<line x1="64" y1="484" x2="304" y2="484" class="rule"/>
+<text x="64" y="528" class="detail">Durable in PostgreSQL.</text>
+<text x="64" y="556" class="detail">One active turn at a time.</text>
+<text x="64" y="634" class="mono micro">CONCURRENCY</text>
+<text x="64" y="666" class="body">Other conversations</text>
+<text x="64" y="694" class="body">can work independently.</text>
+<path d="M304 362 H388" class="flow"/>
+<rect x="352" y="218" width="1024" height="542" fill="none" stroke="#d7d7d4"/>
+<path d="M352 238 V218 H402" fill="none" stroke="#171717" stroke-width="2"/>
+<text x="380" y="248" class="mono section">02 / SERVER-OWNED RUN</text>
+<text x="1348" y="248" class="mono micro" text-anchor="end">run_id</text>
+<text x="400" y="294" class="mono micro">BUILD / 01</text>
+<text x="400" y="330" class="station">Assemble context</text>
+<line x1="400" y1="346" x2="760" y2="346" class="rule"/>
+<text x="400" y="377" class="mono micro">STABLE PREFIX</text>
+<text x="400" y="404" class="body">Policy / project guidance</text>
+<text x="400" y="442" class="mono micro">DYNAMIC INPUT</text>
+<text x="400" y="469" class="body">History / task / gated recall</text>
+<text x="400" y="497" class="detail">Permissions / selected tools</text>
+<rect x="968" y="304" width="344" height="174" fill="#171717" stroke="#171717" rx="3"/>
+<text x="992" y="337" class="mono micro" style="fill:#bdbdbd">MODEL / 02</text>
+<text x="992" y="382" class="station" style="fill:#ffffff">Model round</text>
+<text x="992" y="421" class="body" style="fill:#ffffff">Reason. Write. Call tools.</text>
+<text x="992" y="451" class="detail" style="fill:#dddddd">Or deliver the final reply.</text>
+<path d="M784 390 H944" class="flow"/>
+<text x="864" y="373" class="mono micro" text-anchor="middle">request</text>
+<path d="M1140 478 V560" class="flow"/>
+<text x="1160" y="526" class="mono micro">tool calls</text>
+<text x="968" y="584" class="mono micro">CHECK / 03</text>
+<text x="968" y="620" class="station">Dispatch tools</text>
+<line x1="968" y1="636" x2="1312" y2="636" class="rule"/>
+<text x="968" y="668" class="detail">Permission / scope / arguments</text>
+<text x="968" y="696" class="detail">Atomic shared claims, when needed</text>
+<path d="M944 654 H784" class="flow"/>
+<text x="864" y="637" class="mono micro" text-anchor="middle">tool call</text>
+<text x="400" y="584" class="mono micro">EXECUTE / 04</text>
+<text x="400" y="620" class="station">Act. Then observe.</text>
+<line x1="400" y1="636" x2="760" y2="636" class="rule"/>
+<text x="400" y="668" class="detail">Compute / network / desktop / plugins</text>
+<text x="400" y="696" class="detail">Owned Jobs, real outputs and checks</text>
+<path d="M580 558 V520" class="flow"/>
+<text x="604" y="540" class="mono micro">observed results</text>
+<text x="380" y="737" class="mono micro">Scoped to user / conversation / run / project / cwd</text>
+<text x="64" y="813" class="mono section">03 / DISTINCT RECORDS</text>
+<text x="1376" y="813" class="mono micro" text-anchor="end">Written as the run advances</text>
+<path d="M1348 760 V784" class="fine" stroke-dasharray="3 5"/>
+<line x1="64" y1="840" x2="1376" y2="840" class="rule"/>
+<line x1="380" y1="840" x2="380" y2="1140" class="rule"/>
+<rect x="64" y="858" width="32" height="32" fill="none" stroke="#171717"/>
+<text x="80" y="880" class="mono section" text-anchor="middle">A</text>
+<text x="116" y="884" class="record">Canonical history</text>
+<rect x="64" y="958" width="32" height="32" fill="none" stroke="#171717"/>
+<text x="80" y="980" class="mono section" text-anchor="middle">B</text>
+<text x="116" y="984" class="record">Run + task state</text>
+<rect x="64" y="1058" width="32" height="32" fill="none" stroke="#171717"/>
+<text x="80" y="1080" class="mono section" text-anchor="middle">C</text>
+<text x="116" y="1084" class="record">Public items</text>
+<line x1="64" y1="940" x2="1376" y2="940" class="rule"/>
+<line x1="64" y1="1040" x2="1376" y2="1040" class="rule"/>
+<line x1="64" y1="1140" x2="1376" y2="1140" class="rule"/>
+<text x="420" y="879" class="body">Provider messages / completed tool results / replay metadata</text>
+<text x="420" y="910" class="detail">Feeds future model requests; preserves provider-native replay semantics.</text>
+<text x="420" y="979" class="body">Run checkpoints + task state for complex work</text>
+<text x="420" y="1010" class="detail">Goal / user-sourced constraints / remaining work / real checks</text>
+<text x="420" y="1079" class="body">Ordered text / reasoning / tool occurrences with stable IDs</text>
+<text x="420" y="1111" class="mono micro">Snapshot + sequenced deltas</text>
+<path d="M700 1105 H726" class="fine"/>
+<text x="748" y="1111" class="mono micro">Shared reducer</text>
+<path d="M910 1105 H938" class="fine"/>
+<text x="960" y="1111" class="mono micro">Web / iOS / Android</text>
+<line x1="64" y1="1181" x2="1376" y2="1181" class="rule"/>
+<text x="64" y="1218" class="body">Runs outlive HTTP / SSE connections.</text>
+<text x="1376" y="1218" class="detail" text-anchor="end">Stopped work keeps already-public replies.</text>
+<text x="64" y="1251" class="detail">A server restart interrupts undrained work; queued inputs remain. No automatic crash replay.</text>
+</svg>

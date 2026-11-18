@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1380" viewBox="0 0 1440 1380" role="img" aria-labelledby="title desc">
+<title id="title">A memory needs two reasons.</title>
+<desc id="desc">Automatic and Agent-generated facts pass attributable-source and semantic-admission checks. Explicit user edits are curated separately. Recall is scoped and bounded. Conversation memory choice is fixed at creation, with the account setting as an upper bound. Memory Off excludes personal reads, writes and future source use while preserving saved chats, task continuity, files and independent Computer permission.</desc>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#171717" stroke-width="1.5"/></marker>
+  <marker id="fine-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L8 5 L1 9" fill="none" stroke="#858582" stroke-width="1.4"/></marker>
+</defs>
+<style>
+  text { font-family:Geist,Arial,sans-serif; fill:#171717; }
+  .mono { font-family:"Geist Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace; }
+  .eyebrow { font-size:16px; letter-spacing:1px; }
+  .title { font-size:48px; font-weight:700; letter-spacing:-1.5px; }
+  .subtitle { font-size:21px; fill:#5c5c5c; }
+  .section { font-size:17px; font-weight:500; letter-spacing:.4px; }
+  .station { font-size:28px; font-weight:650; letter-spacing:-.5px; }
+  .body { font-size:20px; }
+  .detail { font-size:18px; fill:#5c5c5c; }
+  .micro { font-size:16px; fill:#5c5c5c; }
+  .large { font-size:36px; font-weight:650; letter-spacing:-.7px; }
+  .flow { fill:none; stroke:#171717; stroke-width:2.3; marker-end:url(#arrow); }
+  .fine { fill:none; stroke:#858582; stroke-width:1.5; marker-end:url(#fine-arrow); }
+  .rule { stroke:#d7d7d4; stroke-width:1; }
+</style>
+<rect width="1440" height="1380" fill="#fcfcfb"/>
+<text x="64" y="54" class="mono eyebrow">03 / MEMORY &amp; CONTINUITY</text>
+<text x="1376" y="54" class="mono eyebrow" text-anchor="end">OCHI / SYSTEM NOTES</text>
+<line x1="64" y1="72" x2="1376" y2="72" class="rule"/>
+<text x="64" y="132" class="title">A memory needs two reasons.</text>
+<text x="64" y="173" class="subtitle">It must come from the user. It must remain useful beyond the current task.</text>
+<text x="64" y="244" class="mono section">01 / THE POLICY GATE</text>
+<rect x="64" y="275" width="5" height="85" fill="#171717" stroke="#171717"/>
+<text x="92" y="305" class="large">Account ON  +  conversation ON</text>
+<text x="92" y="345" class="detail">Choose before the first send. Fixed for that conversation; the account setting remains an upper bound.</text>
+<text x="64" y="416" class="mono section">02 / ADMIT AUTOMATIC + AGENT-GENERATED FACTS</text>
+<line x1="64" y1="458" x2="324" y2="458" class="rule"/>
+<line x1="400" y1="458" x2="660" y2="458" class="rule"/>
+<line x1="740" y1="458" x2="1040" y2="458" class="rule"/>
+<text x="64" y="492" class="station">Accepted user</text>
+<text x="64" y="526" class="station">statement</text>
+<text x="64" y="570" class="detail">Full source, not an isolated phrase</text>
+<text x="400" y="492" class="station">Source attribution</text>
+<text x="400" y="538" class="detail">Exact excerpt + source run</text>
+<text x="400" y="568" class="detail">User / project scope retained</text>
+<text x="740" y="492" class="station">Semantic admission</text>
+<text x="740" y="538" class="detail">Useful after this task?</text>
+<text x="740" y="568" class="detail">No guesses, quotes or secrets</text>
+<path d="M336 512 H374" class="flow"/>
+<path d="M680 512 H714" class="flow"/>
+<path d="M1058 512 H1094" class="flow"/>
+<rect x="1116" y="458" width="260" height="138" fill="#171717" stroke="#171717"/>
+<text x="1140" y="493" class="mono micro" style="fill:#bdbdbd">ADMITTED</text>
+<text x="1140" y="534" class="station" style="fill:#ffffff">Facts +</text>
+<text x="1140" y="570" class="station" style="fill:#ffffff">preferences</text>
+<text x="740" y="622" class="detail">Failed or malformed assessment admits no fact.</text>
+<text x="64" y="622" class="detail">Explicit user edits use a separate curated path.</text>
+<text x="64" y="710" class="mono section">03 / RECALL WHAT FITS</text>
+<line x1="64" y1="742" x2="1376" y2="742" class="rule"/>
+<text x="64" y="790" class="station">Curated + admitted facts</text>
+<text x="64" y="830" class="detail">Stable profile / fact recall</text>
+<path d="M440 800 H530" class="flow"/>
+<text x="570" y="790" class="station">Scoped retrieval</text>
+<text x="570" y="830" class="detail">User / project / bounded relevance</text>
+<path d="M900 800 H982" class="flow"/>
+<text x="1020" y="790" class="station">Run context</text>
+<text x="1020" y="830" class="detail">Background, not a new instruction</text>
+<text x="64" y="884" class="detail">Corrections, supersession, expiry and source revision guards remain authoritative.</text>
+<text x="64" y="966" class="mono section">04 / TASK-LOCAL IS NOT PERMANENT</text>
+<line x1="64" y1="997" x2="1376" y2="997" class="rule"/>
+<text x="64" y="1043" class="station">Stay with the task</text>
+<text x="64" y="1083" class="body">Current instructions + user-sourced constraints</text>
+<text x="64" y="1115" class="detail">Conversation / TaskState / compacted context</text>
+<text x="760" y="1043" class="station">Persist only with admission</text>
+<text x="760" y="1083" class="body">Lasting personal facts + standing preferences</text>
+<text x="760" y="1115" class="detail">Project-only meaning never broadens to account scope.</text>
+<rect x="64" y="1170" width="1312" height="120" fill="#f1f1ef" stroke="#d7d7d4"/>
+<text x="88" y="1208" class="mono section">MEMORY OFF</text>
+<text x="340" y="1208" class="body">No personal recall, past-chat tools, private learned Skills or memory writes.</text>
+<text x="340" y="1242" class="detail">The conversation is also excluded as a future source. Saved chat, files and Computer remain.</text>
+<line x1="64" y1="1320" x2="1376" y2="1320" class="rule"/>
+<text x="64" y="1355" class="detail">Source attribution is deterministic. Semantic admission remains a model judgment, not perfect classification.</text>
+</svg>
