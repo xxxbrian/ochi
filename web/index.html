@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-look="mono">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -29,7 +29,7 @@
                         if (localStorage.getItem('assistant.theme.v1') === 'system') apply(event.matches)
                     })
                 } else if (t === 'dark') apply(true)
-                if (localStorage.getItem('assistant.look.v1') === 'mono') root.dataset.look = 'mono'
+                if (localStorage.getItem('assistant.look.v1') === 'quiet') delete root.dataset.look
                 if (localStorage.getItem('assistant.canvas.v1') === 'flat') root.dataset.canvas = 'flat'
             } catch {}
         </script>

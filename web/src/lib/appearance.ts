@@ -74,7 +74,7 @@ export function setThemePref(value: ThemePref) {
   if (value === "system") watchSystem();
   swap(() => paintTheme(value === "system" ? prefersDark() : value === "dark"));
 }
-// Defaults (quiet, paper) are the absence of the attribute, matching the boot script.
+// Quiet uses the base CSS tokens. Mono is set on the initial HTML.
 export function setLook(value: "quiet" | "mono") {
   write(KEYS.look, value);
   if (value === "quiet") delete root().dataset.look; else root().dataset.look = value;

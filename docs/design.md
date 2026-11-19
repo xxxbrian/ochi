@@ -18,10 +18,10 @@ generates `tokens.css`; do not hand-edit that file. Native components reuse toke
 values with platform-specific surface treatments, not Web CSS.
 
 Appearance has three independent axes: light/dark theme, a style (`looks` in
-`tokens.json`: Quiet is the base, Mono overrides type, radius and neutrals) and a
+`tokens.json`: Quiet supplies base tokens, Mono overrides type, radius and neutrals) and a
 canvas (paper sheet by default, flat optional). A style is data only, emitted as
 `:root[data-look]` overrides; components read tokens and never branch on its name.
-Defaults are the absence of the attribute, and `index.html` restores the stored
+Web starts in Mono and resets to Mono. `index.html` restores a stored Quiet
 choice before first paint. Native clients may read the same `looks` table.
 Looks reach every surface through tokens: the radius scale (`--radius-xs`..`xl`,
 `pill`, `composer`), `--density`, motion durations/eases, shadow roles (including

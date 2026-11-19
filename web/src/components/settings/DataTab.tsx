@@ -38,7 +38,7 @@ export function DataTab() {
   }
   function resetAppearance() {
     setThemePref("light");
-    setLook("quiet");
+    setLook("mono");
     setCanvas("paper");
     setTextSize(100);
     setDensity("cozy");
