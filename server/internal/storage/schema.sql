@@ -18,6 +18,7 @@ CREATE TABLE app_settings (
     debug_mode boolean DEFAULT false NOT NULL,
     embedding_revision bigint DEFAULT 1 NOT NULL,
     client_releases jsonb DEFAULT '{}'::jsonb NOT NULL,
+    speech_settings jsonb DEFAULT '{}'::jsonb NOT NULL,
     CONSTRAINT app_settings_id_check CHECK (id)
 );
 

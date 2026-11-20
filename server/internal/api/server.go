@@ -179,6 +179,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerAdminRoutes(mux)
 	s.registerUpdateRoutes(mux)
 	s.registerClientReleaseRoutes(mux)
+	s.registerSpeechRoutes(mux)
 	s.registerExtraRoutes(mux)
 	s.registerTaskRoutes(mux)
 	s.registerContextRoutes(mux)

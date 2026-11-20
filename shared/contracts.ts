@@ -41,6 +41,19 @@ export type UserPreferences = {
   language: import("./i18n").LanguagePreference;
 };
 
+export type SpeechCapabilities = {
+  dictation: boolean;
+  read_aloud: boolean;
+  max_recording_seconds: number;
+  max_upload_bytes: number;
+  max_text_characters: number;
+};
+
+export type SpeechSettings = {
+  dictation: { enabled: boolean; provider_id: string; model: string };
+  read_aloud: { enabled: boolean; provider_id: string; model: string; voice: string };
+};
+
 export type ReasoningOption = {
   type: "toggle" | "effort" | "budget_tokens";
   values?: string[];

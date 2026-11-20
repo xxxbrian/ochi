@@ -359,6 +359,22 @@ search services. Users see published capabilities and supported reasoning
 controls, never provider credentials. Search adapters are server-side; results
 are grouped in the clients rather than one row for every fetched page.
 
+Speech settings independently enable dictation and reply read-aloud. Each
+selects an existing Provider connection and a manually entered upstream model
+ID. Read-aloud also selects a voice. The connection supplies its base URL,
+credential, headers and timeout. The OpenAI-compatible Audio API appends
+`/audio/transcriptions` (multipart recording and model; JSON transcript) or
+`/audio/speech` (text, model and voice; MP3 response) to the versioned base URL.
+The Provider's chat protocol and discovered chat models do not determine
+audio support. The administrator can test unsaved speech settings.
+
+The authenticated speech API provides enabled capabilities and limits. The
+composer stops a recording at 90 seconds, the server accepts audio uploads up
+to 10 MiB, and synthesis accepts up to 2,000 Unicode characters per request.
+These are bounded HTTP requests that end on completion or cancellation.
+Recordings and synthesized audio do not enter conversation history, model
+context, the Computer, or persistent server storage.
+
 Published chat models have one administrator-managed order across providers and
 an independent initial default. An explicit user choice is stored with that
 account's preferences and is reused for new conversations and after restart.

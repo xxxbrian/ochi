@@ -684,6 +684,86 @@
     "zh-CN": "暂时无法读取搜索配置。",
     "zh-TW": "暫時無法讀取搜尋設定。"
   },
+  "speech_unavailable": {
+    "en": "This speech feature is currently unavailable.",
+    "zh-CN": "此语音功能暂不可用。",
+    "zh-TW": "此語音功能暫時無法使用。"
+  },
+  "speech_configuration_invalid": {
+    "en": "Choose a provider and enter a valid speech model ID.",
+    "zh-CN": "请选择服务商并输入有效的语音模型 ID。",
+    "zh-TW": "請選擇服務商並輸入有效的語音模型 ID。"
+  },
+  "speech_voice_required": {
+    "en": "Enter a valid voice ID.",
+    "zh-CN": "请输入有效的音色 ID。",
+    "zh-TW": "請輸入有效的音色 ID。"
+  },
+  "speech_provider_unavailable": {
+    "en": "Choose an enabled provider with a configured connection.",
+    "zh-CN": "请选择已启用且连接配置完整的服务商。",
+    "zh-TW": "請選擇已啟用且連線設定完整的服務商。"
+  },
+  "speech_recording_required": {
+    "en": "Supply a nonempty audio recording.",
+    "zh-CN": "请提交一段非空的录音。",
+    "zh-TW": "請提交一段非空的錄音。"
+  },
+  "speech_recording_invalid": {
+    "en": "The recording request is invalid.",
+    "zh-CN": "录音请求无效。",
+    "zh-TW": "錄音請求無效。"
+  },
+  "speech_recording_format_invalid": {
+    "en": "Use a WAV, MP3, M4A, MP4, WebM, Ogg, or FLAC recording.",
+    "zh-CN": "请使用 WAV、MP3、M4A、MP4、WebM、Ogg 或 FLAC 格式的录音。",
+    "zh-TW": "請使用 WAV、MP3、M4A、MP4、WebM、Ogg 或 FLAC 格式的錄音。"
+  },
+  "speech_recording_too_large": {
+    "en": "The recording must be {max} MiB or smaller.",
+    "zh-CN": "录音大小不能超过 {max} MiB。",
+    "zh-TW": "錄音大小不能超過 {max} MiB。"
+  },
+  "speech_text_invalid": {
+    "en": "Enter between 1 and {max} characters to read aloud.",
+    "zh-CN": "请输入 1 到 {max} 个字符用于朗读。",
+    "zh-TW": "請輸入 1 到 {max} 個字元用於朗讀。"
+  },
+  "speech_provider_url_invalid": {
+    "en": "The speech provider address is invalid.",
+    "zh-CN": "语音服务地址无效。",
+    "zh-TW": "語音服務位址無效。"
+  },
+  "speech_provider_connection_failed": {
+    "en": "Could not connect to the speech provider or read its response.",
+    "zh-CN": "无法连接语音服务或读取其响应。",
+    "zh-TW": "無法連線至語音服務或讀取回應。"
+  },
+  "speech_provider_timeout": {
+    "en": "The speech provider timed out.",
+    "zh-CN": "语音服务请求超时。",
+    "zh-TW": "語音服務請求逾時。"
+  },
+  "speech_provider_http_error": {
+    "en": "The speech provider rejected the request (HTTP {status}).",
+    "zh-CN": "语音服务拒绝了请求（HTTP {status}）。",
+    "zh-TW": "語音服務拒絕了請求（HTTP {status}）。"
+  },
+  "speech_provider_response_too_large": {
+    "en": "The speech provider response is too large.",
+    "zh-CN": "语音服务返回的内容过大。",
+    "zh-TW": "語音服務傳回的內容過大。"
+  },
+  "speech_transcription_response_invalid": {
+    "en": "The speech provider did not return a valid transcription.",
+    "zh-CN": "语音服务未返回有效的转写结果。",
+    "zh-TW": "語音服務未傳回有效的轉寫結果。"
+  },
+  "speech_synthesis_response_invalid": {
+    "en": "The speech provider did not return MP3 audio.",
+    "zh-CN": "语音服务未返回 MP3 音频。",
+    "zh-TW": "語音服務未傳回 MP3 音訊。"
+  },
   "image_model_unconfigured": {
     "en": "No available image generation model is configured.",
     "zh-CN": "尚未配置可用的生图模型。",
