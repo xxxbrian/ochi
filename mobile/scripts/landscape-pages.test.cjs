@@ -31,7 +31,7 @@ function harness(width = 852, height = 393, insets = { top: 0, left: 59, right: 
   const imports = {
     react: hooks, 'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' }, 'react-native': native,
     'lucide-react-native': primitives,
-    'expo-router': { router: { push() {}, replace() {}, back() {}, canGoBack: () => true }, useFocusEffect() {}, useLocalSearchParams: () => ({ memoryId: 'new' }) },
+    'expo-router': { router: { push() {}, replace() {}, back() {}, canGoBack: () => true }, useFocusEffect() {}, useIsFocused: () => true, useLocalSearchParams: () => ({ memoryId: 'new' }) },
     'react-native-safe-area-context': { useSafeAreaInsets: () => state.insets, SafeAreaView: 'SafeAreaView', SafeAreaProvider: 'SafeAreaProvider' },
     'react-native-keyboard-controller': { KeyboardAvoidingView: 'KeyboardAvoidingView', KeyboardAwareScrollView: 'KeyboardAwareScrollView' },
     'react-native-webview': { WebView: 'WebView' },
@@ -42,6 +42,7 @@ function harness(width = 852, height = 393, insets = { top: 0, left: 59, right: 
     '../lib/processTimeline': { unrepresentedOutput: () => '' },
     '../../../web/src/lib/scheduling': { scheduleWallTime: () => '', scheduleInstant: () => '' },
     '../../brand.config': { brand: { displayName: 'Ochi' } },
+    '../hooks/useChatSpeech': { useChatSpeech: () => ({}) },
     '../hooks/useRunStream': { useRunStream: () => ({}) },
     './artifactFiles': { fileType: (file) => file.type ?? 'binary', fileSize: () => '1 KB' },
   };

@@ -11,10 +11,11 @@ const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve()
 const primitive = new Proxy({}, { get: (_target, key) => key });
 
 function fixture(screen = "ChatScreen") {
-  const calls = { creates: [], sends: [], preferences: [], params: [] };
+  const calls = { creates: [], sends: [], preferences: [], params: [], speech: [] };
+  let focused = true;
   const model = { id: "model", default_effort: "high" };
   const app = {
-    dark: false, colors: {}, models: [model], preferredModel: model,
+    user: { id: "account" }, dark: false, colors: {}, models: [model], preferredModel: model,
     preferences: { memory_enabled: true }, invalidateLists() {}, refreshPreferences: async () => {},
     selectPreferredModel: async () => {},
   };
@@ -48,7 +49,7 @@ function fixture(screen = "ChatScreen") {
   };
   const load = createLoader(require("typescript"), require, {
     "react-native": native, "lucide-react-native": primitive,
-    "expo-router": { router: { push() {} }, useNavigation: () => navigation, useIsFocused: () => true },
+    "expo-router": { router: { push() {} }, useNavigation: () => navigation, useIsFocused: () => focused },
     "react-native-safe-area-context": { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },
     "react-native-keyboard-controller": {
       KeyboardAwareScrollView: "KeyboardAwareScrollView", KeyboardAvoidingView: "KeyboardAvoidingView",
@@ -58,9 +59,12 @@ function fixture(screen = "ChatScreen") {
     "react-native-reanimated": { __esModule: true, default: { View: "ReanimatedView" }, useAnimatedStyle: () => ({}), useReducedMotion: () => true },
     [path.join(root, "mobile/src/lib/i18n.ts")]: testI18n.native,
     [path.join(root, "mobile/src/lib/errors.ts")]: { errorForDisplay: (value) => value, localizedError: (value) => new Error(value) },
-    [path.join(root, "mobile/src/lib/api.ts")]: { api, isActiveStatus: () => false },
+    [path.join(root, "mobile/src/lib/api.ts")]: { api, isActiveStatus: () => false, getAPIBaseURL: () => "https://example.invalid" },
     [path.join(root, "mobile/src/providers/AppProvider.tsx")]: { useApp: () => app },
     [path.join(root, "mobile/src/hooks/useSessionChat.ts")]: { useSessionChat: () => chat },
+    [path.join(root, "mobile/src/hooks/useChatSpeech.ts")]: {
+      useChatSpeech: (...args) => { calls.speech.push(args); return { dictation: { enabled: args[3] } }; },
+    },
     [path.join(root, "mobile/src/hooks/useDrawerNavigation.ts")]: { useDrawerNavigation: () => ({ canHandleInput: () => true, canAct: () => true }) },
     [path.join(root, "mobile/src/ui/GlassSurface.tsx")]: {
       GlassSurface: "GlassSurface",
@@ -80,7 +84,7 @@ function fixture(screen = "ChatScreen") {
     [path.join(root, "mobile/src/components/SessionSearch.tsx")]: { SessionSearch: "SessionSearch", sessionDate: () => "" },
   });
   const module = load(path.join(root, `mobile/src/screens/${screen === "ChatScreen" ? "ChatScreen" : "ProjectsScreen"}.tsx`));
-  return { Screen: module[screen], app, chat, calls, api };
+  return { Screen: module[screen], app, chat, calls, api, setFocused(value) { focused = value; } };
 }
 
 test("native draft memory defaults on, resets for each new chat/project, and never writes account preferences", async () => {
@@ -146,5 +150,23 @@ test("native project entry sends its own draft choice as argument five and start
     assert.equal(composer().memoryEnabled, true);
     assert.ok(!Object.hasOwn(f.calls.sends[0][2], "memory_enabled"));
     assert.deepEqual(f.calls.preferences, []);
+  } finally { await act(async () => tree.unmount()); }
+});
+
+test("native project entry connects dictation to the focused project draft and account", async () => {
+  const f = fixture("ProjectScreen");
+  let tree;
+  await act(async () => { tree = create(React.createElement(f.Screen, { projectId: "project" })); await flush(); });
+  const composer = () => tree.root.findByType("FlatList").props.ListHeaderComponent.props.children.find((node) => node?.type === "Composer").props;
+  try {
+    assert.equal(composer().dictation.enabled, true);
+    assert.deepEqual(f.calls.speech.at(-1), ['["https://example.invalid","account"]', "", "project-project", true]);
+    f.setFocused(false);
+    await act(async () => tree.update(React.createElement(f.Screen, { projectId: "project" })));
+    assert.equal(composer().dictation.enabled, false);
+    f.setFocused(true);
+    await act(async () => { tree.update(React.createElement(f.Screen, { projectId: "other" })); await flush(); });
+    assert.equal(composer().dictation.enabled, true);
+    assert.deepEqual(f.calls.speech.at(-1), ['["https://example.invalid","account"]', "", "project-other", true]);
   } finally { await act(async () => tree.unmount()); }
 });

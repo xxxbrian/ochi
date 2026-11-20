@@ -100,6 +100,22 @@ test('native cold history fetches process only on disclosure and preserves all p
   } finally { await act(async () => tree.unmount()); }
 });
 
+test('native read-aloud uses history revision even when the recycled cell still has older run details', async () => {
+  const { ChatMessages } = setup();
+  const old = snapshot([text('old', 'Old detail')], 'completed');
+  const started = [];
+  const readAloud = { enabled: true, blocked: false, status: null, toggle: (...args) => started.push(args) };
+  const tree = await mount(ChatMessages, chatProps({ messages: [message('Old detail')], run: old, readAloud }));
+  try {
+    await act(async () => tree.update(React.createElement(ChatMessages, chatProps({
+      messages: [message('Revised public reply')], readAloud,
+    }))));
+    const control = tree.root.findAllByType('ActionIcon').find((node) => node.props.label === testI18n.native.t('speech.readAloud'));
+    await act(async () => control.props.onPress());
+    assert.deepEqual(started, [['assistant-R', 'Revised public reply']]);
+  } finally { await act(async () => tree.unmount()); }
+});
+
 test('native needs-user tool remains a separate labelled row and is not counted as successful work', async () => {
   const { Activity } = setup();
   const tree = await mount(Activity, { snapshot: snapshot([tool('one'), tool('permission', 'needs_user'), tool('two')], 'waiting_user'), defaultExpanded: true, availableHeight: 200 });

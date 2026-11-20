@@ -133,6 +133,7 @@ function harness({ platform = 'android', composer = false, preserveKeyboard = tr
         if (name === './useModalTransition') return load('src/ui/useModalTransition.ts');
         if (name === './overlayGeometry' || name === '../ui/overlayGeometry') return load('src/ui/overlayGeometry.ts');
         if (name === '../hooks/useKeyboardTop') return load('src/hooks/useKeyboardTop.ts');
+        if (name === '../../../shared/speech') return load('../shared/speech.ts');
         throw new Error(`Unexpected import ${name} in ${file}`);
       },
     }, { filename });

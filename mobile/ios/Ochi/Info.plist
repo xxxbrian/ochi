@@ -67,6 +67,8 @@
 	<string>Use Face ID to access your Ochi credentials.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Connect to your Ochi server.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record audio and transcribe it into a chat draft.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose photos to add to a chat.</string>
 	<key>NSUserActivityTypes</key>

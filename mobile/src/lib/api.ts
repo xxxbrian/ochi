@@ -9,7 +9,7 @@ import type {
   ApiError, Artifact, Memory, Message, Model, NativeUpload,
   PendingRun, Project, ProjectDetail, RunOptions, RunStatus, Schedule, ScheduleExecution,
   Plugin, Session, SessionHead, SessionPage, SessionPatch, Snapshot, User, UserPreferences,
-  RunInstruction,
+  RunInstruction, SpeechCapabilities,
 } from './types';
 
 const AUTH_KEY = 'ochi.auth.v1';
@@ -104,8 +104,9 @@ function errorMessage(path: string, status: number, code?: string, params?: Reco
   return t("error.request");
 }
 
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+async function requestResponse(path: string, init: RequestInit): Promise<Response> {
   const base = requireAPIBaseURL();
+  const revision = credentialRevision;
   let response: Response;
   try {
     response = await fetch(`${base}${path}`, {
@@ -128,9 +129,15 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     error.detail = body.error ?? '';
     error.code = body.code;
     error.params = body.params;
-    if (response.status === 401 && !path.endsWith('/login')) onUnauthorized?.();
+    if (response.status === 401 && !path.endsWith('/login') && revision === credentialRevision && !init.signal?.aborted)
+      onUnauthorized?.();
     throw error;
   }
+  return response;
+}
+
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await requestResponse(path, init);
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
@@ -151,6 +158,19 @@ export const api = {
   },
   logout: () => request<void>('/api/auth/logout', json('POST')),
   models: () => request<Model[]>('/api/models'),
+  speechCapabilities: (signal: AbortSignal) => request<SpeechCapabilities>('/api/speech/capabilities', { signal, redirect: 'error' }),
+  transcribeSpeech: (file: File, signal: AbortSignal) => {
+    const body = new FormData();
+    body.append('file', file);
+    return request<{ text: string }>('/api/speech/transcriptions', { method: 'POST', body, signal, redirect: 'error' });
+  },
+  synthesizeSpeech: async (text: string, signal: AbortSignal) => {
+    const response = await requestResponse('/api/speech/synthesis', {
+      ...json('POST', { text }), signal, redirect: 'error', headers: { Accept: 'audio/mpeg' },
+    });
+    if (response.headers.get('content-type')?.split(';')[0]?.trim() !== 'audio/mpeg') throw localizedError('speech.playbackFailed');
+    return new Uint8Array(await response.arrayBuffer());
+  },
   sessionsPage: (options: { q?: string; cursor?: string; project_id?: string; limit?: number } = {}, signal?: AbortSignal) => {
     const params = new URLSearchParams();
     Object.entries(options).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)); });

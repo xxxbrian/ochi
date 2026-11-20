@@ -21,9 +21,10 @@ import {
   Search,
   Trash2,
 } from "lucide-react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useIsFocused } from "expo-router";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { api } from "../lib/api";
+import { api, getAPIBaseURL } from "../lib/api";
+import { useChatSpeech } from "../hooks/useChatSpeech";
 import type { Project, Session } from "../lib/types";
 import { useApp } from "../providers/AppProvider";
 import { Sheet } from "../ui/Sheet";
@@ -125,7 +126,8 @@ export function ProjectsScreen() {
 
 export function ProjectScreen({ projectId }: { projectId: string }) {
   useI18n();
-  const { colors, models, preferences, invalidateLists, invalidateVersion } = useApp();
+  const { user, colors, models, preferences, invalidateLists, invalidateVersion } = useApp();
+  const focused = useIsFocused();
   const { height } = useWindowDimensions();
   const compact = height < 500;
   const contentStyle = usePageContentStyle({ horizontal: 18, top: 0, bottom: 30, gap: 0 });
@@ -140,6 +142,10 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
   const [modelId, setModelId] = useState("");
   const [effort, setEffort] = useState("");
   const [computer, setComputer] = useState(true);
+  const draftKey = `project-${projectId}`;
+  const { dictation } = useChatSpeech(
+    user ? JSON.stringify([getAPIBaseURL(), user.id]) : "", "", draftKey, focused && !loading,
+  );
   const [memoryChoice, setMemoryChoice] = useState({ projectId, enabled: true });
   const memoryEnabled = memoryChoice.projectId === projectId ? memoryChoice.enabled : true;
   useEffect(() => {
@@ -251,7 +257,8 @@ export function ProjectScreen({ projectId }: { projectId: string }) {
         </Pressable>
       ) : null}
       <Composer
-        draftKey={`project-${projectId}`}
+        draftKey={draftKey}
+        dictation={dictation}
         models={models}
         modelId={modelId}
         effort={effort}

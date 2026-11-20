@@ -24,8 +24,10 @@ import {
   ChevronDown,
   File,
   ImageIcon,
+  Mic,
   Monitor,
   Plus,
+  RotateCw,
   Square,
   X,
 } from "lucide-react-native";
@@ -50,6 +52,8 @@ import {
 import { ArtifactCards } from "./Artifacts";
 import { ModelIcon } from "./ModelIcon";
 import { anchorGeometryKey } from "../ui/overlayGeometry";
+import { appendDictation } from "../../../shared/speech";
+import type { DictationActions } from "../hooks/useChatSpeech";
 
 export type ComposerSubmission = {
   text: string;
@@ -83,6 +87,7 @@ type Props = {
   editingMessage?: Message | null;
   onCancelEdit?: () => void;
   availableHeight?: number;
+  dictation?: DictationActions;
 };
 type Rect = { x: number; y: number; width: number; height: number };
 type InputMeasurement = { key: string; scope: string; height: number };
@@ -114,6 +119,7 @@ export const Composer = memo(function Composer({
   editingMessage,
   onCancelEdit,
   availableHeight,
+  dictation,
 }: Props) {
   useI18n();
   const { colors, fonts, dark } = useTheme();
@@ -126,6 +132,10 @@ export const Composer = memo(function Composer({
   const compact = width < 430;
   const supplementAvailable = Boolean(onSupplement) && !editingMessage;
   const compactSupplementTools = supplementAvailable && (width < 360 || shortViewport);
+  const toolbarWidth = Math.min(780, width - insets.left - insets.right) - 30;
+  const compactVoiceTools = Boolean(dictation?.enabled && toolbarWidth < 380);
+  const inlineSupplement = supplementAvailable && !(dictation?.enabled && toolbarWidth < 324);
+  const voice = dictation?.enabled ? dictation.status : null;
   const inputScope = `${draftKey}:${editingMessage?.id ?? "draft"}`;
   const [draft, setDraft] = useState(initialDraft ?? "");
   const [files, setFiles] = useState<Artifact[]>([]);
@@ -206,7 +216,7 @@ export const Composer = memo(function Composer({
     });
   }
   const model = models.find((item) => item.id === modelId);
-  const busy = posting || uploading || Boolean(unavailable) || Boolean(supplementBusy);
+  const busy = posting || uploading || Boolean(unavailable) || Boolean(supplementBusy) || Boolean(voice);
   const memoryStatus = !memoryEnabled ? t("sessionMemory.off")
     : !memoryGloballyEnabled ? t("sessionMemory.globalOff") : t("sessionMemory.on");
   const canThink =
@@ -441,6 +451,12 @@ export const Composer = memo(function Composer({
             disabled: busy,
             onPress: () => void pick("files"),
           },
+          ...(supplementAvailable && !inlineSupplement ? [{
+            key: "supplement",
+            title: t("chat.addInstructions"),
+            disabled: !displayedDraft.trim() || displayedFiles.length > 0 || busy,
+            onPress: () => { setMenu(null); void supplement(); },
+          }] : []),
           {
             key: "memory",
             title: memoryStatus,
@@ -498,6 +514,7 @@ export const Composer = memo(function Composer({
   return (
     <View style={styles.outer}>
       <ErrorNotice error={error} />
+      <ErrorNotice error={voice?.phase === "failed" ? voice.error : undefined} />
       <GlassSurface
         interactive
         style={[styles.composer, shortViewport && styles.composerCompact, { borderColor: colors.border }]}
@@ -579,7 +596,34 @@ export const Composer = memo(function Composer({
           </View>
         )}
         <View style={[styles.toolbar, shortViewport && styles.toolbarCompact]}>
-          <View ref={attachmentRef} collapsable={false}>
+          {dictation && voice && (
+            <View style={[styles.dictationControls, shortViewport && styles.dictationControlsCompact]}>
+              <View style={styles.dictationStatus} accessibilityLiveRegion="polite">
+                {voice.phase === "recording" ? (
+                  <>
+                    <View style={[styles.recordingDot, { backgroundColor: colors.error }]} />
+                    <AppText muted size={12} numberOfLines={1} style={styles.dictationLabel}>{t("speech.recording")}</AppText>
+                    <RecordingClock startedAt={voice.startedAt} maxSeconds={voice.maxSeconds} />
+                  </>
+                ) : voice.phase === "failed" ? null : (
+                  <>
+                    <ActivityIndicator size="small" color={colors.muted} />
+                    <AppText muted size={12} numberOfLines={1} style={styles.dictationLabel}>
+                      {t(voice.phase === "starting" ? "speech.starting" : "speech.transcribing")}
+                    </AppText>
+                  </>
+                )}
+              </View>
+              <ActionIcon icon={X} label={t(voice.phase === "failed" ? "common.close" : "speech.cancelRecording")} size={18} onPress={dictation.cancel} />
+              {voice.phase === "recording" && (
+                <ActionIcon icon={Check} label={t("speech.finishRecording")} size={20} onPress={dictation.finish} />
+              )}
+              {voice.phase === "failed" && voice.retry && (
+                <ActionIcon icon={RotateCw} label={t("speech.retryTranscription")} size={18} onPress={dictation.retry} />
+              )}
+            </View>
+          )}
+          {!voice && <View ref={attachmentRef} collapsable={false}>
           <Pressable
             onPress={() => openMenu("attachments", attachmentRef)}
             accessibilityRole="button"
@@ -597,8 +641,8 @@ export const Composer = memo(function Composer({
               <Plus size={22} color={colors.text} strokeWidth={1.8} />
             </View>
           </Pressable>
-          </View>
-          <View ref={modelRef} collapsable={false} style={{ minWidth: 0, flexShrink: 1 }}>
+          </View>}
+          {!voice && <View ref={modelRef} collapsable={false} style={{ minWidth: 0, flexShrink: 1 }}>
             <Pressable
               onPress={() => openMenu("models", modelRef)}
               accessibilityRole="button"
@@ -611,7 +655,7 @@ export const Composer = memo(function Composer({
               ]}
             >
               <ModelIcon model={model} size={18} />
-              {!compact && !compactSupplementTools && (
+              {!compact && !compactSupplementTools && !compactVoiceTools && (
                 <>
                   <AppText
                     size={13}
@@ -625,8 +669,8 @@ export const Composer = memo(function Composer({
                 </>
               )}
             </Pressable>
-          </View>
-          {canThink && (
+          </View>}
+          {!voice && canThink && (
             <View ref={effortRef} collapsable={false}>
               <Pressable
                 onPress={() => {
@@ -642,7 +686,7 @@ export const Composer = memo(function Composer({
                 style={styles.effortTrigger}
               >
                 <Brain size={17} color={colors.muted} />
-                {!compactSupplementTools && <AppText size={12} muted>
+                {!compactSupplementTools && !compactVoiceTools && <AppText size={12} muted>
                   {model?.reasoning_kind === "budget"
                     ? Number(budgetValue).toLocaleString(getLocale())
                     : thinkingLevelLabel(effort)}
@@ -650,8 +694,8 @@ export const Composer = memo(function Composer({
               </Pressable>
             </View>
           )}
-          <View style={{ flex: shortViewport ? 0 : 1, minWidth: 2 }} />
-          <View style={styles.computer}>
+          {!voice && <View style={{ flex: shortViewport ? 0 : 1, minWidth: 2 }} />}
+          {!voice && <View style={styles.computer}>
             <Monitor size={16} color={colors.muted} />
             <View style={styles.switchTarget}>
               <Switch
@@ -667,8 +711,8 @@ export const Composer = memo(function Composer({
                 style={styles.switch}
               />
             </View>
-          </View>
-          {supplementAvailable && (
+          </View>}
+          {!voice && inlineSupplement && (
             <Pressable accessibilityRole="button" accessibilityLabel={t("chat.addInstructions")}
               accessibilityHint={displayedFiles.length ? t("chat.instructionsNoAttachments") : undefined}
               accessibilityState={{ disabled: !displayedDraft.trim() || displayedFiles.length > 0 || busy }}
@@ -677,6 +721,14 @@ export const Composer = memo(function Composer({
                 { backgroundColor: pressed ? colors.hover : "transparent", opacity: !displayedDraft.trim() || displayedFiles.length || busy ? 0.4 : 1 }]}>
               <AppText muted size={12} numberOfLines={1}>{t("chat.addDetails")}</AppText>
             </Pressable>
+          )}
+          {!voice && dictation?.enabled && (
+            <ActionIcon icon={Mic} label={t("speech.voiceInput")} size={18} disabled={busy || Boolean(editingMessage && !editReady)}
+              onPress={() => dictation.start((text) => {
+                if (mounted.current && currentInputScope.current === inputScope)
+                  changeDraft((current) => appendDictation(current, text));
+              })}
+            />
           )}
           {posting || uploading ? (
             <View style={[styles.send, { backgroundColor: colors.text }]}>
@@ -762,6 +814,17 @@ export const Composer = memo(function Composer({
   );
 });
 
+function RecordingClock({ startedAt, maxSeconds }: { startedAt: number; maxSeconds: number }) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setSeconds(Math.min(maxSeconds, Math.max(0, Math.floor((Date.now() - startedAt) / 1_000)))), 250);
+    return () => clearInterval(timer);
+  }, [startedAt, maxSeconds]);
+  return <AppText muted size={12} style={styles.recordingClock}>
+    {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+  </AppText>;
+}
+
 const styles = StyleSheet.create({
   outer: {
     width: "100%",
@@ -798,6 +861,12 @@ const styles = StyleSheet.create({
   inputProbe: { position: "absolute", top: 0, left: 0, opacity: 0 },
   toolbar: { flexDirection: "row", alignItems: "center", gap: 2 },
   toolbarCompact: { flexShrink: 0 },
+  dictationControls: { flex: 1, flexDirection: "row", alignItems: "center", minHeight: 44 },
+  dictationControlsCompact: { flex: 0, width: 200 },
+  dictationStatus: { flex: 1, minWidth: 0, paddingLeft: 10, flexDirection: "row", gap: 6, alignItems: "center" },
+  dictationLabel: { flexShrink: 1, minWidth: 0 },
+  recordingClock: { fontVariant: ["tabular-nums"] },
+  recordingDot: { width: 7, height: 7, borderRadius: 4 },
   supplement: { minWidth: 40, minHeight: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   editHeading: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: -7, marginBottom: 8, paddingLeft: 10, paddingRight: 1, borderBottomWidth: StyleSheet.hairlineWidth },
   modelTrigger: {

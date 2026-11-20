@@ -13,10 +13,13 @@ import {
   ArrowDown,
   Check,
   Copy,
+  LoaderCircle,
   Pencil,
   RotateCcw,
   Share2,
   ShieldCheck,
+  Square,
+  Volume2,
 } from "lucide-react-native";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import * as Clipboard from "expo-clipboard";
@@ -24,6 +27,7 @@ import type { Message, Snapshot, WaitingInput } from "../lib/types";
 import { isActiveStatus, userFacingRunError } from "../lib/api";
 import { chatMessageKey, projectChatMessages, messagePresentation } from "../../../shared/conversation/projection";
 import { useRunDetail } from "../hooks/useRunDetail";
+import type { ReadAloudActions } from "../hooks/useChatSpeech";
 import { useTheme } from "../providers/AppProvider";
 import { LongPressMenu } from "../ui/LongPressMenu";
 import {
@@ -59,6 +63,7 @@ type Props = {
   onRetry: (message: Message) => Promise<void>;
   onEdit: (message: Message) => void;
   bottomInset?: number;
+  readAloud?: ReadAloudActions;
 };
 
 export const ChatMessages = memo(function ChatMessages({
@@ -73,6 +78,7 @@ export const ChatMessages = memo(function ChatMessages({
   onRetry,
   onEdit,
   bottomInset = 16,
+  readAloud,
 }: Props) {
   useI18n();
   const { colors } = useTheme();
@@ -233,6 +239,7 @@ export const ChatMessages = memo(function ChatMessages({
           ) : (
             <AssistantBubble
               key={item.key}
+              itemKey={item.key}
               message={item.message}
               snapshot={item.snapshot}
               onResume={resume}
@@ -241,6 +248,10 @@ export const ChatMessages = memo(function ChatMessages({
               onProcessReadingChange={onProcessReadingChange}
               readingTranscript={readingTranscript}
               onViewAnswer={(offset) => viewAnswer(item.key, offset)}
+              speechEnabled={readAloud?.enabled}
+              speechBlocked={readAloud?.blocked}
+              speechStatus={readAloud?.status?.id === item.key ? readAloud?.status : undefined}
+              onReadAloud={readAloud?.toggle}
             />
           )
         }
@@ -298,6 +309,7 @@ const UserBubble = memo(function UserBubble({
 });
 
 const AssistantBubble = memo(function AssistantBubble({
+  itemKey,
   message,
   snapshot,
   onResume,
@@ -306,7 +318,12 @@ const AssistantBubble = memo(function AssistantBubble({
   onProcessReadingChange,
   readingTranscript = false,
   onViewAnswer,
+  speechEnabled,
+  speechBlocked,
+  speechStatus,
+  onReadAloud,
 }: {
+  itemKey: string;
   message: Message;
   snapshot?: Snapshot;
   onResume: Props["resume"];
@@ -315,6 +332,10 @@ const AssistantBubble = memo(function AssistantBubble({
   onProcessReadingChange: ProcessReadingChange;
   readingTranscript?: boolean;
   onViewAnswer?: (offset: number) => void;
+  speechEnabled?: boolean;
+  speechBlocked?: boolean;
+  speechStatus?: ReadAloudActions["status"];
+  onReadAloud?: ReadAloudActions["toggle"];
 }) {
   useI18n();
   const { colors } = useTheme();
@@ -323,8 +344,8 @@ const AssistantBubble = memo(function AssistantBubble({
   const [historyOpen, setHistoryOpen] = useState(false);
   const reading = useRef(false);
   const runId = message.run_id;
-  const provided = snapshot?.run_id === runId ? snapshot : null;
-  const detail = useRunDetail(runId ?? "", provided ?? null, message.run_status, historyOpen);
+  const provided = snapshot && snapshot.run_id === runId ? snapshot : null;
+  const detail = useRunDetail(runId ?? "", provided, message.run_status, historyOpen);
   const saved = detail.snapshot;
   const historyLoading = detail.loading;
   const presentation = messagePresentation(message, saved);
@@ -332,6 +353,8 @@ const AssistantBubble = memo(function AssistantBubble({
   const status = current?.status ?? message.run_status;
   const active = isActiveStatus(status);
   const display = current;
+  const speechText = speechEnabled ? messagePresentation(message, provided).copyText : "";
+  const speaking = speechStatus?.phase === "loading" || speechStatus?.phase === "playing";
   const files = current?.artifacts ?? message.attachments;
   const process = Boolean(current || message.has_process || message.step_count || message.has_reasoning ||
     status === "failed" || status === "interrupted" || status === "cancelled");
@@ -408,6 +431,17 @@ const AssistantBubble = memo(function AssistantBubble({
             style={styles.messageAction}
             onPress={() => void Share.share({ message: content })}
           />
+          {speechText && onReadAloud && (
+            <ActionIcon
+              icon={speechStatus?.phase === "loading" ? LoaderCircle : speaking ? Square : Volume2}
+              label={t(speechStatus?.phase === "loading" ? "speech.stopPreparing" : speaking ? "speech.stopReading" : "speech.readAloud")}
+              size={17}
+              style={styles.messageAction}
+              disabled={speechBlocked}
+              selected={speaking}
+              onPress={() => onReadAloud(itemKey, speechText)}
+            />
+          )}
           {onRetry && <ActionIcon
             icon={RotateCcw}
             label={t("chat.regenerate")}
@@ -432,6 +466,7 @@ const AssistantBubble = memo(function AssistantBubble({
       )}
       {!current && <ErrorNotice error={message.run_error ? userFacingRunError(message.run_error, Boolean(files?.length), message.run_error_code) : undefined} />}
       <ErrorNotice error={error} />
+      <ErrorNotice error={speechStatus?.error} />
     </View>
   );
 });

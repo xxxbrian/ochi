@@ -38,8 +38,9 @@ import {
   useKeyboardState,
 } from "react-native-keyboard-controller";
 import Reanimated, { useAnimatedStyle, useReducedMotion } from "react-native-reanimated";
-import { api, isActiveStatus } from "../lib/api";
+import { api, getAPIBaseURL, isActiveStatus } from "../lib/api";
 import { useApp } from "../providers/AppProvider";
+import { useChatSpeech } from "../hooks/useChatSpeech";
 import { useSessionChat } from "../hooks/useSessionChat";
 import { useDrawerNavigation } from "../hooks/useDrawerNavigation";
 import { BlurScene, GlassSurface } from "../ui/GlassSurface";
@@ -79,7 +80,7 @@ export function ChatScreen({
         "c/[sessionId]"
       >
     >();
-  const { colors, dark, models, preferredModel, selectPreferredModel, preferences, refreshPreferences, invalidateLists } =
+  const { user, colors, dark, models, preferredModel, selectPreferredModel, preferences, refreshPreferences, invalidateLists } =
     useApp();
   const focused = useIsFocused();
   const [composerGeneration, setComposerGeneration] = useState(0);
@@ -118,6 +119,14 @@ export function ChatScreen({
   const [refreshOperation, setRefreshOperation] = useState<number | null>(null);
   const refreshOwner = useRef<number | null>(null);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const speech = useChatSpeech(
+    user ? JSON.stringify([getAPIBaseURL(), user.id]) : "",
+    chat.ownerKey,
+    JSON.stringify([chat.ownerKey, editingMessage?.id ?? ""]),
+    focused,
+    chat.messages,
+    chat.run,
+  );
   const instructions = chat.instructions;
   const [composerHeight, setComposerHeight] = useState(146);
   const [bodyHeight, setBodyHeight] = useState(0);
@@ -519,6 +528,7 @@ export function ChatScreen({
         supplementAccepted={instructions.accepted}
         editingMessage={editingMessage}
         onCancelEdit={() => setEditingMessage(null)}
+        dictation={speech.dictation}
         availableHeight={bodyHeight ? Math.max(0, bodyHeight - 20 - (chat.pending.length ? 40 : 0) - (instructions.items.length || instructions.error || instructions.syncError ? 36 : 0)) : undefined}
       />
       </ScrollView>
@@ -667,6 +677,7 @@ export function ChatScreen({
                     resume={chat.resume}
                     onRetry={retry}
                     onEdit={setEditingMessage}
+                    readAloud={speech.readAloud}
                     bottomInset={composerHeight + 20}
                   />
                 ) : (

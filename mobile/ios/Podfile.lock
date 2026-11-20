@@ -180,6 +180,8 @@ PODS:
     - Yoga
   - ExpoAsset (57.0.19):
     - ExpoModulesCore
+  - ExpoAudio (57.0.5):
+    - ExpoModulesCore
   - ExpoBlur (57.0.3):
     - ExpoModulesCore
   - ExpoClipboard (57.0.2):
@@ -2604,6 +2606,7 @@ DEPENDENCIES:
   - "expo-dev-menu (from `../node_modules/.pnpm/expo-dev-menu@57.0.19_expo@57.0.27_react-native@0.86.3_@babel+core@7.29.7_supports-colo_6a5139d4414517778da78781616db3ba/node_modules/expo-dev-menu`)"
   - "expo-dev-menu-interface (from `../node_modules/.pnpm/expo-dev-menu-interface@57.0.0_expo@57.0.27/node_modules/expo-dev-menu-interface/ios`)"
   - "ExpoAsset (from `../node_modules/.pnpm/expo-asset@57.0.19_expo@57.0.27_react-native@0.86.3_@babel+core@7.29.7_supports-color@8_08d35a065d3c896da3c988b64001f5fa/node_modules/expo-asset/ios`)"
+  - "ExpoAudio (from `../node_modules/.pnpm/expo-audio@57.0.5_expo-asset@57.0.19_expo@57.0.27_react-native@0.86.3_@babel+core@7.29._be5a80c507bc7517d107445ce89efa42/node_modules/expo-audio/ios`)"
   - "ExpoBlur (from `../node_modules/.pnpm/expo-blur@57.0.3_expo@57.0.27_react-native@0.86.3_@babel+core@7.29.7_supports-color@8.1_098a4c89848b8c6d915c90af62c0f400/node_modules/expo-blur/ios`)"
   - "ExpoClipboard (from `../node_modules/.pnpm/expo-clipboard@57.0.2_expo@57.0.27_react-native@0.86.3_@babel+core@7.29.7_supports-colo_a2ad6d4f8fb7e8c7003335e574b39ba8/node_modules/expo-clipboard/ios`)"
   - "ExpoDocumentPicker (from `../node_modules/.pnpm/expo-document-picker@57.0.3_expo@57.0.27/node_modules/expo-document-picker/ios`)"
@@ -2737,6 +2740,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/.pnpm/expo-dev-menu-interface@57.0.0_expo@57.0.27/node_modules/expo-dev-menu-interface/ios"
   ExpoAsset:
     :path: "../node_modules/.pnpm/expo-asset@57.0.19_expo@57.0.27_react-native@0.86.3_@babel+core@7.29.7_supports-color@8_08d35a065d3c896da3c988b64001f5fa/node_modules/expo-asset/ios"
+  ExpoAudio:
+    :path: "../node_modules/.pnpm/expo-audio@57.0.5_expo-asset@57.0.19_expo@57.0.27_react-native@0.86.3_@babel+core@7.29._be5a80c507bc7517d107445ce89efa42/node_modules/expo-audio/ios"
   ExpoBlur:
     :path: "../node_modules/.pnpm/expo-blur@57.0.3_expo@57.0.27_react-native@0.86.3_@babel+core@7.29.7_supports-color@8.1_098a4c89848b8c6d915c90af62c0f400/node_modules/expo-blur/ios"
   ExpoClipboard:
@@ -2973,6 +2978,7 @@ SPEC CHECKSUMS:
   expo-dev-menu: c3b4fc9723fe88118efa2dba3e8a27cf00edc53c
   expo-dev-menu-interface: 7a59e803916fbfd1b96c75ff91ea8dddac7e722f
   ExpoAsset: 78dbecc7bc9f60d839fb37ba8b10317b64779685
+  ExpoAudio: edc9230b788be6f65238a53907d5c176b57a7ce0
   ExpoBlur: 975b78b65b3c8f475c44bd8f8b53948146b1ff9b
   ExpoClipboard: 15b8cc88075d7c50af165ed8fca0a76915903bba
   ExpoDocumentPicker: 3cb0c283969538c03ced2b405e519c91abf39f8e

@@ -1,6 +1,8 @@
 import type { ExpoConfig } from 'expo/config';
 import brand from './brand.config.json';
 
+const microphonePermission = 'Record audio and transcribe it into a chat draft.';
+
 const config: ExpoConfig = {
   name: brand.displayName,
   slug: 'ochi',
@@ -39,6 +41,7 @@ const config: ExpoConfig = {
       NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
       NSLocalNetworkUsageDescription: `Connect to your ${brand.displayName} server.`,
       NSCameraUsageDescription: 'Take photos to add to a chat.',
+      NSMicrophoneUsageDescription: microphonePermission,
       NSPhotoLibraryUsageDescription: 'Choose photos to add to a chat.',
     },
   },
@@ -46,7 +49,7 @@ const config: ExpoConfig = {
     package: 'co.bojin.ochi',
     versionCode: 14,
     softwareKeyboardLayoutMode: 'resize',
-    permissions: ['CAMERA', 'REQUEST_INSTALL_PACKAGES'],
+    permissions: ['CAMERA', 'RECORD_AUDIO', 'REQUEST_INSTALL_PACKAGES'],
     adaptiveIcon: { foregroundImage: './assets/adaptive-icon.png', backgroundColor: '#313235' },
   },
   plugins: [
@@ -60,7 +63,8 @@ const config: ExpoConfig = {
       supportedLocales: ['en', 'zh-Hans', 'zh-Hant'],
       allowDynamicLocaleChangesAndroid: true,
     }],
-    ['expo-image-picker', { cameraPermission: 'Take photos to add to a chat.', photosPermission: 'Choose photos to add to a chat.', microphonePermission: false }],
+    ['expo-image-picker', { cameraPermission: 'Take photos to add to a chat.', photosPermission: 'Choose photos to add to a chat.', microphonePermission }],
+    ['expo-audio', { microphonePermission, enableBackgroundPlayback: false, enableBackgroundRecording: false }],
     ['expo-build-properties', { ios: { enableSceneSupport: true }, android: { usesCleartextTraffic: true } }],
     './plugins/withLocalReleaseSigning.cjs',
   ],

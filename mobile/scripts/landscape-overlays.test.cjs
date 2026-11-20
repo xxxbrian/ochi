@@ -93,11 +93,12 @@ function harness(file, name, props, { width = 393, height = 852, insets = { top:
         if (imported === '../providers/AppProvider') return { useTheme: () => theme, useApp: () => app };
         if (imported === 'expo-router') return { router: {}, useNavigation: () => navigation, useIsFocused: () => true };
         if (imported === '../hooks/useSessionChat') return { useSessionChat: () => ({ ...chat, instructions }) };
+        if (imported === '../hooks/useChatSpeech') return { useChatSpeech: () => ({}) };
         if (imported === '../hooks/useRunInstructions') return { useRunInstructions: () => instructions };
         if (imported === '../hooks/useDrawerNavigation') return { useDrawerNavigation: () => ({ canHandleInput: () => true }) };
         if (imported === '../lib/haptics') return { selectionHaptic() {} };
         if (imported === '../../brand.config') return { brand: { displayName: 'Ochi' } };
-        if (imported === '../lib/api' && file.endsWith('ChatScreen.tsx')) return { isActiveStatus: () => false, api: {} };
+        if (imported === '../lib/api' && file.endsWith('ChatScreen.tsx')) return { isActiveStatus: () => false, api: {}, getAPIBaseURL: () => 'https://example.invalid' };
         if (imported === '../lib/api') return { fileURL: () => '/image', resourceHeaders: () => ({}), imageSource: () => ({ uri: '/image' }) };
         if (imported === './artifactFiles') return { fileSize: () => '100KB', shareArtifact: async () => {} };
         if (imported === '../ui/overlayGeometry' || imported === './overlayGeometry') return load('src/ui/overlayGeometry.ts');
