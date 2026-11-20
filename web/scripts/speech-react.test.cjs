@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 const { JSDOM } = require("jsdom");
 const { createLoader } = require("../../shared/conversation/test-loader.cjs");
 const { createI18nHarness } = require("./i18n-harness.cjs");
@@ -33,9 +35,27 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
+function sampleWav() {
+  const bytes = Buffer.alloc(46);
+  bytes.write("RIFF");
+  bytes.writeUInt32LE(bytes.length - 8, 4);
+  bytes.write("WAVEfmt ", 8);
+  bytes.writeUInt32LE(16, 16);
+  bytes.writeUInt16LE(1, 20);
+  bytes.writeUInt16LE(1, 22);
+  bytes.writeUInt32LE(8000, 24);
+  bytes.writeUInt32LE(16000, 28);
+  bytes.writeUInt16LE(2, 32);
+  bytes.writeUInt16LE(16, 34);
+  bytes.write("data", 36);
+  bytes.writeUInt32LE(2, 40);
+  return new Blob([bytes], { type: "audio/wav" });
+}
+
 function loader(api, adminApi) {
   const Paragraph = ({ message }) => React.createElement("p", {}, message.content);
   return createLoader(require("typescript"), require, {
+    [path.resolve(__dirname, "../../shared/i18n/errors.ts")]: t.errors,
     [file("lib/i18n.ts")]: t.web,
     [file("pages/admin/i18n.ts")]: t.admin,
     [file("lib/api.ts")]: { api, adminApi, isActiveStatus: (status) => unavailable.has(status) },
@@ -223,7 +243,7 @@ test("reply playback activates before fetching, excludes code and aborts on repl
     destination = {};
     resume() { calls.push(["resume", this]); return Promise.resolve(); }
     close() { calls.push(["close", this]); return Promise.resolve(); }
-    decodeAudioData() { calls.push(["decode", this]); return Promise.resolve({}); }
+    decodeAudioData(data) { calls.push(["decode", Buffer.from(data)]); return Promise.resolve({}); }
     createBufferSource() {
       const source = {
         start: () => { calls.push(["play", this]); },
@@ -234,6 +254,10 @@ test("reply playback activates before fetching, excludes code and aborts on repl
     }
   };
   const load = loader({
+    speechCapabilities(signal) {
+      calls.push(["capabilities", signal]);
+      return Promise.resolve(capabilities);
+    },
     synthesizeSpeech(text, signal) {
       const result = deferred();
       calls.push(["synthesize", { text, signal, result }]);
@@ -253,7 +277,7 @@ test("reply playback activates before fetching, excludes code and aborts on repl
   const device = microphone();
   const { Composer } = load(file("components/Composer.tsx"));
   function Chat({ scope }) {
-    const audio = useSpeechPlayback(scope, capabilities.max_text_characters, (message) => errors.push(message));
+    const audio = useSpeechPlayback(scope, true, (message) => errors.push(message));
     const [dictating, setDictating] = React.useState(false);
     return React.createElement(React.Fragment, {},
       React.createElement(MessageList, {
@@ -278,8 +302,9 @@ test("reply playback activates before fetching, excludes code and aborts on repl
   await click(read()[0]);
   const stop = view.getByRole("button", { name: t.web.t("message.stopSpeech") });
   assert.equal(stop.getAttribute("aria-busy"), "true");
-  assert.deepEqual(calls.map(([event]) => event), ["resume", "synthesize"]);
-  const firstRequest = calls[1][1];
+  assert.deepEqual(calls.map(([event]) => event), ["resume", "capabilities", "synthesize"]);
+  const firstRequest = calls[2][1];
+  assert.equal(firstRequest.signal, calls[1][1]);
   assert.equal(firstRequest.text, "First reply\n\nContinue");
 
   await click(second);
@@ -287,7 +312,9 @@ test("reply playback activates before fetching, excludes code and aborts on repl
   const secondRequest = calls.findLast(([event]) => event === "synthesize")[1];
   await act(async () => firstRequest.result.resolve(new Blob(["late MP3"], { type: "audio/mpeg" })));
   assert.equal(calls.filter(([event]) => event === "decode").length, 0);
-  await act(async () => secondRequest.result.resolve(new Blob(["second MP3"], { type: "audio/mpeg" })));
+  const wav = sampleWav();
+  await act(async () => secondRequest.result.resolve(wav));
+  assert.deepEqual(calls.find(([event]) => event === "decode")[1], Buffer.from(await wav.arrayBuffer()));
   assert.equal(calls.filter(([event]) => event === "play").length, 1);
   assert.equal(view.getByRole("button", { name: t.web.t("message.stopSpeech") }).getAttribute("aria-busy"), null);
   await click(view.getByRole("button", { name: t.web.t("composer.voiceInput") }));
@@ -307,13 +334,72 @@ test("reply playback activates before fetching, excludes code and aborts on repl
   assert.deepEqual(errors, []);
 });
 
-test("the admin can test unsaved audio models independently and save their enablement", async () => {
+test("read-aloud refreshes the request limit and drops results from a cancelled capability probe", async () => {
+  const probes = [];
+  const segments = [];
+  const sources = [];
+  const errors = [];
+  const wav = sampleWav();
+  globalThis.AudioContext = class {
+    destination = {};
+    async resume() {}
+    async close() {}
+    async decodeAudioData() { return {}; }
+    createBufferSource() {
+      const source = { start: () => sources.push(source), stop() {}, connect() {}, disconnect() {} };
+      return source;
+    }
+  };
+  const { useSpeechPlayback } = loader({
+    speechCapabilities(signal) {
+      const result = deferred();
+      probes.push({ signal, result });
+      return result.promise;
+    },
+    async synthesizeSpeech(text, signal) {
+      segments.push({ text, signal });
+      return wav;
+    },
+  })(file("hooks/useSpeechPlayback.ts"));
+  function Chat() {
+    const audio = useSpeechPlayback("chat", true, (message) => errors.push(message));
+    return React.createElement("button", { onClick: () => audio.toggle("reply", "ABCDEFGHI") },
+      t.web.t(audio.status ? "message.stopSpeech" : "message.readAloud"));
+  }
+  const view = render(React.createElement(Chat));
+  const action = () => view.getByRole("button");
+  await click(action());
+  assert.equal(action().textContent, t.web.t("message.stopSpeech"));
+  await click(action());
+  assert.equal(probes[0].signal.aborted, true);
+  await act(async () => probes[0].result.resolve(capabilities));
+  assert.equal(segments.length, 0);
+  assert.deepEqual(errors, []);
+
+  await click(action());
+  await act(async () => probes[1].result.resolve({ ...capabilities, max_text_characters: 4 }));
+  assert.deepEqual(segments.map(({ text }) => text), ["ABCD"]);
+  await act(async () => sources[0].onended());
+  await act(async () => sources[1].onended());
+  await act(async () => sources[2].onended());
+  assert.deepEqual(segments.map(({ text }) => text), ["ABCD", "EFGH", "I"]);
+  assert.ok(segments.every(({ signal }) => signal === probes[1].signal));
+  assert.equal(action().textContent, t.web.t("message.readAloud"));
+
+  await click(action());
+  await act(async () => probes[2].result.resolve({ ...capabilities, read_aloud: false }));
+  assert.equal(segments.length, 3);
+  assert.equal(action().textContent, t.web.t("message.readAloud"));
+  assert.deepEqual(errors, [t.errors.translateError("speech_unavailable")]);
+});
+
+test("the admin can preview WAV and save the selected format and request limit", async () => {
   const config = {
     dictation: { enabled: false, provider_id: "synthetic", model: "voice/transcription" },
-    read_aloud: { enabled: false, provider_id: "synthetic", model: "voice/synthesis", voice: "fixture" },
+    read_aloud: { enabled: false, provider_id: "synthetic", model: "voice/synthesis", voice: "fixture", output_format: "mp3", max_text_characters: 2000 },
   };
   const calls = [];
-  const preview = new Blob(["test MP3"], { type: "audio/mpeg" });
+  const wav = sampleWav();
   const load = loader(undefined, {
     speechSettings: async () => config,
     providers: async () => [{ id: "synthetic", name: "Synthetic Provider", enabled: true }],
@@ -321,7 +407,10 @@ test("the admin can test unsaved audio models independently and save their enabl
       calls.push(["transcription", target, file]);
       return { text: "Hello from the recording" };
     },
-    testSynthesis: async (target, text) => { calls.push(["synthesis", target, text]); return preview; },
+    testSynthesis: async (target, text) => {
+      calls.push(["synthesis", target, text]);
+      return target.output_format === "wav" ? wav : new Blob(["test MP3"], { type: "audio/mpeg" });
+    },
     saveSpeechSettings: async (settings) => { calls.push(["save", settings]); return settings; },
   });
   const { default: SpeechPage } = load(file("pages/admin/SpeechPage.tsx"));
@@ -344,20 +433,121 @@ test("the admin can test unsaved audio models independently and save their enabl
     assert.equal(calls[0][1].model, "voice/unsaved-transcription");
     assert.equal(calls[0][2], sample);
     assert.equal(config.dictation.model, "voice/transcription");
-    await click(playback.getByRole("button", { name: t.admin.t("speech.testReadAloud") }));
-    audioURL = playback.getByLabelText(t.admin.t("speech.preview")).src;
-    assert.equal(await (await fetch(audioURL)).text(), "test MP3");
+    const generate = playback.getByRole("button", { name: t.admin.t("speech.testReadAloud") });
+    const format = playback.getByRole("combobox", { name: t.admin.t("speech.outputFormat") });
+    const limit = playback.getByRole("spinbutton", { name: /Characters per request/ });
+    const sampleText = playback.getByRole("textbox", { name: /Sample text/ });
+    const save = within(actions).getByRole("button", { name: t.admin.t("save") });
+    const form = view.container.querySelector("form");
+    const spokenText = "\u4f60\u597d\u{1f30a}".repeat(66) + "\u4f60\u{1f680}";
+    assert.equal(Array.from(spokenText).length, 200);
+    assert.ok(spokenText.length > 200);
+    assert.equal(format.textContent.trim(), "MP3");
+    assert.equal(limit.value, "2000");
+    await click(generate);
+    const mp3URL = playback.getByLabelText(t.admin.t("speech.preview")).src;
+    const mp3 = await fetch(mp3URL);
+    assert.equal(mp3.headers.get("content-type"), "audio/mpeg");
+    assert.equal(await mp3.text(), "test MP3");
     assert.deepEqual(calls[1], ["synthesis", config.read_aloud, t.admin.t("speech.sampleText")]);
 
+    await click(format);
+    const wavOption = view.getByRole("option", { name: "WAV" });
+    await act(async () => {
+      fireEvent.pointerDown(wavOption);
+      fireEvent.click(wavOption);
+    });
+    assert.equal(format.textContent.trim(), "WAV");
+    assert.equal(playback.queryByLabelText(t.admin.t("speech.preview")), null);
+    await assert.rejects(fetch(mp3URL), TypeError);
+    await act(async () => fireEvent.change(limit, { target: { value: "200.1" } }));
+    assert.equal(save.disabled, true);
+    assert.equal(generate.disabled, true);
+    await act(async () => fireEvent.submit(form));
+    assert.equal(calls.length, 2);
+    await act(async () => fireEvent.change(limit, { target: { value: "200" } }));
+    await act(async () => fireEvent.change(sampleText, { target: { value: spokenText + "!" } }));
+    assert.equal(generate.disabled, true);
+    assert.ok(playback.getByText(t.admin.t("speech.sampleTooLong", { max: 200 })));
+    assert.equal(sampleText.value, spokenText + "!");
+    await act(async () => fireEvent.change(sampleText, { target: { value: spokenText } }));
+    assert.equal(generate.disabled, false);
+    const unsavedReadAloud = { ...config.read_aloud, output_format: "wav", max_text_characters: 200 };
+    await click(generate);
+    assert.deepEqual(calls[2], ["synthesis", unsavedReadAloud, spokenText]);
+    const initialWavURL = playback.getByLabelText(t.admin.t("speech.preview")).src;
+    const wavResponse = await fetch(initialWavURL);
+    assert.equal(wavResponse.headers.get("content-type"), "audio/wav");
+    assert.deepEqual(await wavResponse.arrayBuffer(), await wav.arrayBuffer());
+    await act(async () => fireEvent.change(limit, { target: { value: "199" } }));
+    assert.equal(sampleText.value, spokenText);
+    assert.equal(generate.disabled, true);
+    assert.equal(playback.queryByLabelText(t.admin.t("speech.preview")), null);
+    await assert.rejects(fetch(initialWavURL), TypeError);
+    await act(async () => fireEvent.change(limit, { target: { value: "200" } }));
+    await click(generate);
+    const failedAudio = playback.getByLabelText(t.admin.t("speech.preview"));
+    const failedAudioURL = failedAudio.src;
+    await act(async () => fireEvent.error(failedAudio));
+    assert.equal(playback.queryByLabelText(t.admin.t("speech.preview")), null);
+    assert.equal(playback.getByRole("alert").textContent, t.admin.t("speech.previewFailed"));
+    await assert.rejects(fetch(failedAudioURL), TypeError);
+    await click(generate);
+    audioURL = playback.getByLabelText(t.admin.t("speech.preview")).src;
+    assert.equal(playback.queryByRole("alert"), null);
     await click(dictation.getByRole("switch", { name: t.admin.t("speech.enableDictation") }));
-    await act(async () => fireEvent.submit(view.container.querySelector("form")));
-    assert.equal(calls[2][0], "save");
-    assert.equal(calls[2][1].dictation.enabled, true);
-    assert.equal(calls[2][1].read_aloud.enabled, false);
-    assert.equal(within(actions).getByRole("button", { name: t.admin.t("save") }).disabled, true);
+    await act(async () => fireEvent.submit(form));
+    assert.deepEqual(calls[5], ["save", {
+      dictation: { ...config.dictation, enabled: true, model: "voice/unsaved-transcription" },
+      read_aloud: unsavedReadAloud,
+    }]);
+    assert.equal(save.disabled, true);
   } finally {
     cleanup();
     actions.remove();
   }
   await assert.rejects(fetch(audioURL), TypeError);
+});
+
+test("speech transport accepts both response formats and sends preview settings only through the admin route", async () => {
+  const ts = require("typescript");
+  const filename = file("lib/api.ts");
+  const source = fs.readFileSync(filename, "utf8").replace("import.meta.env.VITE_API_BASE", "undefined");
+  const { outputText } = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  });
+  const wav = sampleWav();
+  const calls = [];
+  const exports = {};
+  vm.runInNewContext(outputText, {
+    exports, FormData, Intl,
+    require(name) {
+      if (name === "./i18n") return t.web;
+      if (name.endsWith("/i18n/errors")) return t.errors;
+      if (name.endsWith("/shared/speech")) {
+        return createLoader(ts, require)(path.resolve(path.dirname(filename), name + ".ts"));
+      }
+      throw new Error(`Unexpected API dependency: ${name}`);
+    },
+    fetch: async (url, init) => {
+      calls.push({ url, init });
+      return new Response(wav);
+    },
+  }, { filename });
+  const target = { enabled: true, provider_id: "synthetic", model: "fixture/voice", voice: "fixture", output_format: "wav", max_text_characters: 200 };
+  const signal = new AbortController().signal;
+  const preview = await exports.adminApi.testSynthesis(target, "Preview this", signal);
+  const reply = await exports.api.synthesizeSpeech("Read this", signal);
+  assert.equal(preview.type, "audio/wav");
+  assert.deepEqual(await reply.arrayBuffer(), await wav.arrayBuffer());
+  assert.deepEqual(calls.map(({ url }) => url), ["/api/admin/speech/test-synthesis", "/api/speech/synthesis"]);
+  for (const { init } of calls) {
+    assert.equal(init.method, "POST");
+    assert.equal(init.headers.Accept, "audio/mpeg, audio/wav");
+    assert.equal(init.headers["Content-Type"], "application/json");
+    assert.equal(init.signal, signal);
+  }
+  assert.deepEqual(JSON.parse(calls[0].init.body),
+    { provider_id: "synthetic", model: "fixture/voice", voice: "fixture", output_format: "wav", max_text_characters: 200, text: "Preview this" });
+  assert.deepEqual(JSON.parse(calls[1].init.body), { text: "Read this" });
 });

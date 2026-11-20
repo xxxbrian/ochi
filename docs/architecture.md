@@ -361,16 +361,21 @@ are grouped in the clients rather than one row for every fetched page.
 
 Speech settings independently enable dictation and reply read-aloud. Each
 selects an existing Provider connection and a manually entered upstream model
-ID. Read-aloud also selects a voice. The connection supplies its base URL,
+ID. Read-aloud also selects the voice, output format (MP3 or WAV), and maximum
+characters per request. The connection supplies its base URL,
 credential, headers and timeout. The OpenAI-compatible Audio API appends
 `/audio/transcriptions` (multipart recording and model; JSON transcript) or
-`/audio/speech` (text, model and voice; MP3 response) to the versioned base URL.
+`/audio/speech` (text, model, voice and `response_format`; audio bytes) to the
+versioned base URL. The server checks the returned audio matches the selected
+format and serves it with that format's media type.
 The Provider's chat protocol and discovered chat models do not determine
-audio support. The administrator can test unsaved speech settings.
+audio support. The administrator can test the selected format and limit before
+saving.
 
 The authenticated speech API provides enabled capabilities and limits. The
 composer stops a recording at 90 seconds, the server accepts audio uploads up
-to 10 MiB, and synthesis accepts up to 2,000 Unicode characters per request.
+to 10 MiB, and clients split long replies at the configured synthesis limit of
+1 to 2,000 Unicode characters per request. The default is MP3 at 2,000 characters.
 These are bounded HTTP requests that end on completion or cancellation.
 Recordings and synthesized audio do not enter conversation history, model
 context, the Computer, or persistent server storage.

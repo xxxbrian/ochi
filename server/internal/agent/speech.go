@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"strings"
 
 	"ochi/server/internal/i18n"
 	"ochi/server/internal/product"
@@ -21,6 +23,24 @@ const (
 	maxTranscriptionResponseBytes = 256 << 10
 	maxSynthesisResponseBytes     = 16 << 20
 )
+
+type SpeechOutputFormat string
+
+const (
+	SpeechOutputMP3 SpeechOutputFormat = "mp3"
+	SpeechOutputWAV SpeechOutputFormat = "wav"
+)
+
+func (format SpeechOutputFormat) MediaType() string {
+	switch format {
+	case SpeechOutputMP3:
+		return "audio/mpeg"
+	case SpeechOutputWAV:
+		return "audio/wav"
+	default:
+		return ""
+	}
+}
 
 // Speech uses the provider connection independently of its chat protocol.
 func TranscribeSpeech(ctx context.Context, config Config, recording []byte) (string, error) {
@@ -59,22 +79,33 @@ func TranscribeSpeech(ctx context.Context, config Config, recording []byte) (str
 	return *response.Text, nil
 }
 
-func SynthesizeSpeech(ctx context.Context, config Config, voice, text string) ([]byte, error) {
+func SynthesizeSpeech(ctx context.Context, config Config, voice, text string, format SpeechOutputFormat) ([]byte, error) {
+	mediaType := format.MediaType()
+	if mediaType == "" {
+		return nil, i18n.New("speech_synthesis_format_invalid")
+	}
 	payload, err := json.Marshal(struct {
-		Model          string `json:"model"`
-		Input          string `json:"input"`
-		Voice          string `json:"voice"`
-		ResponseFormat string `json:"response_format"`
-	}{config.Model, text, voice, "mp3"})
+		Model          string             `json:"model"`
+		Input          string             `json:"input"`
+		Voice          string             `json:"voice"`
+		ResponseFormat SpeechOutputFormat `json:"response_format"`
+	}{config.Model, text, voice, format})
 	if err != nil {
 		return nil, err
 	}
-	data, err := speechProviderRequest(ctx, config, "audio/speech", "application/json", "audio/mpeg", bytes.NewReader(payload), maxSynthesisResponseBytes)
+	data, err := speechProviderRequest(ctx, config, "audio/speech", "application/json", mediaType, bytes.NewReader(payload), maxSynthesisResponseBytes)
 	if err != nil {
 		return nil, err
 	}
-	if !isMP3(data) {
-		return nil, i18n.New("speech_synthesis_response_invalid")
+	var valid bool
+	switch format {
+	case SpeechOutputMP3:
+		valid = isMP3(data)
+	case SpeechOutputWAV:
+		valid = isWAV(data)
+	}
+	if !valid {
+		return nil, i18n.With("speech_synthesis_response_invalid", map[string]any{"format": strings.ToUpper(string(format))})
 	}
 	return data, nil
 }
@@ -158,4 +189,36 @@ func isMP3(data []byte) bool {
 	// MPEG Layer III frames can start without an ID3 tag.
 	return len(data) >= 4 && data[0] == 0xff && data[1]&0xe6 == 0xe2 &&
 		data[1]&0x18 != 0x08 && data[2]&0xf0 != 0xf0 && data[2]&0x0c != 0x0c
+}
+
+func isWAV(data []byte) bool {
+	if http.DetectContentType(data) != "audio/wave" {
+		return false
+	}
+	var hasFormat bool
+	for chunks := data[12:]; len(chunks) >= 8; {
+		size := uint64(binary.LittleEndian.Uint32(chunks[4:8]))
+		payload := chunks[8:]
+		if size > uint64(len(payload)) {
+			return false
+		}
+		switch string(chunks[:4]) {
+		case "fmt ":
+			if size < 16 || binary.LittleEndian.Uint16(payload[0:2]) == 0 ||
+				binary.LittleEndian.Uint16(payload[2:4]) == 0 || binary.LittleEndian.Uint32(payload[4:8]) == 0 ||
+				binary.LittleEndian.Uint16(payload[12:14]) == 0 {
+				return false
+			}
+			hasFormat = true
+		case "data":
+			return hasFormat && size > 0
+		}
+		// RIFF aligns the next chunk to an even byte offset.
+		next := size + size%2
+		if next > uint64(len(payload)) {
+			return false
+		}
+		chunks = payload[next:]
+	}
+	return false
 }

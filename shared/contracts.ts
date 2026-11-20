@@ -51,7 +51,14 @@ export type SpeechCapabilities = {
 
 export type SpeechSettings = {
   dictation: { enabled: boolean; provider_id: string; model: string };
-  read_aloud: { enabled: boolean; provider_id: string; model: string; voice: string };
+  read_aloud: {
+    enabled: boolean;
+    provider_id: string;
+    model: string;
+    voice: string;
+    output_format: import("./speech").SpeechOutputFormat;
+    max_text_characters: number;
+  };
 };
 
 export type ReasoningOption = {

@@ -17,6 +17,8 @@ import (
 	"ochi/server/internal/product"
 )
 
+const speechPCMFixture = "RIFF\x26\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x40\x1f\x00\x00\x80\x3e\x00\x00\x02\x00\x10\x00data\x02\x00\x00\x00\x00\x00"
+
 func TestSpeechProviderAudioProtocol(t *testing.T) {
 	const model = "relay/voice/vendor-model"
 	const text = "A short voice sample."
@@ -61,13 +63,28 @@ func TestSpeechProviderAudioProtocol(t *testing.T) {
 			_, _ = io.WriteString(w, `{"text":"Transcribed text"}`)
 		case "/proxy/v1/audio/speech":
 			var fields map[string]string
-			if r.Header.Get("Content-Type") != "application/json" || r.Header.Get("Accept") != "audio/mpeg" ||
+			if r.Header.Get("Content-Type") != "application/json" ||
 				json.NewDecoder(r.Body).Decode(&fields) != nil || len(fields) != 4 ||
-				fields["model"] != model || fields["voice"] != voice || fields["input"] != text || fields["response_format"] != "mp3" {
+				fields["model"] != model || fields["voice"] != voice || fields["input"] != text {
 				t.Error("synthesis did not send the expected Audio API request")
 			}
-			w.Header().Set("Content-Type", "audio/mp3")
-			_, _ = w.Write(mp3)
+			switch fields["response_format"] {
+			case "mp3":
+				if r.Header.Get("Accept") != "audio/mpeg" {
+					t.Error("MP3 request did not advertise its format")
+				}
+				w.Header().Set("Content-Type", "audio/mp3")
+				_, _ = w.Write(mp3)
+			case "wav":
+				if r.Header.Get("Accept") != "audio/wav" {
+					t.Error("WAV request did not advertise its format")
+				}
+				w.Header().Set("Content-Type", "audio/x-wav")
+				_, _ = io.WriteString(w, speechPCMFixture)
+			default:
+				t.Error("synthesis sent an unexpected response_format")
+				w.WriteHeader(http.StatusBadRequest)
+			}
 		default:
 			t.Errorf("unexpected audio route %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -92,10 +109,16 @@ func TestSpeechProviderAudioProtocol(t *testing.T) {
 			t.Fatalf("transcription was %q, %v", result, err)
 		}
 	}
-	if result, err := SynthesizeSpeech(context.Background(), config, voice, text); err != nil || !bytes.Equal(result, mp3) {
+	if result, err := SynthesizeSpeech(context.Background(), config, voice, text, SpeechOutputMP3); err != nil || !bytes.Equal(result, mp3) {
 		t.Fatalf("synthesis did not return the audio bytes: %v", err)
 	}
-	if got := calls.Load(); got != int32(len(recordings)+1) {
+	if result, err := SynthesizeSpeech(context.Background(), config, voice, text, SpeechOutputWAV); err != nil || string(result) != speechPCMFixture {
+		t.Fatalf("synthesis did not return the WAV bytes: %v", err)
+	}
+	if _, err := SynthesizeSpeech(context.Background(), config, voice, text, "flac"); err == nil {
+		t.Fatal("synthesis accepted an unsupported format")
+	}
+	if got := calls.Load(); got != int32(len(recordings)+2) {
 		t.Fatalf("provider calls = %d", got)
 	}
 }
@@ -111,7 +134,7 @@ func TestSpeechProviderDoesNotReplayOrFollowRedirects(t *testing.T) {
 		http.Redirect(w, r, target.URL, http.StatusTemporaryRedirect)
 	}))
 	t.Cleanup(server.Close)
-	_, err := SynthesizeSpeech(context.Background(), Config{BaseURL: server.URL, Model: "fixture"}, "voice", "hello")
+	_, err := SynthesizeSpeech(context.Background(), Config{BaseURL: server.URL, Model: "fixture"}, "voice", "hello", SpeechOutputMP3)
 	code, params, _ := i18n.Details(err)
 	if code != "speech_provider_http_error" || params["status"] != http.StatusTemporaryRedirect ||
 		calls.Load() != 1 || redirected.Load() != 0 {
@@ -121,15 +144,19 @@ func TestSpeechProviderDoesNotReplayOrFollowRedirects(t *testing.T) {
 
 func TestSpeechRejectsInvalidAndOversizeResponses(t *testing.T) {
 	tests := []struct {
-		name          string
-		body          string
-		transcription bool
-		want          string
+		name   string
+		body   string
+		format SpeechOutputFormat
+		want   string
 	}{
-		{"missing transcript", `{"error":{"message":"invalid"}}`, true, "speech_transcription_response_invalid"},
-		{"oversize transcript", `{"text":"` + strings.Repeat("x", maxTranscriptionResponseBytes) + `"}`, true, "speech_provider_response_too_large"},
-		{"JSON masquerading as audio", `{"audio_data":"fixture"}`, false, "speech_synthesis_response_invalid"},
-		{"wrong codec", "RIFF\x00\x00\x00\x00WAVE", false, "speech_synthesis_response_invalid"},
+		{"missing transcript", `{"error":{"message":"invalid"}}`, "", "speech_transcription_response_invalid"},
+		{"oversize transcript", `{"text":"` + strings.Repeat("x", maxTranscriptionResponseBytes) + `"}`, "", "speech_provider_response_too_large"},
+		{"JSON masquerading as audio", `{"audio_data":"fixture"}`, SpeechOutputMP3, "speech_synthesis_response_invalid"},
+		{"received WAV instead of MP3", speechPCMFixture, SpeechOutputMP3, "speech_synthesis_response_invalid"},
+		{"received MP3 instead of WAV", "\xff\xfb\x90\x64\x00\x00\x00", SpeechOutputWAV, "speech_synthesis_response_invalid"},
+		{"received only a WAV signature", "RIFF\x00\x00\x00\x00WAVE", SpeechOutputWAV, "speech_synthesis_response_invalid"},
+		{"WAV without format or samples", "RIFF\x28\x00\x00\x00WAVEJUNK\x1c\x00\x00\x00" + strings.Repeat("\x00", 28), SpeechOutputWAV, "speech_synthesis_response_invalid"},
+		{"truncated WAV samples", speechPCMFixture[:len(speechPCMFixture)-1], SpeechOutputWAV, "speech_synthesis_response_invalid"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -140,13 +167,14 @@ func TestSpeechRejectsInvalidAndOversizeResponses(t *testing.T) {
 			t.Cleanup(server.Close)
 			config := Config{BaseURL: server.URL, Model: "fixture"}
 			var err error
-			if test.transcription {
+			if test.format == "" {
 				_, err = TranscribeSpeech(context.Background(), config, []byte("RIFF\x00\x00\x00\x00WAVE"))
 			} else {
-				_, err = SynthesizeSpeech(context.Background(), config, "voice", "hello")
+				_, err = SynthesizeSpeech(context.Background(), config, "voice", "hello", test.format)
 			}
-			if code, _, _ := i18n.Details(err); code != test.want {
-				t.Fatalf("error = %v, want %s", err, test.want)
+			code, params, _ := i18n.Details(err)
+			if code != test.want || code == "speech_synthesis_response_invalid" && params["format"] != strings.ToUpper(string(test.format)) {
+				t.Fatalf("error = %v, want %s for %s", err, test.want, test.format)
 			}
 		})
 	}
@@ -169,7 +197,7 @@ func TestSpeechProviderRespectsRequestCancellation(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, err := SynthesizeSpeech(ctx, Config{BaseURL: server.URL, Model: "fixture"}, "voice", "hello")
+		_, err := SynthesizeSpeech(ctx, Config{BaseURL: server.URL, Model: "fixture"}, "voice", "hello", SpeechOutputWAV)
 		done <- err
 	}()
 	select {

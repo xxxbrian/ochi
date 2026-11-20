@@ -22,7 +22,6 @@ import (
 const (
 	maxSpeechRecordingSeconds = 90
 	maxSpeechUploadBytes      = 10 << 20
-	maxSpeechTextCharacters   = 2000
 	maxSpeechConfigFieldBytes = 512
 )
 
@@ -67,7 +66,11 @@ func (s *Server) speechCapabilities(w http.ResponseWriter, r *http.Request) {
 		MaxRecordingSeconds int  `json:"max_recording_seconds"`
 		MaxUploadBytes      int  `json:"max_upload_bytes"`
 		MaxTextCharacters   int  `json:"max_text_characters"`
-	}{MaxRecordingSeconds: maxSpeechRecordingSeconds, MaxUploadBytes: maxSpeechUploadBytes, MaxTextCharacters: maxSpeechTextCharacters}
+	}{
+		MaxRecordingSeconds: maxSpeechRecordingSeconds,
+		MaxUploadBytes:      maxSpeechUploadBytes,
+		MaxTextCharacters:   settings.ReadAloud.MaxTextCharacters,
+	}
 	for _, item := range []struct {
 		slot      storage.SpeechSlot
 		available *bool
@@ -100,10 +103,16 @@ func normalizeSpeechModel(model *storage.SpeechModel, required bool) error {
 	return nil
 }
 
-func normalizeSpeechVoice(voice *string, required bool) error {
-	*voice = strings.TrimSpace(*voice)
-	if (required && *voice == "") || len(*voice) > maxSpeechConfigFieldBytes || strings.ContainsFunc(*voice, unicode.IsControl) {
+func normalizeSpeechSynthesis(options *storage.SpeechSynthesisOptions, voiceRequired bool) error {
+	options.Voice = strings.TrimSpace(options.Voice)
+	if (voiceRequired && options.Voice == "") || len(options.Voice) > maxSpeechConfigFieldBytes || strings.ContainsFunc(options.Voice, unicode.IsControl) {
 		return i18n.New("speech_voice_required")
+	}
+	if options.OutputFormat.MediaType() == "" {
+		return i18n.New("speech_synthesis_format_invalid")
+	}
+	if options.MaxTextCharacters < 1 || options.MaxTextCharacters > storage.MaxSpeechTextCharacters {
+		return i18n.With("speech_synthesis_limit_invalid", map[string]any{"max": storage.MaxSpeechTextCharacters})
 	}
 	return nil
 }
@@ -131,7 +140,7 @@ func (s *Server) adminSpeech(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	settings := storage.SpeechSettings{Dictation: *input.Dictation, ReadAloud: *input.ReadAloud}
-	if err := normalizeSpeechVoice(&settings.ReadAloud.Voice, settings.ReadAloud.Enabled); err != nil {
+	if err := normalizeSpeechSynthesis(&settings.ReadAloud.SpeechSynthesisOptions, settings.ReadAloud.Enabled); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -306,15 +315,15 @@ func (s *Server) synthesizeSpeech(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if config, ok := s.speechConfig(w, r, settings.ReadAloud.SpeechModel, false); ok {
-		writeSpeechAudio(w, r, config, settings.ReadAloud.Voice, input.Text)
+		writeSpeechAudio(w, r, config, settings.ReadAloud.SpeechSynthesisOptions, input.Text)
 	}
 }
 
 func (s *Server) testSpeechSynthesis(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		storage.SpeechModel
-		Voice string `json:"voice"`
-		Text  string `json:"text"`
+		storage.SpeechSynthesisOptions
+		Text string `json:"text"`
 	}
 	if !decodeRequest(w, r, &input) {
 		return
@@ -323,28 +332,28 @@ func (s *Server) testSpeechSynthesis(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := normalizeSpeechVoice(&input.Voice, true); err != nil {
+	if err := normalizeSpeechSynthesis(&input.SpeechSynthesisOptions, true); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	if config, ok := s.speechConfig(w, r, input.SpeechModel, true); ok {
-		writeSpeechAudio(w, r, config, input.Voice, input.Text)
+		writeSpeechAudio(w, r, config, input.SpeechSynthesisOptions, input.Text)
 	}
 }
 
-func writeSpeechAudio(w http.ResponseWriter, r *http.Request, config agent.Config, voice, text string) {
+func writeSpeechAudio(w http.ResponseWriter, r *http.Request, config agent.Config, options storage.SpeechSynthesisOptions, text string) {
 	text = strings.TrimSpace(text)
-	if text == "" || utf8.RuneCountInString(text) > maxSpeechTextCharacters {
-		writeError(w, http.StatusBadRequest, i18n.With("speech_text_invalid", map[string]any{"max": maxSpeechTextCharacters}))
+	if text == "" || utf8.RuneCountInString(text) > options.MaxTextCharacters {
+		writeError(w, http.StatusBadRequest, i18n.With("speech_text_invalid", map[string]any{"max": options.MaxTextCharacters}))
 		return
 	}
-	audio, err := agent.SynthesizeSpeech(r.Context(), config, voice, text)
+	audio, err := agent.SynthesizeSpeech(r.Context(), config, options.Voice, text, options.OutputFormat)
 	if err != nil {
 		writeSpeechProviderError(w, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "audio/mpeg")
+	w.Header().Set("Content-Type", options.OutputFormat.MediaType())
 	w.Header().Set("Content-Length", strconv.Itoa(len(audio)))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = w.Write(audio)

@@ -14,6 +14,7 @@ const oldReply = reply("old", "Old reply.");
 const newReply = reply("new", "A new response.\n\n```js\nprivate();\n```\nAnother readable paragraph.");
 const chat = { account: "server/account", conversation: "session", input: "draft", focused: true, messages: [oldReply, newReply] };
 const capabilities = { dictation: true, read_aloud: true, max_recording_seconds: 90, max_upload_bytes: 1024, max_text_characters: 30 };
+const clip = (byte, extension = "mp3") => ({ bytes: new Uint8Array([byte]), extension });
 
 function harness(overrides = {}) {
   const listeners = new Set();
@@ -63,8 +64,8 @@ function harness(overrides = {}) {
         onRecording(() => recording.resolve(file));
         return recording.promise;
       },
-      playSpeech(bytes, signal, onPlaying) {
-        const playback = { bytes, signal, ...deferred() };
+      playSpeech(audio, signal, onPlaying) {
+        const playback = { audio, signal, ...deferred() };
         player.push(playback);
         signal.addEventListener("abort", () => playback.reject(signal.reason), { once: true });
         onPlaying();
@@ -173,16 +174,18 @@ test("read-aloud queues only prose, stops a stale reply and relinquishes playbac
     await act(async () => f.current.readAloud.toggle(oldReply.id, oldReply.content));
     await act(async () => f.current.readAloud.toggle(newReply.id, newReply.content));
     assert.equal(f.synthesis[0].signal.aborted, true);
+    const audio = clip(2, "wav");
     await act(async () => {
-      f.synthesis[0].resolve(new Uint8Array([1]));
-      f.synthesis[1].resolve(new Uint8Array([2]));
+      f.synthesis[0].resolve(clip(1));
+      f.synthesis[1].resolve(audio);
     });
     assert.equal(f.player.length, 1);
+    assert.equal(f.player[0].audio, audio);
     assert.equal(f.current.readAloud.status.phase, "playing");
     assert.equal(f.synthesis[1].text, "A new response.");
     await act(async () => f.player[0].resolve());
     assert.equal(f.synthesis[2].text, "Another readable paragraph.");
-    await act(async () => f.synthesis[2].resolve(new Uint8Array([3])));
+    await act(async () => f.synthesis[2].resolve(clip(3)));
     assert.equal(f.player.length, 2);
     await act(async () => tree.root.findByType("TextInput").props.start());
     assert.equal(f.player[1].signal.aborted, true);
@@ -204,7 +207,7 @@ test("read-aloud follows the current reply through persistence but stops after r
   const tree = await mount(f, { ...chat, messages: [], run: pending });
   try {
     await act(async () => f.current.readAloud.toggle("assistant-run", "Initial answer."));
-    await act(async () => f.synthesis[0].resolve(new Uint8Array([1])));
+    await act(async () => f.synthesis[0].resolve(clip(1)));
     const persisted = { ...reply("saved-answer", "Initial answer."), run_id: "run" };
     await act(async () => tree.update(h(f.Screen, { ...chat, messages: [persisted] })));
     assert.equal(f.player[0].signal.aborted, false);
@@ -218,9 +221,122 @@ test("read-aloud follows the current reply through persistence but stops after r
     assert.equal(f.synthesis.length, 2);
     await act(async () => tree.update(h(f.Screen, { ...chat, messages: [] })));
     assert.equal(f.synthesis[1].signal.aborted, true);
-    await act(async () => f.synthesis[1].resolve(new Uint8Array([2])));
+    await act(async () => f.synthesis[1].resolve(clip(2)));
     assert.equal(f.player.length, 1);
   } finally {
     await act(async () => tree.unmount());
   }
+});
+
+test("read-aloud can cancel a capability refresh and splits to the latest configured limit", async () => {
+  const answer = reply("answer", "Alpha beta gamma.");
+  const pending = [];
+  let initial = true;
+  const f = harness({ api: {
+    speechCapabilities(signal) {
+      if (initial) { initial = false; return Promise.resolve(capabilities); }
+      const request = { signal, ...deferred() };
+      pending.push(request);
+      return request.promise;
+    },
+  } });
+  const tree = await mount(f, { ...chat, messages: [answer] });
+  try {
+    const toggle = () => f.current.readAloud.toggle(answer.id, answer.content);
+    await act(async () => toggle());
+    assert.equal(f.current.readAloud.status.phase, "loading");
+    assert.equal(f.synthesis.length, 0);
+    await act(async () => toggle());
+    assert.equal(pending[0].signal.aborted, true);
+    await act(async () => pending[0].resolve(capabilities));
+    assert.equal(f.current.readAloud.status, null);
+    assert.equal(f.synthesis.length, 0);
+
+    await act(async () => toggle());
+    await act(async () => pending[1].resolve({ ...capabilities, read_aloud: false }));
+    assert.equal(f.current.readAloud.status.phase, "failed");
+    assert.equal(f.synthesis.length, 0);
+
+    await act(async () => toggle());
+    await act(async () => pending[2].resolve({ ...capabilities, max_text_characters: 6 }));
+    assert.equal(f.synthesis[0].text, "Alpha");
+    await act(async () => f.synthesis[0].resolve(clip(1, "wav")));
+    await act(async () => f.player[0].resolve());
+    assert.equal(f.synthesis[1].text, "beta");
+  } finally {
+    await act(async () => tree.unmount());
+  }
+});
+
+test("native synthesis negotiates both formats and plays cached files with the matching extension", async () => {
+  const requests = [];
+  const files = [];
+  const played = [];
+  const bytes = new Uint8Array([1, 2, 3]);
+  let contentType;
+  let bufferReads = 0;
+  const load = createLoader(require("typescript"), require, {
+    "expo/fetch": { async fetch(url, init) {
+      requests.push({ url, ...init });
+      return {
+        ok: true,
+        headers: new Headers(contentType ? { "Content-Type": contentType } : {}),
+        async arrayBuffer() { bufferReads++; return bytes.buffer; },
+      };
+    } },
+    "expo-secure-store": {},
+    "expo-file-system": { Paths: { cache: "file:///cache" }, File: class {
+      constructor(cache, name) { this.uri = `${cache}/${name}`; files.push(this); }
+      create() { this.exists = true; }
+      write(value) { this.bytes = value; }
+      delete() { this.exists = false; }
+    } },
+    "expo-audio": {
+      RecordingPresets: { HIGH_QUALITY: {} },
+      async setAudioModeAsync() {},
+      async setIsAudioActiveAsync() {},
+      createAudioPlayer(uri) {
+        let status;
+        return {
+          addListener(_name, listener) { status = listener; return { remove() {} }; },
+          play() { played.push(uri); status({ playing: true, currentTime: 0 }); status({ didJustFinish: true }); },
+          pause() {},
+          release() {},
+        };
+      },
+    },
+    "react-native": { Platform: { OS: "android" } },
+    [path.join(root, "mobile/src/lib/errors.ts")]: { localizedError: (key) => new Error(key) },
+    [path.join(root, "mobile/src/lib/i18n.ts")]: { getLocale: () => "en" },
+  });
+  const { api } = load(path.join(root, "mobile/src/lib/api.ts"));
+  const { playSpeech } = load(path.join(root, "mobile/src/lib/speechAudio.ts"));
+  const { signal } = new AbortController();
+
+  for (const [mime, extension] of [["audio/mpeg", "mp3"], ["Audio/WAV; sample-rate=24000", "wav"]]) {
+    contentType = mime;
+    const audio = await api.synthesizeSpeech("Read this.", signal);
+    assert.deepEqual(audio, { bytes, extension });
+    let started = false;
+    await playSpeech(audio, signal, () => { started = true; });
+    const file = files.at(-1);
+    assert.match(file.uri, new RegExp(`^file:///cache/ochi-speech-\\d+-\\d+\\.${extension}$`));
+    assert.deepEqual(file.bytes, bytes);
+    assert.equal(file.exists, false);
+    assert.equal(played.at(-1), file.uri);
+    assert.equal(started, true);
+    const request = requests.at(-1);
+    assert.match(request.url, /\/api\/speech\/synthesis$/);
+    assert.equal(request.headers.Accept, "audio/mpeg, audio/wav");
+    assert.equal(request.redirect, "error");
+    assert.equal(request.signal, signal);
+    assert.deepEqual(JSON.parse(request.body), { text: "Read this." });
+  }
+
+  for (const mime of ["audio/ogg", "application/octet-stream", undefined]) {
+    contentType = mime;
+    await assert.rejects(api.synthesizeSpeech("Read this.", signal), { message: "speech.playbackFailed" });
+  }
+  assert.equal(bufferReads, 2);
+  assert.equal(files.length, 2);
 });

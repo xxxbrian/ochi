@@ -1,6 +1,7 @@
 import { localizedError } from "./errors";
 import { t, getLocale } from "./i18n";
 import { translateError } from '../../../shared/i18n/errors';
+import { speechOutputMediaTypes } from '../../../shared/speech';
 import { fetch } from 'expo/fetch';
 import { File } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
@@ -9,12 +10,14 @@ import type {
   ApiError, Artifact, Memory, Message, Model, NativeUpload,
   PendingRun, Project, ProjectDetail, RunOptions, RunStatus, Schedule, ScheduleExecution,
   Plugin, Session, SessionHead, SessionPage, SessionPatch, Snapshot, User, UserPreferences,
-  RunInstruction, SpeechCapabilities,
+  RunInstruction, SpeechCapabilities, SynthesizedSpeech,
 } from './types';
 
 const AUTH_KEY = 'ochi.auth.v1';
 const SERVER_KEY = 'ochi.server.v1';
 const storageOptions = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY };
+const speechOutputFormats = ['mp3', 'wav'] as const;
+const speechOutputAccept = speechOutputFormats.map((format) => speechOutputMediaTypes[format]).join(', ');
 export const DEFAULT_API_BASE_URL = 'https://ochi.bojin.co';
 let serverURL = initialServerURL(process.env.EXPO_PUBLIC_API_URL?.trim() || DEFAULT_API_BASE_URL);
 let accessToken: string | null = null;
@@ -164,12 +167,14 @@ export const api = {
     body.append('file', file);
     return request<{ text: string }>('/api/speech/transcriptions', { method: 'POST', body, signal, redirect: 'error' });
   },
-  synthesizeSpeech: async (text: string, signal: AbortSignal) => {
+  synthesizeSpeech: async (text: string, signal: AbortSignal): Promise<SynthesizedSpeech> => {
     const response = await requestResponse('/api/speech/synthesis', {
-      ...json('POST', { text }), signal, redirect: 'error', headers: { Accept: 'audio/mpeg' },
+      ...json('POST', { text }), signal, redirect: 'error', headers: { Accept: speechOutputAccept },
     });
-    if (response.headers.get('content-type')?.split(';')[0]?.trim() !== 'audio/mpeg') throw localizedError('speech.playbackFailed');
-    return new Uint8Array(await response.arrayBuffer());
+    const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+    const extension = speechOutputFormats.find((format) => speechOutputMediaTypes[format] === contentType);
+    if (!extension) throw localizedError('speech.playbackFailed');
+    return { bytes: new Uint8Array(await response.arrayBuffer()), extension };
   },
   sessionsPage: (options: { q?: string; cursor?: string; project_id?: string; limit?: number } = {}, signal?: AbortSignal) => {
     const params = new URLSearchParams();

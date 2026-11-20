@@ -1,3 +1,12 @@
+export const speechOutputMediaTypes = {
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+} as const;
+
+export type SpeechOutputFormat = keyof typeof speechOutputMediaTypes;
+
+export const maxSpeechTextCharacters = 2000;
+
 export function appendDictation(draft: string, text: string): string {
   const transcript = text.trim();
   if (!transcript) return draft;

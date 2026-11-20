@@ -162,7 +162,7 @@ export default function App() {
   const [dictating, setDictating] = useState(false);
   const playback = useSpeechPlayback(
     speechScope,
-    route.kind === "chat" && speech?.read_aloud ? speech.max_text_characters : 0,
+    route.kind === "chat" && speech?.read_aloud === true,
     setError,
   );
   const stopPlayback = playback.stop;

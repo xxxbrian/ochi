@@ -2,6 +2,7 @@ import { AudioModule, createAudioPlayer, RecordingPresets, setAudioModeAsync, se
 import { File, Paths } from "expo-file-system";
 import { Platform } from "react-native";
 import { localizedError } from "./errors";
+import type { SynthesizedSpeech } from "./types";
 
 const preset = RecordingPresets.HIGH_QUALITY;
 const recordingOptions = {
@@ -109,10 +110,10 @@ export function requestMicrophonePermission() {
   return AudioModule.requestRecordingPermissionsAsync();
 }
 
-export async function playSpeech(bytes: Uint8Array, signal: AbortSignal, onPlaying: () => void) {
+export async function playSpeech({ bytes, extension }: SynthesizedSpeech, signal: AbortSignal, onPlaying: () => void) {
   checkSignal(signal);
   if (!bytes.byteLength) throw localizedError("speech.playbackFailed");
-  const file = new File(Paths.cache, `ochi-speech-${Date.now()}-${++fileSequence}.mp3`);
+  const file = new File(Paths.cache, `ochi-speech-${Date.now()}-${++fileSequence}.${extension}`);
   try {
     file.create();
     file.write(bytes);

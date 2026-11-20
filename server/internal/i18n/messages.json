@@ -699,6 +699,16 @@
     "zh-CN": "请输入有效的音色 ID。",
     "zh-TW": "請輸入有效的音色 ID。"
   },
+  "speech_synthesis_format_invalid": {
+    "en": "Choose MP3 or WAV for read-aloud output.",
+    "zh-CN": "请选择 MP3 或 WAV 作为朗读输出格式。",
+    "zh-TW": "請選擇 MP3 或 WAV 作為朗讀輸出格式。"
+  },
+  "speech_synthesis_limit_invalid": {
+    "en": "Set the characters per request to a whole number between 1 and {max}.",
+    "zh-CN": "请将每次请求的字符数设为 1 到 {max} 之间的整数。",
+    "zh-TW": "請將每次請求的字元數設為 1 到 {max} 之間的整數。"
+  },
   "speech_provider_unavailable": {
     "en": "Choose an enabled provider with a configured connection.",
     "zh-CN": "请选择已启用且连接配置完整的服务商。",
@@ -760,9 +770,9 @@
     "zh-TW": "語音服務未傳回有效的轉寫結果。"
   },
   "speech_synthesis_response_invalid": {
-    "en": "The speech provider did not return MP3 audio.",
-    "zh-CN": "语音服务未返回 MP3 音频。",
-    "zh-TW": "語音服務未傳回 MP3 音訊。"
+    "en": "The speech provider did not return valid {format} audio.",
+    "zh-CN": "语音服务未返回有效的 {format} 音频。",
+    "zh-TW": "語音服務未傳回有效的 {format} 音訊。"
   },
   "image_model_unconfigured": {
     "en": "No available image generation model is configured.",

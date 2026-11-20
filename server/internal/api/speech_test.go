@@ -12,7 +12,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"unicode/utf8"
 
+	"ochi/server/internal/agent"
 	"ochi/server/internal/filelimits"
 	"ochi/server/internal/storage"
 )
@@ -131,8 +133,9 @@ func TestSpeechHTTPSettingsAndDispatch(t *testing.T) {
 	if preview.Body.String() != "{\"text\":\"fixture transcript\"}\n" {
 		t.Fatal("admin transcription did not return text")
 	}
-	payload, _ := json.Marshal(map[string]string{
-		"provider_id": tts.ProviderID, "model": tts.Model, "voice": "voice-one", "text": "admin tests unsaved settings",
+	payload, _ := json.Marshal(map[string]any{
+		"provider_id": tts.ProviderID, "model": tts.Model, "voice": "voice-one",
+		"output_format": "mp3", "max_text_characters": storage.MaxSpeechTextCharacters, "text": "admin tests unsaved settings",
 	})
 	audio := f.request(t, f.foreign, http.MethodPost, testSynthesis, string(payload), http.StatusOK)
 	if !bytes.Equal(fixtureAudio, audio) {
@@ -144,7 +147,12 @@ func TestSpeechHTTPSettingsAndDispatch(t *testing.T) {
 
 	settings := storage.SpeechSettings{
 		Dictation: storage.SpeechSlot{SpeechModel: stt, Enabled: true},
-		ReadAloud: storage.ReadAloudSettings{SpeechSlot: storage.SpeechSlot{SpeechModel: tts}, Voice: " voice-one "},
+		ReadAloud: storage.ReadAloudSettings{
+			SpeechSlot: storage.SpeechSlot{SpeechModel: tts},
+			SpeechSynthesisOptions: storage.SpeechSynthesisOptions{
+				Voice: " voice-one ", OutputFormat: agent.SpeechOutputMP3, MaxTextCharacters: storage.MaxSpeechTextCharacters,
+			},
+		},
 	}
 	data, _ := json.Marshal(settings)
 	f.request(t, f.foreign, http.MethodPut, adminSettings, string(data), http.StatusOK)
@@ -201,6 +209,105 @@ func TestSpeechHTTPSettingsAndDispatch(t *testing.T) {
 	settings.Dictation.Enabled, settings.ReadAloud.Enabled = false, false
 	data, _ = json.Marshal(settings)
 	f.request(t, f.foreign, http.MethodPut, adminSettings, string(data), http.StatusOK)
+}
+
+func TestSpeechReadAloudWAVSettings(t *testing.T) {
+	f := newCoreHTTPFixture(t)
+	const (
+		adminSettings = "/api/admin/speech"
+		capabilities  = "/api/speech/capabilities"
+		synthesis     = "/api/speech/synthesis"
+		testSynthesis = "/api/admin/speech/test-synthesis"
+		model         = "relay/vendor/wav-synthesis"
+	)
+	var syntheses atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		syntheses.Add(1)
+		var body map[string]string
+		if r.URL.Path != "/v1/audio/speech" || r.Header.Get("Accept") != "audio/wav" ||
+			json.NewDecoder(r.Body).Decode(&body) != nil || body["response_format"] != "wav" ||
+			body["model"] != model || body["voice"] != "speaker" || utf8.RuneCountInString(body["input"]) != 200 {
+			t.Error("unexpected WAV synthesis request")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = io.WriteString(w, speechFixtureWAV)
+	}))
+	t.Cleanup(upstream.Close)
+	provider, err := f.server.store.SaveProvider(context.Background(), storage.Provider{
+		Name: "WAV fixture", Protocol: "openai-responses", BaseURL: upstream.URL + "/v1", Enabled: true, AllowNoKey: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := f.request(t, f.foreign, http.MethodGet, adminSettings, "", http.StatusOK)
+	options := map[string]any{
+		"provider_id": provider.ID, "model": model, "voice": "speaker", "output_format": "wav", "max_text_characters": 200,
+	}
+	sample := strings.Repeat("\u6f22", 200)
+	preview := func(text string, want int) []byte {
+		t.Helper()
+		options["text"] = text
+		data, _ := json.Marshal(options)
+		delete(options, "text")
+		return f.request(t, f.foreign, http.MethodPost, testSynthesis, string(data), want)
+	}
+	save := func(want int) []byte {
+		t.Helper()
+		options["enabled"] = true
+		data, _ := json.Marshal(map[string]any{"dictation": storage.SpeechSlot{}, "read_aloud": options})
+		delete(options, "enabled")
+		return f.request(t, f.foreign, http.MethodPut, adminSettings, string(data), want)
+	}
+	for _, invalid := range []struct {
+		field string
+		value any
+		code  string
+	}{
+		{"output_format", "", "speech_synthesis_format_invalid"},
+		{"output_format", "flac", "speech_synthesis_format_invalid"},
+		{"max_text_characters", 0, "speech_synthesis_limit_invalid"},
+		{"max_text_characters", storage.MaxSpeechTextCharacters + 1, "speech_synthesis_limit_invalid"},
+		{"max_text_characters", 2.5, "invalid_json"},
+	} {
+		value := options[invalid.field]
+		options[invalid.field] = invalid.value
+		for _, data := range [][]byte{save(http.StatusBadRequest), preview(sample, http.StatusBadRequest)} {
+			if !bytes.Contains(data, []byte(`"code":"`+invalid.code+`"`)) {
+				t.Fatalf("unexpected validation error for %s: %s", invalid.field, data)
+			}
+		}
+		options[invalid.field] = value
+	}
+	if data := preview(sample+"\u6f22", http.StatusBadRequest); !bytes.Contains(data, []byte(`"max":200`)) {
+		t.Fatal("preview did not use the unsaved text limit")
+	}
+	if audio := preview(sample, http.StatusOK); string(audio) != speechFixtureWAV {
+		t.Fatal("preview did not use the unsaved WAV format")
+	}
+	if current := f.request(t, f.foreign, http.MethodGet, adminSettings, "", http.StatusOK); !bytes.Equal(current, original) {
+		t.Fatal("preview changed saved settings")
+	}
+	saved := save(http.StatusOK)
+	if current := f.request(t, f.foreign, http.MethodGet, adminSettings, "", http.StatusOK); !bytes.Equal(current, saved) ||
+		!bytes.Contains(current, []byte(`"output_format":"wav","max_text_characters":200`)) {
+		t.Fatal("saved synthesis options did not round-trip")
+	}
+	data := f.request(t, f.token, http.MethodGet, capabilities, "", http.StatusOK)
+	if !bytes.Contains(data, []byte(`"read_aloud":true`)) || !bytes.Contains(data, []byte(`"max_text_characters":200`)) {
+		t.Fatal("public capabilities omitted the saved read-aloud limit")
+	}
+	f.request(t, f.token, http.MethodPost, synthesis, `{"text":"hello","output_format":"mp3"}`, http.StatusBadRequest)
+	f.request(t, f.token, http.MethodPost, synthesis, fmt.Sprintf(`{"text":%q}`, sample+"\u6f22"), http.StatusBadRequest)
+	req := httptest.NewRequest(http.MethodPost, synthesis, strings.NewReader(fmt.Sprintf(`{"text":%q}`, sample)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+f.token)
+	res := serveSpeechFixture(t, f.server.Handler(), req, http.StatusOK)
+	if res.Header().Get("Content-Type") != "audio/wav" || res.Header().Get("Cache-Control") != "no-store" ||
+		res.Body.String() != speechFixtureWAV || syntheses.Load() != 2 {
+		t.Fatal("synthesis did not serve private WAV or forwarded invalid requests")
+	}
 }
 
 func TestSpeechRecordingUploadLimits(t *testing.T) {

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Check, Mic, Volume2 } from "lucide-react";
+import { maxSpeechTextCharacters, speechOutputMediaTypes, type SpeechOutputFormat } from "../../../../shared/speech";
 import { adminApi } from "../../lib/api";
 import type { Provider, SpeechSettings } from "../../lib/types";
 import { SelectField } from "../../components/ui/Select";
@@ -10,7 +11,8 @@ import { t, useAdminI18n } from "./i18n";
 type Operation = "save" | "dictation" | "read_aloud";
 type ReportedError = { operation: Operation | "load"; message: string };
 type DictationSettings = SpeechSettings["dictation"];
-type ReadAloudSettings = SpeechSettings["read_aloud"];
+
+const outputFormats = Object.keys(speechOutputMediaTypes).map((value) => ({ value, label: value.toUpperCase() }));
 
 function usable(settings: DictationSettings, providers: Provider[]) {
   return Boolean(settings.model.trim() && providers.some(({ id, enabled }) => id === settings.provider_id && enabled));
@@ -117,8 +119,13 @@ export default function SpeechPage() {
   }
 
   const dictationReady = Boolean(settings && usable(settings.dictation, providers));
-  const readAloudReady = Boolean(settings && usable(settings.read_aloud, providers) && settings.read_aloud.voice.trim());
-  const valid = settings && (!settings.dictation.enabled || dictationReady) && (!settings.read_aloud.enabled || readAloudReady);
+  const textLimit = settings?.read_aloud.max_text_characters ?? 0;
+  const limitValid = Number.isInteger(textLimit) && textLimit >= 1 && textLimit <= maxSpeechTextCharacters;
+  const readAloudReady = Boolean(settings && usable(settings.read_aloud, providers) && settings.read_aloud.voice.trim() && limitValid);
+  const sampleText = text.trim();
+  const sampleTooLong = limitValid && Array.from(sampleText).length > textLimit;
+  const sampleReady = Boolean(sampleText) && !sampleTooLong;
+  const valid = settings && limitValid && (!settings.dictation.enabled || dictationReady) && (!settings.read_aloud.enabled || readAloudReady);
   const dirty = JSON.stringify(settings) !== JSON.stringify(saved);
   function save() {
     if (!settings || !valid || !dirty) return;
@@ -139,10 +146,10 @@ export default function SpeechPage() {
     });
   }
   function testReadAloud() {
-    if (!settings || !readAloudReady || !text.trim()) return;
+    if (!settings || !readAloudReady || !sampleReady) return;
     void run("read_aloud", async (signal) => {
       setAudio(null);
-      const result = await adminApi.testSynthesis(settings.read_aloud, text.trim(), signal);
+      const result = await adminApi.testSynthesis(settings.read_aloud, sampleText, signal);
       if (!signal.aborted) setAudio(result);
     });
   }
@@ -188,24 +195,37 @@ export default function SpeechPage() {
                 onChange={(enabled) => update("read_aloud", { enabled })} disabled={busy !== null} />} />
             <fieldset className="ochi-admin-fieldset" disabled={busy !== null}>
               <SpeechFields value={settings.read_aloud} providers={providers} onChange={(patch) => update("read_aloud", patch)} busy={busy !== null} />
-              <Field title={t("speech.voice")} hint={t("speech.voiceHint")}>
-                <input className="input mono" value={settings.read_aloud.voice}
-                  onChange={(event) => update("read_aloud", { voice: event.target.value })} />
+              <div className="ochi-admin-grid2">
+                <Field title={t("speech.voice")} hint={t("speech.voiceHint")}>
+                  <input className="input mono" value={settings.read_aloud.voice}
+                    onChange={(event) => update("read_aloud", { voice: event.target.value })} />
+                </Field>
+                <Field title={t("speech.outputFormat")}>
+                  <SelectField value={settings.read_aloud.output_format} options={outputFormats} label={t("speech.outputFormat")} disabled={busy !== null}
+                    triggerClassName="ochi-admin-speech-select" onChange={(format) => update("read_aloud", { output_format: format as SpeechOutputFormat })} />
+                </Field>
+              </div>
+              <Field title={t("speech.maxTextCharacters")} hint={t("speech.maxTextCharactersHint", { max: maxSpeechTextCharacters })}>
+                <input className="input mono" type="number" min={1} max={maxSpeechTextCharacters} step={1} required
+                  value={textLimit || ""} onChange={(event) => update("read_aloud", { max_text_characters: Number(event.target.value) })} />
               </Field>
               <div className="ochi-admin-speech-test">
-                <Field title={t("speech.testText")}>
-                  <textarea className="textarea" rows={2} maxLength={500} value={text} onChange={(event) => {
+                <Field title={t("speech.testText")} hint={sampleTooLong ? t("speech.sampleTooLong", { max: textLimit }) : undefined}>
+                  <textarea className="textarea" rows={2} aria-invalid={sampleTooLong || undefined} value={text} onChange={(event) => {
                     setText(event.target.value); setAudio(null);
                     setError((current) => current?.operation === "read_aloud" ? null : current);
                   }} />
                 </Field>
                 <div>
                   <button type="button" className={`btn secondary${busy === "read_aloud" ? " btn-progress" : ""}`}
-                    disabled={!readAloudReady || !text.trim() || busy !== null} onClick={testReadAloud}>
+                    disabled={!readAloudReady || !sampleReady || busy !== null} onClick={testReadAloud}>
                     <Volume2 className="ic" />{busy === "read_aloud" ? t("testingEllipsis") : t("speech.testReadAloud")}
                   </button>
                 </div>
-                {audioURL && <audio controls src={audioURL} aria-label={t("speech.preview")} />}
+                {audioURL && <audio key={audioURL} controls src={audioURL} aria-label={t("speech.preview")} onError={() => {
+                  setAudio(null);
+                  setError({ operation: "read_aloud", message: t("speech.previewFailed") });
+                }} />}
                 <ErrorNotice error={error?.operation === "read_aloud" ? error.message : ""} />
               </div>
             </fieldset>

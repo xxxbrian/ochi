@@ -2944,10 +2944,30 @@
     "zh-CN": "填写此模型支持的音色。",
     "zh-TW": "輸入此模型支援的音色。"
   },
+  "speech.outputFormat": {
+    "en": "Output format",
+    "zh-CN": "输出格式",
+    "zh-TW": "輸出格式"
+  },
+  "speech.maxTextCharacters": {
+    "en": "Characters per request",
+    "zh-CN": "单次请求字符上限",
+    "zh-TW": "單次請求字元上限"
+  },
+  "speech.maxTextCharactersHint": {
+    "en": "Replies are split at this limit. Enter 1 to {max}.",
+    "zh-CN": "回复按此上限分段。可填 1 至 {max}。",
+    "zh-TW": "回覆依此上限分段。可填 1 至 {max}。"
+  },
   "speech.testText": {
     "en": "Sample text",
     "zh-CN": "试听文本",
     "zh-TW": "試聽文字"
+  },
+  "speech.sampleTooLong": {
+    "en": "Shorten the sample to {max} characters or fewer.",
+    "zh-CN": "请将试听文本缩短至 {max} 个字符以内。",
+    "zh-TW": "請將試聽文字縮短至 {max} 個字元以內。"
   },
   "speech.sampleText": {
     "en": "Hello! This is a short sample of Ochi’s read-aloud voice.",
@@ -2963,6 +2983,11 @@
     "en": "Read-aloud preview",
     "zh-CN": "朗读试听",
     "zh-TW": "朗讀試聽"
+  },
+  "speech.previewFailed": {
+    "en": "Could not play this preview.",
+    "zh-CN": "未能播放这段试听音频。",
+    "zh-TW": "無法播放這段試聽音訊。"
   },
   "speech.loadFailed": {
     "en": "Could not load speech settings",

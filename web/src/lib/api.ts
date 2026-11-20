@@ -1,6 +1,7 @@
 import { getLocale, t } from "./i18n";
 import { translateError } from "../../../shared/i18n/errors";
 import type { MessageParams } from "../../../shared/i18n";
+import { speechOutputMediaTypes } from "../../../shared/speech";
 import type {
   ApiError,
   AdminRunDetail,
@@ -133,7 +134,12 @@ export async function request<T>(
 }
 
 async function requestSpeech(path: string, value: object, signal?: AbortSignal): Promise<Blob> {
-  const response = await requestResponse(path, { method: "POST", body: JSON.stringify(value), signal }, { quiet: true });
+  const response = await requestResponse(path, {
+    method: "POST",
+    headers: { Accept: Object.values(speechOutputMediaTypes).join(", ") },
+    body: JSON.stringify(value),
+    signal,
+  }, { quiet: true });
   return response.blob();
 }
 
@@ -384,8 +390,8 @@ export const adminApi = {
     request<SpeechSettings>("/api/admin/speech", { method: "PUT", body: JSON.stringify(settings), signal }, { quiet: true }),
   testTranscription: (target: SpeechSettings["dictation"], file: File, signal: AbortSignal) =>
     request<{ text: string }>("/api/admin/speech/test-transcription", { method: "POST", body: recordingBody(file, target), signal }, { quiet: true }),
-  testSynthesis: ({ provider_id, model, voice }: SpeechSettings["read_aloud"], text: string, signal: AbortSignal) =>
-    requestSpeech("/api/admin/speech/test-synthesis", { provider_id, model, voice, text }, signal),
+  testSynthesis: ({ provider_id, model, voice, output_format, max_text_characters }: SpeechSettings["read_aloud"], text: string, signal: AbortSignal) =>
+    requestSpeech("/api/admin/speech/test-synthesis", { provider_id, model, voice, output_format, max_text_characters, text }, signal),
   clientReleases: (signal?: AbortSignal) =>
     request<ClientReleases>("/api/admin/client-releases", { signal }, { quiet: true }),
   uploadAndroidRelease: (file: File, notes: string, progress: (value: number) => void, signal: AbortSignal) =>

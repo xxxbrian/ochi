@@ -3,7 +3,11 @@ package storage
 import (
 	"context"
 	"encoding/json"
+
+	"ochi/server/internal/agent"
 )
+
+const MaxSpeechTextCharacters = 2000
 
 type SpeechModel struct {
 	ProviderID string `json:"provider_id"`
@@ -15,9 +19,15 @@ type SpeechSlot struct {
 	Enabled bool `json:"enabled"`
 }
 
+type SpeechSynthesisOptions struct {
+	Voice             string                   `json:"voice"`
+	OutputFormat      agent.SpeechOutputFormat `json:"output_format"`
+	MaxTextCharacters int                      `json:"max_text_characters"`
+}
+
 type ReadAloudSettings struct {
 	SpeechSlot
-	Voice string `json:"voice"`
+	SpeechSynthesisOptions
 }
 
 type SpeechSettings struct {
@@ -27,7 +37,10 @@ type SpeechSettings struct {
 
 func (s *Store) SpeechSettings(ctx context.Context) (SpeechSettings, error) {
 	var data []byte
-	var settings SpeechSettings
+	settings := SpeechSettings{ReadAloud: ReadAloudSettings{SpeechSynthesisOptions: SpeechSynthesisOptions{
+		OutputFormat:      agent.SpeechOutputMP3,
+		MaxTextCharacters: MaxSpeechTextCharacters,
+	}}}
 	err := s.db.QueryRow(ctx, `SELECT speech_settings FROM app_settings WHERE id=true`).Scan(&data)
 	if err == nil {
 		err = json.Unmarshal(data, &settings)

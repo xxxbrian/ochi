@@ -28,6 +28,7 @@ function apiHarness({ saved = {}, override, dev = false } = {}) {
   const storage = new Map(Object.entries(saved));
   const requests = [];
   const api = load('src/lib/api.ts', {
+    '../../../shared/speech': testI18n.load('../shared/speech.ts'),
     'expo/fetch': { async fetch(url, init) {
       requests.push({ url, ...init });
       return { ok: true, status: 200, json: async () => url.endsWith('/login') ? { id: 'user', access_token: 'test-token', expires_at: 'future' } : { id: 'user' } };

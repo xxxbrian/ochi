@@ -222,8 +222,8 @@ export function useChatSpeech(
   }, [status?.phase, transcribe]);
 
   const toggleReadAloud = useCallback((id: string, text: string) => {
-    const { playOwner, caps, messages, run } = latest.current;
-    if (!playOwner || !caps || capture.current || AppState.currentState !== "active") return;
+    const { playOwner, messages, run } = latest.current;
+    if (!playOwner || capture.current || AppState.currentState !== "active") return;
     const wasReading = reader.current?.id === id && reader.current.owner === playOwner;
     if (!wasReading && !replyIsCurrent({ id, text }, messages, run)) return;
     stopReading();
@@ -232,8 +232,13 @@ export function useChatSpeech(
     reader.current = operation;
     const signal = operation.controller.signal;
     const ownsPlayback = () => reader.current === operation && latest.current.playOwner === playOwner && !signal.aborted;
+    const loading = { owner: playOwner, value: { id, phase: "loading" as const } };
+    setPlayState(loading);
     void (async () => {
       try {
+        const caps = await api.speechCapabilities(signal);
+        if (!ownsPlayback()) return;
+        if (!caps.read_aloud) throw localizedError("speech.playbackFailed");
         const chunks = splitSpeechText(Lexer.lex(text), caps.max_text_characters);
         if (!chunks.length) {
           reader.current = null;
@@ -242,10 +247,10 @@ export function useChatSpeech(
         }
         for (const part of chunks) {
           if (!ownsPlayback()) return;
-          setPlayState({ owner: playOwner, value: { id, phase: "loading" } });
-          const bytes = await api.synthesizeSpeech(part, signal);
+          setPlayState(loading);
+          const audio = await api.synthesizeSpeech(part, signal);
           if (!ownsPlayback()) return;
-          await playSpeech(bytes, signal, () => {
+          await playSpeech(audio, signal, () => {
             if (ownsPlayback()) setPlayState({ owner: playOwner, value: { id, phase: "playing" } });
           });
         }
