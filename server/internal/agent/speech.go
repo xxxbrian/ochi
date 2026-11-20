@@ -102,7 +102,8 @@ func SynthesizeSpeech(ctx context.Context, config Config, voice, text string, fo
 	case SpeechOutputMP3:
 		valid = isMP3(data)
 	case SpeechOutputWAV:
-		valid = isWAV(data)
+		data = normalizeWAV(data)
+		valid = data != nil
 	}
 	if !valid {
 		return nil, i18n.With("speech_synthesis_response_invalid", map[string]any{"format": strings.ToUpper(string(format))})
@@ -191,34 +192,55 @@ func isMP3(data []byte) bool {
 		data[1]&0x18 != 0x08 && data[2]&0xf0 != 0xf0 && data[2]&0x0c != 0x0c
 }
 
-func isWAV(data []byte) bool {
+func normalizeWAV(data []byte) []byte {
 	if http.DetectContentType(data) != "audio/wave" {
-		return false
+		return nil
 	}
-	var hasFormat bool
+	const unknownSize = 0xffffffff
+	riffSize := binary.LittleEndian.Uint32(data[4:8])
+	var blockAlign int
 	for chunks := data[12:]; len(chunks) >= 8; {
+		kind := string(chunks[:4])
 		size := uint64(binary.LittleEndian.Uint32(chunks[4:8]))
 		payload := chunks[8:]
-		if size > uint64(len(payload)) {
-			return false
+		if kind == "data" && riffSize == unknownSize && size == unknownSize {
+			// A non-seekable encoder leaves both lengths unset. After a complete
+			// HTTP response, the final data chunk extends to the end of the buffer.
+			if blockAlign == 0 || len(payload) == 0 || len(payload)%blockAlign != 0 {
+				return nil
+			}
+			binary.LittleEndian.PutUint32(chunks[4:8], uint32(len(payload)))
+			if len(payload)%2 != 0 {
+				data = append(data, 0)
+			}
+			binary.LittleEndian.PutUint32(data[4:8], uint32(len(data)-8))
+			return data
 		}
-		switch string(chunks[:4]) {
+		if size > uint64(len(payload)) {
+			return nil
+		}
+		switch kind {
 		case "fmt ":
 			if size < 16 || binary.LittleEndian.Uint16(payload[0:2]) == 0 ||
-				binary.LittleEndian.Uint16(payload[2:4]) == 0 || binary.LittleEndian.Uint32(payload[4:8]) == 0 ||
-				binary.LittleEndian.Uint16(payload[12:14]) == 0 {
-				return false
+				binary.LittleEndian.Uint16(payload[2:4]) == 0 || binary.LittleEndian.Uint32(payload[4:8]) == 0 {
+				return nil
 			}
-			hasFormat = true
+			blockAlign = int(binary.LittleEndian.Uint16(payload[12:14]))
+			if blockAlign == 0 {
+				return nil
+			}
 		case "data":
-			return hasFormat && size > 0
+			if blockAlign > 0 && size > 0 {
+				return data
+			}
+			return nil
 		}
 		// RIFF aligns the next chunk to an even byte offset.
 		next := size + size%2
 		if next > uint64(len(payload)) {
-			return false
+			return nil
 		}
 		chunks = payload[next:]
 	}
-	return false
+	return nil
 }

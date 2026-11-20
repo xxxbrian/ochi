@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -17,7 +18,12 @@ import (
 	"ochi/server/internal/product"
 )
 
-const speechPCMFixture = "RIFF\x26\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x40\x1f\x00\x00\x80\x3e\x00\x00\x02\x00\x10\x00data\x02\x00\x00\x00\x00\x00"
+const (
+	speechPCMFormat       = "fmt \x10\x00\x00\x00\x01\x00\x01\x00\x40\x1f\x00\x00\x80\x3e\x00\x00\x02\x00\x10\x00"
+	speechPCMFixture      = "RIFF\x26\x00\x00\x00WAVE" + speechPCMFormat + "data\x02\x00\x00\x00\x00\x00"
+	speechWAVMetadata     = "LIST\x0e\x00\x00\x00INFOINAM\x02\x00\x00\x00X\x00"
+	speechStreamedWAVHead = "RIFF\xff\xff\xff\xffWAVE" + speechPCMFormat + speechWAVMetadata + "data\xff\xff\xff\xff"
+)
 
 func TestSpeechProviderAudioProtocol(t *testing.T) {
 	const model = "relay/voice/vendor-model"
@@ -142,6 +148,39 @@ func TestSpeechProviderDoesNotReplayOrFollowRedirects(t *testing.T) {
 	}
 }
 
+func TestSpeechNormalizesStreamedWAV(t *testing.T) {
+	const samples = "\x00\x00\x01\x00\xff\xff"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "audio/wav")
+		_, _ = io.WriteString(w, speechStreamedWAVHead)
+		w.(http.Flusher).Flush()
+		_, _ = io.WriteString(w, samples)
+	}))
+	t.Cleanup(server.Close)
+	config := Config{BaseURL: server.URL, Model: "fixture"}
+	audio, err := SynthesizeSpeech(context.Background(), config, "voice", "hello", SpeechOutputWAV)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sampleOffset = len(speechStreamedWAVHead)
+	if len(audio) != sampleOffset+len(samples) ||
+		binary.LittleEndian.Uint32(audio[4:8]) != uint32(len(audio)-8) ||
+		binary.LittleEndian.Uint32(audio[sampleOffset-4:sampleOffset]) != uint32(len(samples)) {
+		t.Fatalf("incorrect normalized WAV sizes: %x", audio)
+	}
+	if string(audio[8:sampleOffset-4]) != speechStreamedWAVHead[8:sampleOffset-4] || string(audio[sampleOffset:]) != samples {
+		t.Fatal("normalization changed the waveform or metadata")
+	}
+}
+
+func TestSpeechPadsOddLengthStreamedWAV(t *testing.T) {
+	const format = "fmt \x10\x00\x00\x00\x01\x00\x01\x00\x40\x1f\x00\x00\x40\x1f\x00\x00\x01\x00\x08\x00"
+	audio := normalizeWAV([]byte("RIFF\xff\xff\xff\xffWAVE" + format + "data\xff\xff\xff\xff\x7f"))
+	if want := "RIFF\x26\x00\x00\x00WAVE" + format + "data\x01\x00\x00\x00\x7f\x00"; string(audio) != want {
+		t.Fatalf("odd WAV sample was not padded: %x", audio)
+	}
+}
+
 func TestSpeechRejectsInvalidAndOversizeResponses(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -157,6 +196,11 @@ func TestSpeechRejectsInvalidAndOversizeResponses(t *testing.T) {
 		{"received only a WAV signature", "RIFF\x00\x00\x00\x00WAVE", SpeechOutputWAV, "speech_synthesis_response_invalid"},
 		{"WAV without format or samples", "RIFF\x28\x00\x00\x00WAVEJUNK\x1c\x00\x00\x00" + strings.Repeat("\x00", 28), SpeechOutputWAV, "speech_synthesis_response_invalid"},
 		{"truncated WAV samples", speechPCMFixture[:len(speechPCMFixture)-1], SpeechOutputWAV, "speech_synthesis_response_invalid"},
+		{"empty streamed WAV", speechStreamedWAVHead, SpeechOutputWAV, "speech_synthesis_response_invalid"},
+		{"partial streamed WAV sample", speechStreamedWAVHead + "\x00", SpeechOutputWAV, "speech_synthesis_response_invalid"},
+		{"streamed WAV without format", "RIFF\xff\xff\xff\xffWAVEdata\xff\xff\xff\xff\x00\x00", SpeechOutputWAV, "speech_synthesis_response_invalid"},
+		{"unknown data size in finite WAV", "RIFF\x26\x00\x00\x00WAVE" + speechPCMFormat + "data\xff\xff\xff\xff\x00\x00", SpeechOutputWAV, "speech_synthesis_response_invalid"},
+		{"unknown metadata size in streamed WAV", "RIFF\xff\xff\xff\xffWAVE" + speechPCMFormat + "LIST\xff\xff\xff\xff\x00\x00", SpeechOutputWAV, "speech_synthesis_response_invalid"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

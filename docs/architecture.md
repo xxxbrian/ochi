@@ -367,7 +367,9 @@ credential, headers and timeout. The OpenAI-compatible Audio API appends
 `/audio/transcriptions` (multipart recording and model; JSON transcript) or
 `/audio/speech` (text, model, voice and `response_format`; audio bytes) to the
 versioned base URL. The server checks the returned audio matches the selected
-format and serves it with that format's media type.
+format and serves it with that format's media type. When a streamed WAV leaves
+both RIFF and data lengths unknown, the server fills them from the complete
+response before delivering the file.
 The Provider's chat protocol and discovered chat models do not determine
 audio support. The administrator can test the selected format and limit before
 saving.
