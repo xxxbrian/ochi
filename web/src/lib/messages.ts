@@ -752,10 +752,40 @@ export const messages = {
     "zh-CN": "补充",
     "zh-TW": "補充"
   },
-  "composer.stopRecording": {
-    "en": "Stop recording",
-    "zh-CN": "停止录音",
-    "zh-TW": "停止錄音"
+  "composer.recording": {
+    "en": "Recording",
+    "zh-CN": "录音中",
+    "zh-TW": "錄音中"
+  },
+  "composer.requestingMicrophone": {
+    "en": "Waiting for microphone access…",
+    "zh-CN": "等待麦克风权限…",
+    "zh-TW": "等待麥克風權限…"
+  },
+  "composer.transcribing": {
+    "en": "Transcribing…",
+    "zh-CN": "正在转写…",
+    "zh-TW": "正在轉錄…"
+  },
+  "composer.cancelRecording": {
+    "en": "Discard recording",
+    "zh-CN": "舍弃录音",
+    "zh-TW": "捨棄錄音"
+  },
+  "composer.finishRecording": {
+    "en": "Finish recording and transcribe",
+    "zh-CN": "结束录音并转写",
+    "zh-TW": "結束錄音並轉錄"
+  },
+  "composer.noSpeech": {
+    "en": "No speech was detected",
+    "zh-CN": "未识别到语音",
+    "zh-TW": "未辨識到語音"
+  },
+  "composer.transcriptionFailed": {
+    "en": "Could not transcribe the recording",
+    "zh-CN": "未能转写录音",
+    "zh-TW": "無法轉錄錄音"
   },
   "composer.voiceInput": {
     "en": "Voice input",
@@ -986,6 +1016,16 @@ export const messages = {
     "en": "Read aloud",
     "zh-CN": "朗读",
     "zh-TW": "朗讀"
+  },
+  "message.noSpeechText": {
+    "en": "This reply has no text to read aloud",
+    "zh-CN": "这条回复没有可朗读的文字",
+    "zh-TW": "這則回覆沒有可朗讀的文字"
+  },
+  "message.speechPlaybackFailed": {
+    "en": "Could not play this reply",
+    "zh-CN": "未能播放这条回复",
+    "zh-TW": "無法播放這則回覆"
   },
   "message.regenerate": {
     "en": "Regenerate",

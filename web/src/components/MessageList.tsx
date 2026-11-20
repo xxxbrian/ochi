@@ -1,4 +1,4 @@
-import { t, useI18n, getLocale } from "../lib/i18n";
+import { t, useI18n } from "../lib/i18n";
 import {
   memo,
   useCallback,
@@ -11,9 +11,10 @@ import {
   type PointerEvent,
   type SyntheticEvent,
 } from "react";
-import { ArrowDown, Check, Copy, RotateCw, Volume2 } from "lucide-react";
+import { ArrowDown, Check, Copy, RotateCw, Square, Volume2 } from "lucide-react";
 import { isActiveStatus } from "../lib/api";
 import type { Message, Snapshot } from "../lib/types";
+import type { SpeechPlaybackStatus } from "../hooks/useSpeechPlayback";
 import { chatMessageKey, projectChatMessages } from "../lib/chatProjection";
 import { markdownImageUrls } from "../lib/markdown";
 import { publicReply } from "../lib/runPresentation";
@@ -35,6 +36,10 @@ type Props = {
   onRetry?: (message: Message) => void;
   onEdit?: (message: Message) => void;
   onResume: (runId: string, answer: string) => Promise<void>;
+  speechStatus?: SpeechPlaybackStatus | null;
+  readAloudDisabled?: boolean;
+  onReadAloud?: (id: string, text: string) => void;
+  onStopSpeech?: (id: string) => void;
 };
 
 function messageRunStatus(message?: Message, snapshot?: Snapshot | null) {
@@ -53,13 +58,20 @@ function durationText(message: Message) {
 const MessageActions = memo(function MessageActions({
   message,
   onRetry,
+  onReadAloud,
+  speaking,
+  preparing,
+  speechDisabled,
 }: {
   message: Message;
   onRetry?: (message: Message) => void;
+  onReadAloud?: (id: string, text: string) => void;
+  speaking?: boolean;
+  preparing?: boolean;
+  speechDisabled?: boolean;
 }) {
   useI18n();
   const [copied, setCopied] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
   async function copy() {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -69,33 +81,23 @@ const MessageActions = memo(function MessageActions({
       /* Copy is unavailable in an insecure browser context. */
     }
   }
-  function speak() {
-    if (speaking) {
-      window.speechSynthesis.cancel();
-      setSpeaking(false);
-      return;
-    }
-    const utterance = new SpeechSynthesisUtterance(message.content.replace(/[#*`]/g, ""));
-    utterance.lang = getLocale();
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-    setSpeaking(true);
-  }
   const meta = [
     message.role === "assistant" ? message.model_name : "",
     message.role === "assistant" && message.effort ? effortLabel(message.effort) : "",
     message.role === "assistant" ? durationText(message) : "",
   ].filter(Boolean).join(" · ");
   return (
-    <div className="ai-actions">
+    <div className="ai-actions" data-speaking={speaking || undefined}>
       <button className={`icon-btn sm${copied ? " flash" : ""}`} onClick={() => void copy()} aria-label={copied ? t("common.copied") : t("common.copy")} title={t("common.copy")}>
         {copied ? <Check className="ic" /> : <Copy className="ic" />}
       </button>
-      {message.role === "assistant" && "speechSynthesis" in window && (
-        <button className="icon-btn sm" aria-pressed={speaking} onClick={speak} aria-label={speaking ? t("message.stopSpeech") : t("message.readAloud")} title={t("message.readAloud")}>
-          <Volume2 className="ic" />
+      {onReadAloud && (
+        <button type="button" className={`icon-btn sm${preparing ? " btn-progress" : ""}`} aria-pressed={Boolean(speaking)}
+          aria-busy={preparing || undefined}
+          disabled={speechDisabled}
+          onClick={() => onReadAloud(chatMessageKey(message), message.content)}
+          aria-label={t(speaking ? "message.stopSpeech" : "message.readAloud")} title={t(speaking ? "message.stopSpeech" : "message.readAloud")}>
+          {speaking ? <Square className="ic" /> : <Volume2 className="ic" />}
         </button>
       )}
       {onRetry && (
@@ -115,6 +117,11 @@ const HistoryMessage = memo(function HistoryMessage({
   onEdit,
   processOpen,
   onProcessOpen,
+  onReadAloud,
+  onStopSpeech,
+  speaking,
+  preparing,
+  readAloudDisabled,
 }: {
   message: Message;
   snapshot?: Snapshot | null;
@@ -122,6 +129,11 @@ const HistoryMessage = memo(function HistoryMessage({
   onEdit?: (message: Message) => void;
   processOpen?: boolean;
   onProcessOpen?: (runId: string, expanded: boolean) => void;
+  onReadAloud?: (id: string, text: string) => void;
+  onStopSpeech?: (id: string) => void;
+  speaking: boolean;
+  preparing: boolean;
+  readAloudDisabled?: boolean;
 }) {
   useI18n();
   const process =
@@ -138,6 +150,11 @@ const HistoryMessage = memo(function HistoryMessage({
   const visibleContent = terminalMessage && message.content.trim() ? message.content
     : snapshot && !isActiveStatus(runStatus) ? publicReply(snapshot)
     : snapshot ? publicReply(snapshot) : message.content;
+  const messageKey = chatMessageKey(message);
+  const speechText = !isActiveStatus(runStatus) && onReadAloud ? visibleContent : "";
+  useLayoutEffect(() => {
+    if (speaking && speechText) return () => onStopSpeech?.(messageKey);
+  }, [messageKey, speaking, speechText, onStopSpeech]);
   const embeddedImages = useMemo(() => markdownImageUrls(message.content), [message.content]);
   const separateFiles = files?.filter((file) => !file.mime_type.startsWith("image/") || !embeddedImages.has(file.url));
   const embeddedFiles = files?.filter((file) => file.mime_type.startsWith("image/") && embeddedImages.has(file.url));
@@ -172,7 +189,10 @@ const HistoryMessage = memo(function HistoryMessage({
       {!process && visibleContent ? <MarkdownMessage message={{ ...message, content: visibleContent }} isStreaming={runStatus === "running"} /> : null}
       <FileCards files={separateFiles} />
       <FileCards files={embeddedFiles} compactImages />
-      {visibleContent && !isActiveStatus(runStatus) && <MessageActions message={{ ...message, content: visibleContent }} onRetry={onRetry} />}
+      {visibleContent && !isActiveStatus(runStatus) && (
+        <MessageActions message={{ ...message, content: visibleContent }} onRetry={onRetry}
+          onReadAloud={onReadAloud} speaking={speaking} preparing={preparing} speechDisabled={readAloudDisabled} />
+      )}
     </article>
   );
 });
@@ -183,6 +203,10 @@ const History = memo(function History({
   onEdit,
   processExpansion,
   onProcessOpen,
+  speechStatus,
+  readAloudDisabled,
+  onReadAloud,
+  onStopSpeech,
 }: {
   messages: Message[];
   latestSnapshot?: Snapshot | null;
@@ -190,6 +214,10 @@ const History = memo(function History({
   onEdit?: (message: Message) => void;
   processExpansion: Record<string, boolean>;
   onProcessOpen: (runId: string, expanded: boolean) => void;
+  speechStatus?: SpeechPlaybackStatus | null;
+  readAloudDisabled?: boolean;
+  onReadAloud?: (id: string, text: string) => void;
+  onStopSpeech?: (id: string) => void;
 }) {
   useI18n();
   let lastUser = -1,
@@ -218,6 +246,11 @@ const History = memo(function History({
             onEdit={index === lastUser ? onEdit : undefined}
             processOpen={message.run_id ? processExpansion[message.run_id] : undefined}
             onProcessOpen={onProcessOpen}
+            onReadAloud={onReadAloud}
+            onStopSpeech={onStopSpeech}
+            speaking={speechStatus?.id === chatMessageKey(message)}
+            preparing={speechStatus?.id === chatMessageKey(message) && speechStatus.preparing}
+            readAloudDisabled={readAloudDisabled}
           />
         ))}
       </section>
@@ -234,6 +267,10 @@ export function MessageList({
   onRetry,
   onEdit,
   onResume,
+  speechStatus,
+  readAloudDisabled,
+  onReadAloud,
+  onStopSpeech,
 }: Props) {
   useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -418,6 +455,10 @@ export function MessageList({
             onEdit={onEdit}
             processExpansion={processExpansion}
             onProcessOpen={onProcessOpen}
+            speechStatus={speechStatus}
+            readAloudDisabled={readAloudDisabled}
+            onReadAloud={onReadAloud}
+            onStopSpeech={onStopSpeech}
           />
           {snapshot?.waiting_input && currentRunStatus === "waiting_user" && (
             <WaitingInputCard

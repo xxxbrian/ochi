@@ -32,6 +32,11 @@ import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar, MobileMenuButton, modKey, type PaletteCommand } from "./components/Sidebar";
 import { MessageList } from "./components/MessageList";
 import { Composer } from "./components/Composer";
+import { DictationControls } from "./components/DictationControls";
+import { appendDictation } from "../../shared/speech";
+import { useDictation } from "./hooks/useDictation";
+import { useSpeechCapabilities } from "./hooks/useSpeechCapabilities";
+import { useSpeechPlayback } from "./hooks/useSpeechPlayback";
 import { RunInstructionStatus } from "./components/RunInstructionStatus";
 import { ComputerPanel } from "./components/ComputerPanel";
 import { ArtifactDock } from "./components/ArtifactDock";
@@ -150,7 +155,28 @@ export default function App() {
     kind: "edit" | "retry";
   } | null>(null);
   const [revisionText, setRevisionText] = useState("");
+  const revisionInput = useRef<HTMLTextAreaElement>(null);
   const [composerKey, setComposerKey] = useState(0);
+  const speech = useSpeechCapabilities(user?.id ?? "", route.kind === "admin");
+  const speechScope = JSON.stringify([user?.id, route.kind, route.id, selectedId, composerKey]);
+  const [dictating, setDictating] = useState(false);
+  const playback = useSpeechPlayback(
+    speechScope,
+    route.kind === "chat" && speech?.read_aloud ? speech.max_text_characters : 0,
+    setError,
+  );
+  const stopPlayback = playback.stop;
+  const onDictationActiveChange = useCallback((active: boolean) => {
+    setDictating(active);
+    if (active) stopPlayback();
+  }, [stopPlayback]);
+  const editVoice = useDictation({
+    scope: `${speechScope}/${revision?.message.id ?? ""}`,
+    capabilities: route.kind === "chat" && route.id === selectedId && revision?.kind === "edit" ? speech : undefined,
+    inputRef: revisionInput,
+    onTranscript: (text) => setRevisionText((current) => appendDictation(current, text)),
+    onActiveChange: onDictationActiveChange,
+  });
   const userRef = useRef<User | null>(null);
   const selectedRef = useRef<string | null>(null);
   const modelsRef = useRef<Model[]>([]);
@@ -646,7 +672,8 @@ export default function App() {
     }
   }
   async function revise() {
-    if (!revision || !selectedId || posting || busy || computerUpdating) return;
+    if (!revision || !selectedId || posting || busy || computerUpdating || editVoice.pending) return;
+    editVoice.cancel();
     const token = selectionGeneration.current;
     setError("");
     try {
@@ -792,6 +819,8 @@ export default function App() {
               <Composer
                 key={`project-${id}`}
                 draftKey={`assistant.draft.v2.${user.id}.project.${id}`}
+                speech={speech}
+                onDictationActiveChange={onDictationActiveChange}
                 onSubmit={(content, files) => sendMessage(content, files, false, id)}
                 onStop={() => undefined}
                 onError={setError}
@@ -882,6 +911,10 @@ export default function App() {
                 onRetry={!busy ? requestRetry : undefined}
                 onEdit={!busy ? requestEdit : undefined}
                 onResume={resumeRun}
+                speechStatus={playback.status}
+                readAloudDisabled={dictating}
+                onReadAloud={playback.available ? playback.toggle : undefined}
+                onStopSpeech={playback.stopMessage}
               />
             )}
             {empty && <EmptyHero name={user.display_name || user.username} />}
@@ -918,6 +951,9 @@ export default function App() {
             <Composer
               key={composerKey}
               draftKey={`assistant.draft.v2.${user.id}.${selectedId ?? "new"}`}
+              speech={speech}
+              speechPaused={Boolean(revision) || route.id !== (selectedId ?? undefined)}
+              onDictationActiveChange={onDictationActiveChange}
               onSubmit={sendMessage}
               onSubmitNow={sendMessageNow}
               onSupplement={instructions.canSend && !revision ? instructions.send : undefined}
@@ -985,7 +1021,7 @@ export default function App() {
                 className={`primary-button${posting ? " btn-progress" : ""}`}
                 onClick={() => void revise()}
                 disabled={
-                  posting || (revision.kind === "edit" && !revisionText.trim())
+                  posting || (revision.kind === "edit" && (!revisionText.trim() || editVoice.pending))
                 }
               >
                 {t("chat.rerun")}
@@ -994,13 +1030,19 @@ export default function App() {
           }
         >
           {revision.kind === "edit" && (
-            <textarea
-              className="field-input"
-              rows={5}
-              value={revisionText}
-              onChange={(event) => setRevisionText(event.target.value)}
-              aria-label={t("chat.messageContent")}
-            />
+            <>
+              <textarea
+                ref={revisionInput}
+                className="field-input"
+                rows={5}
+                value={revisionText}
+                onChange={(event) => setRevisionText(event.target.value)}
+                aria-label={t("chat.messageContent")}
+              />
+              {editVoice.available && <div className="composer-bar">
+                <DictationControls voice={editVoice} disabled={posting} />
+              </div>}
+            </>
           )}
           {messages.some(
             (message) =>

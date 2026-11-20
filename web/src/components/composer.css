@@ -66,7 +66,13 @@
 @media (prefers-reduced-motion: reduce) { .send[data-pending] .ic { animation: none; } }
 .send[data-mode="stop"] { background: var(--ink); color: var(--canvas); border-radius: 50%; }
 .send[data-mode="stop"] .ic { fill: currentColor; width: 12px; height: 12px; }
-.icon-btn[data-listening] { color: var(--danger); background: var(--hover); }
+.dictation-controls { display: flex; align-items: center; flex: none; gap: var(--pad-2); }
+.dictation-controls[data-active] { flex: 1; min-width: 0; }
+.dictation-status { display: flex; align-items: center; gap: var(--pad-2); flex: 1; min-width: 0; color: var(--muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.dictation-status[role="alert"] { display: block; color: var(--danger); }
+.dictation-status .tnum { flex: none; }
+.dictation-dot { flex: none; width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--danger); }
+.dictation-controls .dictation-finish { background: var(--accent-soft); color: var(--accent); }
 
 /* model + effort + budget popovers */
 .model-pop { width: 320px; padding: 5px; }

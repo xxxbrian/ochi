@@ -299,6 +299,18 @@
 .ochi-admin-fieldset:disabled { opacity: 0.7; }
 .ochi-admin-stack-form { display: flex; flex-direction: column; gap: var(--pad-4); }
 .ochi-admin-inline-switch { display: inline-flex; align-items: center; gap: var(--pad-2); font-size: var(--fs-sm); color: var(--ink-2); }
+.ochi-admin-speech-card .ochi-admin-grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ochi-admin-speech-card .ochi-admin-speech-select { width: 100%; min-width: 0; }
+.ochi-admin-speech-card input[type="file"] { padding-block: var(--pad-2); height: auto; }
+.ochi-admin-speech-test { display: flex; flex-direction: column; gap: var(--pad-3); padding-top: var(--pad-4); border-top: 1px solid var(--line); }
+.ochi-admin-speech-test .ochi-admin-field { margin-bottom: 0; }
+.ochi-admin-speech-test .ochi-admin-alert { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ochi-admin-speech-transcript { display: flex; gap: var(--pad-2); padding: var(--pad-3); border-radius: var(--r-md); background: var(--sunken); color: var(--ink-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.ochi-admin-speech-transcript .ic { flex: none; color: var(--success); }
+.ochi-admin-speech-test audio { max-width: 100%; }
+@media (max-width: 640px) {
+    .ochi-admin-speech-card .ochi-admin-grid2 { grid-template-columns: minmax(0, 1fr); }
+}
 .ochi-admin-doc-link { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--accent); text-decoration: none; align-self: flex-start; }
 .ochi-admin-range-row { display: flex; align-items: center; gap: var(--pad-3); } .ochi-admin-range-row .slider { flex: 1; } .ochi-admin-range-v { min-width: 2ch; text-align: right; }
 .ochi-admin-cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--pad-4); }

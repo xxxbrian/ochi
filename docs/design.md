@@ -72,6 +72,20 @@ File transfer and model previews have separate limits. A large attachment stays
 a file rather than becoming an unbounded text or image prompt. Transfer errors
 describe the server's configured limit instead of assuming a fixed client cap.
 
+When an administrator enables dictation, the composer shows a microphone on
+supported clients. Tap to record, then finish or discard. The timer shows elapsed
+time and the recorder finishes at the limit. A failed transcription can retry
+the same recording. The result is appended to the latest draft for that
+conversation or edit, where it can be changed before sending. The composer
+remains editable during transcription and keeps its input identity.
+
+When read-aloud is enabled, a settled assistant reply has a read/stop action
+beside its other message actions. Playback uses the visible reply prose, skipping
+code blocks and tool details. Long replies play in order in bounded segments.
+Starting another reply replaces playback. Changing conversations, replacing or
+removing the reply, and starting a recording stop it. Scrolling the transcript
+keeps playback going.
+
 Thinking and tool calls follow a linear process timeline: a header (indicator
 plus one rolling label for thinking, the running tool and its subject, waiting,
 replying, or the settled summary) above a rail of rows. Interim replies are not

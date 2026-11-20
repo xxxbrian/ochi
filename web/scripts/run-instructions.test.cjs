@@ -215,11 +215,15 @@ function composerHarness(native, patch = {}) {
     useEffect(effect, dependencies) { const index = cursor++, previous = slots[index]; if (changes(previous?.dependencies, dependencies)) effects.push(() => { previous?.cleanup?.(); slots[index] = { dependencies, cleanup: effect() }; }); },
   };
   react.useLayoutEffect = react.useEffect;
+  react.useCallback = (callback) => callback;
   const icons = new Proxy({}, { get: (_target, key) => key });
   const chrome = new Proxy({}, { get: (_target, key) => key });
   const imports = {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx }, 'lucide-react': icons, 'lucide-react-native': icons,
     '../lib/api': { api: { upload: async () => ({ id: 'file', name: 'file', mime_type: 'text/plain', url: '/file', size: 1 }) } },
+    '../../../shared/speech': load('shared/speech.ts'),
+    '../hooks/useDictation': { useDictation: () => ({ available: false, pending: false, state: null, cancel() {} }) },
+    './DictationControls': { DictationControls: 'DictationControls' },
     './ui/Select': { SelectField: 'SelectField' }, '../lib/composeEvent': { COMPOSE_EVENT: 'ochi:compose' }, './FileCards': { sizeText: String }, './BrandIcon': { BrandIcon: 'BrandIcon' }, './composer.css': {},
     '@base-ui/react/popover': { Popover: chrome }, '@base-ui/react/menu': { Menu: chrome },
     'react-native': { ...chrome, ...Object.fromEntries(['ActivityIndicator', 'Image', 'Pressable', 'ScrollView', 'Switch', 'Text', 'TextInput', 'View'].map((name) => [name, name])), Platform: { OS: 'ios' }, StyleSheet: { create: (value) => value, hairlineWidth: 0.5 }, useWindowDimensions: () => ({ width: 393, fontScale: 1 }) },
@@ -297,10 +301,14 @@ for (const native of [false, true]) {
   test(`${platform} supplements reuse the existing toolbar and input instead of increasing the composer height`, async () => {
     const h = composerHarness(native); await h.settle();
     const input = h.input(), supplement = h.find('补充当前任务要求');
+    const send = h.find(native ? '加入队列' : '排队发送');
     assert.equal(input.props.placeholder, '补充内容…');
     assert.equal(supplement.props.children.props?.children ?? supplement.props.children, '补充');
-    const parent = walk(h.tree).find((node) => Array.isArray(node.props.children) && node.props.children.includes(supplement));
-    assert.ok(parent && walk(parent).some((node) => (node.props.accessibilityLabel ?? node.props['aria-label'] ?? node.props.label) === (native ? '加入队列' : '排队发送')));
+    const toolbar = walk(h.tree).find((node) =>
+      node.props.className === 'composer-bar' ||
+      (native && node.type === 'View' && walk(node).includes(supplement) &&
+        walk(node).includes(send) && !walk(node).includes(input)));
+    assert.ok(toolbar && walk(toolbar).includes(supplement) && walk(toolbar).includes(send));
     h.render({ onSupplement: undefined }); await h.settle();
     assert.equal(h.find('补充当前任务要求'), undefined);
     assert.equal(h.input().type, input.type);

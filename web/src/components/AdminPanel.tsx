@@ -1,6 +1,6 @@
 import { t, useAdminI18n, type AdminMessageKey } from "../pages/admin/i18n";
 import { Fragment, lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowLeft, Bug, Check, ChevronsUpDown, Container, Globe, History, Puzzle, Settings, Sparkles, Users, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Bug, Check, ChevronsUpDown, Container, Globe, History, Mic, Puzzle, Settings, Sparkles, Users, type LucideIcon } from "lucide-react";
 import { UsersPage, SystemPage, WorkspacesPage, RunsPage } from "../pages/admin/SystemPages";
 import { DebugPage } from "../pages/admin/RequestDiagnostics";
 import { AdminSlotContext, Pill, SkeletonRows, type AdminSlots } from "../pages/admin/ui";
@@ -8,6 +8,7 @@ import { ActionMenu, MenuAction } from "./ui/Menu";
 import { adminApi } from "../lib/api";
 const ProvidersPage = lazy(() => import("../pages/admin/ProvidersPage"));
 const SearchPage = lazy(() => import("../pages/admin/SearchPage"));
+const SpeechPage = lazy(() => import("../pages/admin/SpeechPage"));
 const PluginsPage = lazy(() => import("../pages/admin/PluginsPage"));
 
 type Section = { id: string; title: string; icon: LucideIcon; group: string; desc: string };
@@ -17,6 +18,7 @@ function sections(): Section[] {
   return [
     { id: "providers", title: t("modelProviders"), icon: Sparkles, group: models, desc: t("adminDesc.providers") },
     { id: "search", title: t("webSearch"), icon: Globe, group: models, desc: t("adminDesc.search") },
+    { id: "speech", title: t("speech.title"), icon: Mic, group: models, desc: t("speech.description") },
     { id: "plugins", title: t("plugins"), icon: Puzzle, group: models, desc: t("adminDesc.plugins") },
     { id: "users", title: t("users"), icon: Users, group: org, desc: t("adminDesc.users") },
     { id: "workspaces", title: t("workspaces"), icon: Container, group: org, desc: t("adminDesc.workspaces") },
@@ -122,6 +124,7 @@ export default function AdminPanel({ section, onNavigate, onBack, currentUserID 
           <AdminSlotContext.Provider value={slots}>
             <Suspense fallback={<SkeletonRows rows={5} />}>
               {section === "search" ? <SearchPage />
+                : section === "speech" ? <SpeechPage />
                 : section === "plugins" || section === "skills" || section === "mcp" ? <PluginsPage section={section} onNavigate={onNavigate} />
                 : section === "users" ? <UsersPage currentUserID={currentUserID} />
                 : section === "settings" ? <SystemPage />

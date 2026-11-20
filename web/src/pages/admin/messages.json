@@ -2873,5 +2873,100 @@
     "en": "The Android download will be removed. You can publish another APK later. Installed apps are not affected.",
     "zh-CN": "Android 下载入口将被移除，之后可以重新发布 APK；已安装的应用不受影响。",
     "zh-TW": "Android 下載入口將被移除，之後可以重新發布 APK；已安裝的應用程式不受影響。"
+  },
+  "speech.title": {
+    "en": "Speech",
+    "zh-CN": "语音",
+    "zh-TW": "語音"
+  },
+  "speech.description": {
+    "en": "Configure voice input and reply read-aloud using OpenAI-compatible audio endpoints.",
+    "zh-CN": "通过 OpenAI 兼容的音频接口配置语音输入与回复朗读。",
+    "zh-TW": "透過 OpenAI 相容的音訊介面設定語音輸入與回覆朗讀。"
+  },
+  "speech.dictation": {
+    "en": "Voice input",
+    "zh-CN": "语音输入",
+    "zh-TW": "語音輸入"
+  },
+  "speech.dictationHint": {
+    "en": "Transcribe recordings into editable drafts.",
+    "zh-CN": "把录音转写为可编辑的草稿。",
+    "zh-TW": "將錄音轉錄成可編輯的草稿。"
+  },
+  "speech.enableDictation": {
+    "en": "Enable voice input",
+    "zh-CN": "启用语音输入",
+    "zh-TW": "啟用語音輸入"
+  },
+  "speech.readAloud": {
+    "en": "Reply read-aloud",
+    "zh-CN": "回复朗读",
+    "zh-TW": "回覆朗讀"
+  },
+  "speech.readAloudHint": {
+    "en": "Use this model and voice to read assistant replies.",
+    "zh-CN": "用指定模型和音色朗读助手回复。",
+    "zh-TW": "使用指定的模型與音色朗讀助理回覆。"
+  },
+  "speech.enableReadAloud": {
+    "en": "Enable reply read-aloud",
+    "zh-CN": "启用回复朗读",
+    "zh-TW": "啟用回覆朗讀"
+  },
+  "speech.missingProvider": {
+    "en": "Provider no longer exists",
+    "zh-CN": "Provider 已不存在",
+    "zh-TW": "Provider 已不存在"
+  },
+  "speech.modelHint": {
+    "en": "Enter the full audio model ID accepted by this provider.",
+    "zh-CN": "填写此 Provider 接受的完整语音模型 ID。",
+    "zh-TW": "輸入此 Provider 接受的完整語音模型 ID。"
+  },
+  "speech.audioSample": {
+    "en": "Sample recording",
+    "zh-CN": "录音样本",
+    "zh-TW": "錄音樣本"
+  },
+  "speech.testDictation": {
+    "en": "Test transcription",
+    "zh-CN": "测试转写",
+    "zh-TW": "測試轉錄"
+  },
+  "speech.voice": {
+    "en": "Voice",
+    "zh-CN": "音色",
+    "zh-TW": "音色"
+  },
+  "speech.voiceHint": {
+    "en": "Enter a voice supported by this model.",
+    "zh-CN": "填写此模型支持的音色。",
+    "zh-TW": "輸入此模型支援的音色。"
+  },
+  "speech.testText": {
+    "en": "Sample text",
+    "zh-CN": "试听文本",
+    "zh-TW": "試聽文字"
+  },
+  "speech.sampleText": {
+    "en": "Hello! This is a short sample of Ochi’s read-aloud voice.",
+    "zh-CN": "你好！这是 Ochi 的朗读试听。",
+    "zh-TW": "你好！這是 Ochi 的朗讀試聽。"
+  },
+  "speech.testReadAloud": {
+    "en": "Generate preview",
+    "zh-CN": "生成试听",
+    "zh-TW": "產生試聽"
+  },
+  "speech.preview": {
+    "en": "Read-aloud preview",
+    "zh-CN": "朗读试听",
+    "zh-TW": "朗讀試聽"
+  },
+  "speech.loadFailed": {
+    "en": "Could not load speech settings",
+    "zh-CN": "未能加载语音设置",
+    "zh-TW": "無法載入語音設定"
   }
 }

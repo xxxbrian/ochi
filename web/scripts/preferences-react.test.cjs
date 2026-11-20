@@ -143,6 +143,7 @@ function appFixture({ delayedWrites = false, delayedModels = false, globalMemory
     me: async () => ({ id: "account", username: "qa", role: "user" }),
     sessionsPage: async () => ({ items: [historical] }),
     models: async () => delayedModels ? modelsGate.promise : models,
+    speechCapabilities: async () => ({ dictation: false, read_aloud: false }),
     projects: async () => [{ id: "project", name: "Project" }],
     preferences: async () => { reads++; return value; },
     updatePreferences: (patch) => {

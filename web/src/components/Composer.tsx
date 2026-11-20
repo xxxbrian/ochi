@@ -23,7 +23,6 @@ import {
   ChevronDown,
   FileUp,
   ImagePlus,
-  Mic,
   Monitor,
   Paperclip,
   Plus,
@@ -34,41 +33,17 @@ import {
 } from "lucide-react";
 import { Popover } from "@base-ui/react/popover";
 import { Menu } from "@base-ui/react/menu";
-import type { Artifact, Model } from "../lib/types";
+import type { Artifact, Model, SpeechCapabilities } from "../lib/types";
 import { api } from "../lib/api";
 import type { InstructionAcceptance } from "../lib/runInstructions";
 import { contextLabel } from "../lib/modelSelection";
 import { effortLabel } from "../lib/reasoningLabels";
+import { appendDictation } from "../../../shared/speech";
+import { useDictation } from "../hooks/useDictation";
+import { DictationControls } from "./DictationControls";
 import { sizeText } from "./FileCards";
 import { BrandIcon } from "./BrandIcon";
 import "./composer.css";
-
-type Recognition = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult:
-    | ((event: {
-        results: {
-          [key: number]: { [key: number]: { transcript: string } };
-          length: number;
-        };
-      }) => void)
-    | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-const recognitionConstructor = () =>
-  (
-    window as unknown as {
-      SpeechRecognition?: new () => Recognition;
-      webkitSpeechRecognition?: new () => Recognition;
-    }
-  ).SpeechRecognition ??
-  (window as unknown as { webkitSpeechRecognition?: new () => Recognition })
-    .webkitSpeechRecognition;
 
 type Props = {
   onSubmit: (value: string, files: Artifact[]) => Promise<boolean>;
@@ -100,6 +75,9 @@ type Props = {
   onModel: (id: string) => void;
   onEffort: (effort: string) => void;
   initialDraft?: string;
+  speech?: SpeechCapabilities;
+  speechPaused?: boolean;
+  onDictationActiveChange?: (active: boolean) => void;
 };
 
 function readDraft(key: string) {
@@ -313,6 +291,9 @@ export const Composer = memo(function Composer({
   onModel,
   onEffort,
   initialDraft,
+  speech,
+  speechPaused,
+  onDictationActiveChange,
 }: Props) {
   useI18n();
   const [draft, setDraft] = useState(initialDraft ?? readDraft(draftKey));
@@ -320,11 +301,9 @@ export const Composer = memo(function Composer({
   const [files, setFiles] = useState<Artifact[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [listening, setListening] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
-  const recognition = useRef<Recognition | null>(null);
   const rootRef = useRef<HTMLFormElement>(null);
   const mounted = useRef(true);
   const pendingUploads = useRef<File[]>([]);
@@ -332,6 +311,15 @@ export const Composer = memo(function Composer({
   const uploadingRef = useRef(false);
   const submittingRef = useRef(false);
   const dragDepth = useRef(0);
+  const voice = useDictation({
+    scope: draftKey,
+    capabilities: speechPaused ? undefined : speech,
+    inputRef,
+    onTranscript: (text) => setDraft((current) => appendDictation(current, text)),
+    onActiveChange: onDictationActiveChange,
+  });
+  const showVoiceToolbar = voice.available && voice.state !== null;
+  const readyToSend = !voice.pending;
   useEffect(() => {
     const compose = (event: Event) => {
       setDraft((event as CustomEvent<string>).detail);
@@ -359,7 +347,6 @@ export const Composer = memo(function Composer({
     (option) => option.type === "budget_tokens",
   );
   const budgetThinking = currentModel?.reasoning_kind === "budget";
-  const voiceAvailable = Boolean(recognitionConstructor());
 
   useEffect(() => {
     try {
@@ -370,7 +357,6 @@ export const Composer = memo(function Composer({
       /* An unavailable storage does not block chat. */
     }
   }, [draft, draftKey]);
-  useEffect(() => () => recognition.current?.stop(), []);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -410,8 +396,9 @@ export const Composer = memo(function Composer({
   async function submit(event?: FormEvent, now = false) {
     event?.preventDefault();
     const content = draft.trim();
-    if ((!content && !files.length) || unavailable || submittingRef.current || supplementBusy || uploadingRef.current)
+    if ((!content && !files.length) || unavailable || submittingRef.current || supplementBusy || uploadingRef.current || !readyToSend)
       return;
+    voice.cancel();
     submittingRef.current = true;
     setDraft("");
     setSubmitting(true);
@@ -425,7 +412,8 @@ export const Composer = memo(function Composer({
   }
   async function supplement() {
     const content = draft.trim();
-    if (!onSupplement || !content || files.length || unavailable || submittingRef.current || supplementBusy || uploadingRef.current) return;
+    if (!onSupplement || !content || files.length || unavailable || submittingRef.current || supplementBusy || uploadingRef.current || !readyToSend) return;
+    voice.cancel();
     submittingRef.current = true;
     setSubmitting(true);
     try {
@@ -438,7 +426,7 @@ export const Composer = memo(function Composer({
   }
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (
-      sendsOnEnter(event) &&
+      readyToSend && sendsOnEnter(event) &&
       !event.nativeEvent.isComposing &&
       event.nativeEvent.keyCode !== 229 &&
       !window.matchMedia("(pointer: coarse)").matches
@@ -511,38 +499,7 @@ export const Composer = memo(function Composer({
     if (!unavailable && !submittingRef.current && !supplementBusy)
       acceptTransfer(event.clipboardData);
   }
-  function toggleVoice() {
-    if (listening) {
-      recognition.current?.stop();
-      return;
-    }
-    const Constructor = recognitionConstructor();
-    if (!Constructor) return;
-    const instance = new Constructor();
-    instance.lang = getLocale();
-    instance.continuous = false;
-    instance.interimResults = false;
-    instance.onresult = (event) => {
-      let text = "";
-      for (let i = 0; i < event.results.length; i += 1)
-        text += event.results[i][0].transcript;
-      setDraft((current) => (current ? `${current}\n${text}` : text));
-    };
-    instance.onend = () => setListening(false);
-    instance.onerror = () => {
-      setListening(false);
-      onError(t("error.microphone"));
-    };
-    recognition.current = instance;
-    try {
-      instance.start();
-      setListening(true);
-    } catch {
-      onError(t("error.microphone"));
-    }
-  }
-
-  const canSend = Boolean(draft.trim() || files.length) && !unavailable && !submitting && !supplementBusy && !uploading;
+  const canSend = Boolean(draft.trim() || files.length) && !unavailable && !submitting && !supplementBusy && !uploading && readyToSend;
   return (
     <form className="composer" ref={rootRef} onSubmit={(event) => void submit(event)}
       data-dragging={dragging && !attachmentsBlocked || undefined}
@@ -588,7 +545,7 @@ export const Composer = memo(function Composer({
           event.currentTarget.value = "";
           void upload(selected);
         }} />
-        <Menu.Root>
+        {!showVoiceToolbar && <><Menu.Root>
           <Menu.Trigger className={`icon-btn sm${uploading ? " btn-progress" : ""}`} aria-label={uploading ? t("composer.uploading") : t("composer.addFile")} title={uploading ? t("composer.uploading") : t("composer.addFile")} disabled={uploading || attachmentsBlocked}>
             <Plus className="ic" />
           </Menu.Trigger>
@@ -638,13 +595,9 @@ export const Composer = memo(function Composer({
             disabled={!draft.trim() || files.length > 0 || unavailable || submitting || supplementBusy || uploading}
             onMouseDown={(event) => event.preventDefault()} onClick={() => void supplement()}>{t("composer.supplement")}</button>
         )}
-        {voiceAvailable && (
-          <button type="button" className="icon-btn sm" aria-pressed={listening} data-listening={listening || undefined}
-            aria-label={listening ? t("composer.stopRecording") : t("composer.voiceInput")} title={t("composer.voiceInput")} onClick={toggleVoice}>
-            <Mic className="ic" />
-          </button>
-        )}
-        {busy && onSubmitNow && (draft.trim() || files.length > 0) && (
+        </>}
+        <DictationControls voice={voice} disabled={unavailable || submitting || supplementBusy} />
+        {!showVoiceToolbar && busy && onSubmitNow && (draft.trim() || files.length > 0) && (
           <button type="button" className="icon-btn sm" aria-label={t("composer.stopAndSend")} title={t("composer.stopAndSend")}
             disabled={unavailable || submitting || supplementBusy || uploading} onClick={() => void submit(undefined, true)}>
             <SkipForward className="ic" />

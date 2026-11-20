@@ -33,9 +33,9 @@
 .attach-row .pv-files { flex: 0 1 auto; max-width: 100%; justify-content: flex-end; margin: 0; }
 .ai-row { margin-top: 16px; min-width: 0; }
 .ai-actions { display: flex; align-items: center; gap: 2px; margin: 8px 0 0 -6px; color: var(--muted); opacity: 0; transition: opacity var(--dur-2); }
-.turn:hover .ai-actions, .ai-actions:focus-within, .turn[data-last="true"] .ai-actions { opacity: 1; }
+.turn:hover .ai-actions, .ai-actions:focus-within, .ai-actions[data-speaking], .turn[data-last="true"] .ai-actions { opacity: 1; }
 .ai-meta { margin-left: 8px; font-size: var(--fs-xs); color: var(--subtle); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.turn[data-status="running"] .ai-actions { display: none; }
+.turn[data-status="running"] .ai-actions:not([data-speaking]) { display: none; }
 @media (hover: none) { .ai-actions { opacity: 1; } .user-tools { display: none; } }
 .status-note { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 8px 12px; border-radius: var(--r-md); font-size: var(--fs-sm); background: var(--hover); color: var(--ink-2); }
 .status-note.danger { background: var(--danger-soft); color: var(--danger); }

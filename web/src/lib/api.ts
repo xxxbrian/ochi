@@ -34,6 +34,8 @@ import type {
   Skill,
   SkillDetail,
   Snapshot,
+  SpeechCapabilities,
+  SpeechSettings,
   User,
   UserPreferences,
   UpdateState,
@@ -75,11 +77,11 @@ function responseError(path: string, status: number, body: { error?: string; cod
   return error;
 }
 
-export async function request<T>(
+async function requestResponse(
   path: string,
   init: RequestInit = {},
   options: { quiet?: boolean } = {},
-): Promise<T> {
+): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
@@ -117,13 +119,43 @@ export async function request<T>(
       console.error("API request failed", path, response.status, detail);
     throw responseError(path, response.status, { error: detail, code, params });
   }
+  return response;
+}
+
+export async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  options: { quiet?: boolean } = {},
+): Promise<T> {
+  const response = await requestResponse(path, init, options);
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+async function requestSpeech(path: string, value: object, signal?: AbortSignal): Promise<Blob> {
+  const response = await requestResponse(path, { method: "POST", body: JSON.stringify(value), signal }, { quiet: true });
+  return response.blob();
+}
+
+function recordingBody(file: File, target?: Pick<SpeechSettings["dictation"], "provider_id" | "model">) {
+  const body = new FormData();
+  if (target) {
+    body.set("provider_id", target.provider_id);
+    body.set("model", target.model);
+  }
+  body.set("file", file);
+  return body;
 }
 
 export const api = {
   clientReleases: (signal?: AbortSignal) =>
     request<ClientReleases>("/api/client-releases", { signal }, { quiet: true }),
+  speechCapabilities: (signal: AbortSignal) =>
+    request<SpeechCapabilities>("/api/speech/capabilities", { signal }, { quiet: true }),
+  transcribe: (file: File, signal: AbortSignal) =>
+    request<{ text: string }>("/api/speech/transcriptions", { method: "POST", body: recordingBody(file), signal }, { quiet: true }),
+  synthesizeSpeech: (text: string, signal: AbortSignal) =>
+    requestSpeech("/api/speech/synthesis", { text }, signal),
   me: () => request<User>("/api/auth/me"),
   login: (username: string, password: string) =>
     request<User>("/api/auth/login", {
@@ -346,6 +378,14 @@ function providerRequestsPath(runID?: string) {
 }
 
 export const adminApi = {
+  speechSettings: (signal: AbortSignal) =>
+    request<SpeechSettings>("/api/admin/speech", { signal }, { quiet: true }),
+  saveSpeechSettings: (settings: SpeechSettings, signal: AbortSignal) =>
+    request<SpeechSettings>("/api/admin/speech", { method: "PUT", body: JSON.stringify(settings), signal }, { quiet: true }),
+  testTranscription: (target: SpeechSettings["dictation"], file: File, signal: AbortSignal) =>
+    request<{ text: string }>("/api/admin/speech/test-transcription", { method: "POST", body: recordingBody(file, target), signal }, { quiet: true }),
+  testSynthesis: ({ provider_id, model, voice }: SpeechSettings["read_aloud"], text: string, signal: AbortSignal) =>
+    requestSpeech("/api/admin/speech/test-synthesis", { provider_id, model, voice, text }, signal),
   clientReleases: (signal?: AbortSignal) =>
     request<ClientReleases>("/api/admin/client-releases", { signal }, { quiet: true }),
   uploadAndroidRelease: (file: File, notes: string, progress: (value: number) => void, signal: AbortSignal) =>
@@ -354,7 +394,7 @@ export const adminApi = {
     request<ClientReleases>("/api/admin/client-releases/android", { method: "DELETE", signal }, { quiet: true }),
   saveIOSRelease: (url: string, signal?: AbortSignal) =>
     request<ClientReleases>("/api/admin/client-releases/ios", { method: "PUT", body: JSON.stringify({ url }), signal }, { quiet: true }),
-  providers: () => request<Provider[]>("/api/admin/providers"),
+  providers: (signal?: AbortSignal) => request<Provider[]>("/api/admin/providers", { signal }),
   models: () => request<Model[]>("/api/admin/models"),
   saveModelOrder: (model_ids: string[], default_model_id: string) =>
     request<void>("/api/admin/models/order", {
